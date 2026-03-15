@@ -29,7 +29,7 @@ Item {
 - **Type** identifies what kind of thing the item represents. Generators dispatch on this. Also used as the display grouping key — items are grouped by Type in the list.
 - **Source** identifies where the item came from (provenance). Multiple sources can produce the same type (e.g. type=dir can come from source=zoxide, source=cwd, or source=hardcoded).
 - **Data** is the bag of KV pairs that accumulates through the selection chain and ultimately becomes available as environment variables during execution.
-- **Cmd** is a Go `text/template` string rendered with the accumulated Data before execution. For example: `tmux select-window -t {{.session}}:{{.window_index}}`.
+- **Cmd** is a Go `text/template` string rendered with the accumulated Data before execution. For example: `tmux switch-client -t '{{.session}}:{{.window_index}}'`.
 
 ### Actions
 
@@ -109,7 +109,7 @@ Adding a new generator means:
 - Source: `tmux`
 - Display: `session:window-index window-name`
 - Action: **Execute**
-- Cmd: `tmux select-window -t {{.session}}:{{.window_index}}`
+- Cmd: `tmux switch-client -t '{{.session}}:{{.window_index}}'`
 - Data: `session=<name>`, `window_index=<n>`
 - Ordering: by session, then window index
 

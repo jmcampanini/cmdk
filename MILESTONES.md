@@ -54,7 +54,7 @@
 
 ---
 
-## - [ ] Milestone 2: Generator Framework + Tmux Window Source + Execute
+## - [x] Milestone 2: Generator Framework + Tmux Window Source + Execute
 
 **Goal**: Introduce the generator abstraction, implement the root generator with live tmux window querying, and wire up the Execute action so selecting a window switches to it.
 

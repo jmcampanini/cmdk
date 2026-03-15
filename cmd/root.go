@@ -3,11 +3,16 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"syscall"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
 
+	"github.com/jmcampanini/cmdk/internal/execute"
+	"github.com/jmcampanini/cmdk/internal/generator"
 	"github.com/jmcampanini/cmdk/internal/item"
+	"github.com/jmcampanini/cmdk/internal/logging"
+	"github.com/jmcampanini/cmdk/internal/tmux"
 	"github.com/jmcampanini/cmdk/internal/tui"
 )
 
@@ -19,20 +24,45 @@ var rootCmd = &cobra.Command{
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		items := []item.Item{
-			{Type: "window", Source: "tmux", Display: "main:1 zsh", Action: item.ActionExecute},
-			{Type: "window", Source: "tmux", Display: "main:2 vim", Action: item.ActionExecute},
-			{Type: "window", Source: "tmux", Display: "dev:1 node", Action: item.ActionExecute},
-			{Type: "dir", Source: "zoxide", Display: "~/projects/foo", Action: item.ActionNextList},
-			{Type: "dir", Source: "zoxide", Display: "~/projects/bar", Action: item.ActionNextList},
+		logger, err := logging.Setup()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: logging setup failed: %v\n", err)
+		}
+		if logger != nil {
+			defer func() { _ = logger.Close() }()
 		}
 
-		listItems := item.GroupAndOrder(items)
-		model := tui.NewModel(listItems, paneID)
+		reg := generator.NewRegistry()
+		reg.Register("root", generator.NewRootGenerator(tmux.ListWindows))
+		reg.MapType("", "root")
 
+		ctx := generator.Context{PaneID: paneID}
+		gen, err := reg.Resolve(nil)
+		if err != nil {
+			return err
+		}
+		items := gen(nil, ctx)
+		listItems := item.GroupAndOrder(items)
+
+		model := tui.NewModel(listItems, paneID, nil)
 		p := tea.NewProgram(model)
-		_, err := p.Run()
-		return err
+		finalModel, err := p.Run()
+		if err != nil {
+			return err
+		}
+
+		m, ok := finalModel.(tui.Model)
+		if !ok {
+			return fmt.Errorf("internal error: unexpected model type %T", finalModel)
+		}
+		sel := m.Selected()
+		if sel == nil {
+			return nil
+		}
+		if logger != nil {
+			logger.Info("executing", "item", sel.Display, "cmd", sel.Cmd, "data", sel.Data)
+		}
+		return execute.Run(nil, *sel, syscall.Exec)
 	},
 }
 

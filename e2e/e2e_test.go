@@ -89,33 +89,44 @@ func sessionExists(sess string) bool {
 	return exec.Command("tmux", "has-session", "-t", sess).Run() == nil
 }
 
+func waitForReady(t *testing.T, sess string) string {
+	t.Helper()
+	return waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, sess)
+	}, 5*time.Second)
+}
+
+func waitForExit(t *testing.T, sess string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if !sessionExists(sess) {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatal("session still exists — process did not exit")
+}
+
+func typeText(t *testing.T, sess string, text string) {
+	t.Helper()
+	for _, ch := range text {
+		sendKeys(t, sess, string(ch))
+	}
+}
+
 func TestE2E_ItemsVisible(t *testing.T) {
 	sess := startSession(t)
 	defer killSession(t, sess)
 
-	content := waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "main:1 zsh")
-	}, 5*time.Second)
+	content := waitForReady(t, sess)
 
-	for _, want := range []string{"main:1 zsh", "main:2 vim", "dev:1 node", "~/projects/foo", "~/projects/bar"} {
-		if !strings.Contains(content, want) {
-			t.Errorf("expected %q in output, not found.\nCapture:\n%s", want, content)
-		}
+	if !strings.Contains(content, sess+":") {
+		t.Errorf("expected test session window %q in output\nCapture:\n%s", sess, content)
 	}
 
-	lines := strings.Split(content, "\n")
-	firstWindow := -1
-	firstDir := -1
-	for i, line := range lines {
-		if strings.Contains(line, "main:1 zsh") && firstWindow == -1 {
-			firstWindow = i
-		}
-		if strings.Contains(line, "~/projects/") && firstDir == -1 {
-			firstDir = i
-		}
-	}
-	if firstDir != -1 && firstWindow != -1 && firstDir < firstWindow {
-		t.Error("dirs should appear after windows")
+	if !strings.Contains(content, "window") {
+		t.Errorf("expected 'window' type in output\nCapture:\n%s", content)
 	}
 }
 
@@ -123,16 +134,14 @@ func TestE2E_FilterItems(t *testing.T) {
 	sess := startSession(t)
 	defer killSession(t, sess)
 
-	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "main:1 zsh")
-	}, 5*time.Second)
+	waitForReady(t, sess)
 
 	sendKeys(t, sess, "/")
 	time.Sleep(200 * time.Millisecond)
-	sendKeys(t, sess, "v", "i", "m")
+	typeText(t, sess, "cmdk-test")
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "main:2 vim") && !strings.Contains(s, "dev:1 node")
+		return strings.Contains(s, sess) && strings.Contains(s, "filtered")
 	}, 5*time.Second)
 }
 
@@ -140,22 +149,20 @@ func TestE2E_EscapeDuringFilterDoesNotQuit(t *testing.T) {
 	sess := startSession(t)
 	defer killSession(t, sess)
 
-	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "main:1 zsh")
-	}, 5*time.Second)
+	waitForReady(t, sess)
 
 	sendKeys(t, sess, "/")
 	time.Sleep(200 * time.Millisecond)
-	sendKeys(t, sess, "v", "i", "m")
+	typeText(t, sess, "cmdk-test")
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "main:2 vim") && !strings.Contains(s, "dev:1 node")
+		return strings.Contains(s, "filtered")
 	}, 5*time.Second)
 
 	sendKeys(t, sess, "Escape")
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "main:1 zsh") && strings.Contains(s, "~/projects/foo")
+		return strings.Contains(s, sess) && !strings.Contains(s, "filtered")
 	}, 5*time.Second)
 
 	if !sessionExists(sess) {
@@ -167,18 +174,18 @@ func TestE2E_EscapeQuits(t *testing.T) {
 	sess := startSession(t)
 	defer killSession(t, sess)
 
-	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "main:1 zsh")
-	}, 5*time.Second)
+	waitForReady(t, sess)
 
 	sendKeys(t, sess, "Escape")
+	waitForExit(t, sess)
+}
 
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if !sessionExists(sess) {
-			return
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	t.Fatal("session still exists after Escape — process did not quit")
+func TestE2E_EnterExecutesAndExits(t *testing.T) {
+	sess := startSession(t)
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+
+	sendKeys(t, sess, "Enter")
+	waitForExit(t, sess)
 }
