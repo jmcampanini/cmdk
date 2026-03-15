@@ -185,6 +185,19 @@ cmdk propagates the executed command's exit code. Under `tmux display-popup -E`,
 
 ---
 
+## Logging
+
+cmdk logs errors and warnings to a file for post-hoc debugging.
+
+- **Library**: charmbracelet/log
+- **Log file**: `~/.local/state/cmdk/cmdk.log` (following XDG Base Directory spec — `XDG_STATE_HOME` is for user-specific state data that persists between restarts)
+- **Format**: plain text
+- **Levels**: errors and warnings
+- **What to log**: source failures, config parse errors, execute actions (rendered command, env vars set)
+- **Directory creation**: create `~/.local/state/cmdk/` if it does not exist
+
+---
+
 ## Tech Stack
 
 | Component | Library |
@@ -194,6 +207,7 @@ cmdk propagates the executed command's exit code. Under `tmux display-popup -E`,
 | TUI runtime | [bubbletea](https://github.com/charmbracelet/bubbletea) (required runtime for bubbles components) |
 | Fuzzy list picker | [bubbles list.Model](https://github.com/charmbracelet/bubbles) |
 | Config parsing | [BurntSushi/toml](https://github.com/BurntSushi/toml) |
+| Logging | [charmbracelet/log](https://github.com/charmbracelet/log) |
 | Module path | `github.com/jmcampanini/cmdk` |
 | Binary name | `cmdk` |
 
@@ -281,7 +295,7 @@ Future config may include:
 - bubbles list.Model with fuzzy filtering
 - Item schema with Type, Source, Display, Data, Action, Cmd
 - Generator abstraction: named registry, type-to-name mapping, Context (PaneID + Config)
-- Root generator aggregating sources: tmux windows, zoxide dirs, CWD dir, hardcoded dirs, custom commands
+- Root generator aggregating sources: tmux windows, zoxide dirs, CWD dir, custom commands
 - Dir-actions generator producing "New window" for directory items
 - Selection chain with accumulated state (arbitrary depth, tested at 2) — execute items push before executing
 - Back navigation via Escape
@@ -294,6 +308,7 @@ Future config may include:
 - Error handling: source failures shown as non-selectable error items in the list
 
 ### Roadmap
+- **Hardcoded directory entries**: `[[directories]]` in config.toml with `path` field, appearing after zoxide and CWD in the directories group
 - **Execute actions**: new-session-at-dir, new-pane-at-dir, open-yazi-at-dir
 - **Dir-actions generator expansion**: configurable via TOML (which actions appear for directories)
 - **Visual markers**: highlight current window, annotate items
