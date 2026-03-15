@@ -18,9 +18,13 @@
 
 7. **E2E tests must invoke the built binary directly** using `./cmdk --pane-id=<id>` (not through `go run` or indirect means). The `--pane-id` value should come from `tmux display-message -p '#{pane_id}'` or be set to a known test value.
 
+8. **Each milestone must be implemented on a dedicated branch** (e.g. `milestone-1`), created before work begins.
+
+9. **`/finalizePhase` must be run at the end of each implementation step** (it handles committing and cleanup).
+
 ---
 
-## - [ ] Milestone 1: Project Bootstrap + TUI Shell
+## - [x] Milestone 1: Project Bootstrap + TUI Shell
 
 **Goal**: Establish the Go project, CLI skeleton, and a working bubbletea TUI that displays a fuzzy-filterable list of hardcoded items, with Escape to quit.
 
