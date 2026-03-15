@@ -85,7 +85,7 @@
 
 ---
 
-## - [ ] Milestone 3: Selection Chain + Directory Flow
+## - [x] Milestone 3: Selection Chain + Directory Flow
 
 **Goal**: Implement the accumulated state (selection chain), NextList action, back navigation with Escape, the zoxide directory source, and the dir-actions generator — enabling the full two-level drill-down flow.
 

@@ -14,8 +14,14 @@ import (
 
 type ExecFn func(argv0 string, argv []string, envv []string) error
 
+var tmplFuncs = template.FuncMap{
+	"sq": func(s string) string {
+		return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+	},
+}
+
 func RenderCmd(cmdTemplate string, data map[string]string) (string, error) {
-	tmpl, err := template.New("cmd").Option("missingkey=error").Parse(cmdTemplate)
+	tmpl, err := template.New("cmd").Funcs(tmplFuncs).Option("missingkey=error").Parse(cmdTemplate)
 	if err != nil {
 		return "", err
 	}

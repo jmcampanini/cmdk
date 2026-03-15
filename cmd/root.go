@@ -14,6 +14,7 @@ import (
 	"github.com/jmcampanini/cmdk/internal/logging"
 	"github.com/jmcampanini/cmdk/internal/tmux"
 	"github.com/jmcampanini/cmdk/internal/tui"
+	"github.com/jmcampanini/cmdk/internal/zoxide"
 )
 
 var paneID string
@@ -33,8 +34,10 @@ var rootCmd = &cobra.Command{
 		}
 
 		reg := generator.NewRegistry()
-		reg.Register("root", generator.NewRootGenerator(tmux.ListWindows))
+		reg.Register("root", generator.NewRootGenerator(tmux.ListWindows, zoxide.ListDirs))
+		reg.Register("dir-actions", generator.NewDirActionsGenerator())
 		reg.MapType("", "root")
+		reg.MapType("dir", "dir-actions")
 
 		ctx := generator.Context{PaneID: paneID}
 		gen, err := reg.Resolve(nil)
@@ -44,7 +47,7 @@ var rootCmd = &cobra.Command{
 		items := gen(nil, ctx)
 		listItems := item.GroupAndOrder(items)
 
-		model := tui.NewModel(listItems, paneID, nil)
+		model := tui.NewModel(listItems, paneID, nil, reg, ctx)
 		p := tea.NewProgram(model)
 		finalModel, err := p.Run()
 		if err != nil {
@@ -62,7 +65,7 @@ var rootCmd = &cobra.Command{
 		if logger != nil {
 			logger.Info("executing", "item", sel.Display, "cmd", sel.Cmd, "data", sel.Data)
 		}
-		return execute.Run(nil, *sel, syscall.Exec)
+		return execute.Run(m.Accumulated(), *sel, syscall.Exec)
 	},
 }
 

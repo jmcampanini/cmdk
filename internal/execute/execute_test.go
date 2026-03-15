@@ -119,6 +119,33 @@ func TestRun_SelectedDataAvailableInTemplate(t *testing.T) {
 	}
 }
 
+func TestRenderCmd_SqEscapesSingleQuotes(t *testing.T) {
+	tmpl := "tmux new-window -c {{sq .path}}"
+	data := map[string]string{"path": "/home/user/jane's-project"}
+
+	got, err := RenderCmd(tmpl, data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "tmux new-window -c '/home/user/jane'\\''s-project'"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestRenderCmd_SqNormalPath(t *testing.T) {
+	tmpl := "tmux new-window -c {{sq .path}}"
+	data := map[string]string{"path": "/home/user/projects"}
+
+	got, err := RenderCmd(tmpl, data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "tmux new-window -c '/home/user/projects'" {
+		t.Errorf("got %q", got)
+	}
+}
+
 func TestRenderCmd_TemplateSyntaxInDataIsSafe(t *testing.T) {
 	tmpl := "echo {{.name}}"
 	data := map[string]string{"name": "{{.evil}}"}

@@ -115,6 +115,35 @@ func typeText(t *testing.T, sess string, text string) {
 	}
 }
 
+func hasZoxide() bool {
+	_, err := exec.LookPath("zoxide")
+	return err == nil
+}
+
+func requireZoxideEntries(t *testing.T) {
+	t.Helper()
+	if !hasZoxide() {
+		t.Skip("zoxide not available")
+	}
+	out, _ := exec.Command("zoxide", "query", "--list", "--score").Output()
+	if len(strings.TrimSpace(string(out))) == 0 {
+		t.Skip("no zoxide entries")
+	}
+}
+
+func navigateToDirItem(t *testing.T, sess string) {
+	t.Helper()
+	content := capturePane(t, sess)
+	windowCount := strings.Count(content, "window")
+	for range windowCount {
+		sendKeys(t, sess, "Down")
+		time.Sleep(50 * time.Millisecond)
+	}
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "dir")
+	}, 3*time.Second)
+}
+
 func TestE2E_ItemsVisible(t *testing.T) {
 	sess := startSession(t)
 	defer killSession(t, sess)
@@ -188,4 +217,69 @@ func TestE2E_EnterExecutesAndExits(t *testing.T) {
 
 	sendKeys(t, sess, "Enter")
 	waitForExit(t, sess)
+}
+
+func TestE2E_ZoxideDirsVisible(t *testing.T) {
+	requireZoxideEntries(t)
+	sess := startSession(t)
+	defer killSession(t, sess)
+
+	content := waitForReady(t, sess)
+
+	if !strings.Contains(content, "dir") {
+		t.Errorf("expected 'dir' type in output when zoxide available\nCapture:\n%s", content)
+	}
+}
+
+func TestE2E_SelectDirShowsDirActions(t *testing.T) {
+	requireZoxideEntries(t)
+
+	sess := startSession(t)
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	navigateToDirItem(t, sess)
+
+	sendKeys(t, sess, "Enter")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "New window")
+	}, 5*time.Second)
+}
+
+func TestE2E_EscapeFromDirActionsReturnsToRoot(t *testing.T) {
+	requireZoxideEntries(t)
+
+	sess := startSession(t)
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	navigateToDirItem(t, sess)
+
+	sendKeys(t, sess, "Enter")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "New window")
+	}, 5*time.Second)
+
+	sendKeys(t, sess, "Escape")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "window")
+	}, 5*time.Second)
+
+	if !sessionExists(sess) {
+		t.Fatal("session should still exist after Escape from dir-actions")
+	}
+}
+
+func TestE2E_WithoutZoxide_StillLaunches(t *testing.T) {
+	sess := startSession(t)
+	defer killSession(t, sess)
+
+	content := waitForReady(t, sess)
+
+	if !strings.Contains(content, "window") {
+		t.Errorf("expected window items even without zoxide\nCapture:\n%s", content)
+	}
 }
