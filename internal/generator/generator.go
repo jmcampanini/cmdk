@@ -3,6 +3,7 @@ package generator
 import (
 	"fmt"
 
+	"github.com/jmcampanini/cmdk/internal/config"
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
@@ -10,10 +11,8 @@ type GeneratorFunc func(accumulated []item.Item, ctx Context) []item.Item
 
 type Context struct {
 	PaneID string
-	Config *Config
+	Config *config.Config
 }
-
-type Config struct{}
 
 type Registry struct {
 	generators map[string]GeneratorFunc

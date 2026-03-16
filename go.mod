@@ -6,6 +6,7 @@ require (
 	charm.land/bubbles/v2 v2.0.0
 	charm.land/bubbletea/v2 v2.0.0
 	charm.land/log/v2 v2.0.0
+	github.com/BurntSushi/toml v1.6.0
 	github.com/spf13/cobra v1.10.2
 )
 

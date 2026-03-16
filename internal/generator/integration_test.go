@@ -1,8 +1,10 @@
 package generator
 
 import (
+	"errors"
 	"testing"
 
+	"github.com/jmcampanini/cmdk/internal/config"
 	"github.com/jmcampanini/cmdk/internal/execute"
 	"github.com/jmcampanini/cmdk/internal/item"
 )
@@ -138,5 +140,116 @@ func TestIntegration_DataFlattening(t *testing.T) {
 	}
 	if rendered != "tmux new-window -c '/home/user'" {
 		t.Errorf("rendered = %q", rendered)
+	}
+}
+
+func TestIntegration_FourSourceTypes(t *testing.T) {
+	windows := func() ([]item.Item, error) {
+		return []item.Item{
+			{Type: "window", Display: "main:1 zsh"},
+		}, nil
+	}
+	dirs := func() ([]item.Item, error) {
+		return []item.Item{
+			{Type: "dir", Source: "zoxide", Display: "/projects"},
+		}, nil
+	}
+	cwdDir := func() ([]item.Item, error) {
+		return []item.Item{
+			{Type: "dir", Source: "cwd", Display: "/home/user"},
+		}, nil
+	}
+	cfg := &config.Config{
+		Commands: []config.Command{
+			{Name: "htop", Cmd: "htop"},
+		},
+	}
+
+	gen := NewRootGenerator(windows, dirs, cwdDir, config.CommandItems(cfg))
+	items := gen(nil, Context{})
+
+	if len(items) != 4 {
+		t.Fatalf("got %d items, want 4", len(items))
+	}
+	wantTypes := []string{"window", "dir", "dir", "cmd"}
+	for i, wt := range wantTypes {
+		if items[i].Type != wt {
+			t.Errorf("items[%d].Type = %q, want %q", i, items[i].Type, wt)
+		}
+	}
+}
+
+func TestIntegration_ConfigCommandsInOrder(t *testing.T) {
+	cfg := &config.Config{
+		Commands: []config.Command{
+			{Name: "alpha", Cmd: "echo alpha"},
+			{Name: "beta", Cmd: "echo beta"},
+			{Name: "gamma", Cmd: "echo gamma"},
+		},
+	}
+	windows := func() ([]item.Item, error) {
+		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
+	}
+
+	gen := NewRootGenerator(windows, config.CommandItems(cfg))
+	items := gen(nil, Context{})
+
+	if len(items) != 4 {
+		t.Fatalf("got %d items, want 4", len(items))
+	}
+	wantNames := []string{"alpha", "beta", "gamma"}
+	for i, w := range wantNames {
+		got := items[i+1]
+		if got.Display != w {
+			t.Errorf("items[%d].Display = %q, want %q", i+1, got.Display, w)
+		}
+		if got.Action != item.ActionExecute {
+			t.Errorf("items[%d].Action = %q, want execute", i+1, got.Action)
+		}
+	}
+}
+
+func TestIntegration_NilConfig(t *testing.T) {
+	windows := func() ([]item.Item, error) {
+		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
+	}
+
+	gen := NewRootGenerator(windows, config.CommandItems(nil))
+	items := gen(nil, Context{})
+
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
+	}
+	if items[0].Type != "window" {
+		t.Errorf("items[0].Type = %q, want window", items[0].Type)
+	}
+}
+
+func TestIntegration_MalformedConfig(t *testing.T) {
+	windows := func() ([]item.Item, error) {
+		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
+	}
+	dirs := func() ([]item.Item, error) {
+		return []item.Item{{Type: "dir", Display: "/projects"}}, nil
+	}
+
+	gen := NewRootGenerator(windows, dirs, config.ErrorSource(errors.New("bad toml")), config.CommandItems(nil))
+	items := gen(nil, Context{})
+
+	if len(items) != 3 {
+		t.Fatalf("got %d items, want 3", len(items))
+	}
+	if items[0].Type != "window" {
+		t.Errorf("items[0].Type = %q, want window", items[0].Type)
+	}
+	if items[1].Type != "dir" {
+		t.Errorf("items[1].Type = %q, want dir", items[1].Type)
+	}
+	errItem := items[2]
+	if errItem.Source != "config" {
+		t.Errorf("errItem.Source = %q, want config", errItem.Source)
+	}
+	if errItem.Action != "" {
+		t.Errorf("errItem.Action = %q, want empty", errItem.Action)
 	}
 }

@@ -8,6 +8,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/spf13/cobra"
 
+	"github.com/jmcampanini/cmdk/internal/config"
+	"github.com/jmcampanini/cmdk/internal/cwd"
 	"github.com/jmcampanini/cmdk/internal/execute"
 	"github.com/jmcampanini/cmdk/internal/generator"
 	"github.com/jmcampanini/cmdk/internal/item"
@@ -33,13 +35,25 @@ var rootCmd = &cobra.Command{
 			defer func() { _ = logger.Close() }()
 		}
 
+		cfg, cfgErr := config.Load(config.DefaultPath())
+
+		sources := []func() ([]item.Item, error){
+			tmux.ListWindows,
+			zoxide.ListDirs,
+			cwd.ListCWD,
+		}
+		if cfgErr != nil {
+			sources = append(sources, config.ErrorSource(cfgErr))
+		}
+		sources = append(sources, config.CommandItems(cfg))
+
 		reg := generator.NewRegistry()
-		reg.Register("root", generator.NewRootGenerator(tmux.ListWindows, zoxide.ListDirs))
+		reg.Register("root", generator.NewRootGenerator(sources...))
 		reg.Register("dir-actions", generator.NewDirActionsGenerator())
 		reg.MapType("", "root")
 		reg.MapType("dir", "dir-actions")
 
-		ctx := generator.Context{PaneID: paneID}
+		ctx := generator.Context{PaneID: paneID, Config: cfg}
 		gen, err := reg.Resolve(nil)
 		if err != nil {
 			return err

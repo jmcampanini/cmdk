@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -37,9 +38,21 @@ func TestMain(m *testing.M) {
 
 func startSession(t *testing.T) string {
 	t.Helper()
+	return startSessionWithEnv(t, nil)
+}
+
+func startSessionWithEnv(t *testing.T, env map[string]string) string {
+	t.Helper()
 	sess := "cmdk-test-" + strings.ReplaceAll(t.Name(), "/", "-")
-	cmd := exec.Command("tmux", "new-session", "-d", "-s", sess, "-x", "120", "-y", "40",
-		binaryPath, "--pane-id=%0")
+	args := []string{"new-session", "-d", "-s", sess, "-x", "120", "-y", "40"}
+	if len(env) > 0 {
+		args = append(args, "env")
+		for k, v := range env {
+			args = append(args, k+"="+v)
+		}
+	}
+	args = append(args, binaryPath, "--pane-id=%0")
+	cmd := exec.Command("tmux", args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("tmux new-session failed: %v\n%s", err, out)
 	}
@@ -281,5 +294,156 @@ func TestE2E_WithoutZoxide_StillLaunches(t *testing.T) {
 
 	if !strings.Contains(content, "window") {
 		t.Errorf("expected window items even without zoxide\nCapture:\n%s", content)
+	}
+}
+
+func writeConfig(t *testing.T, content string) string {
+	t.Helper()
+	dir := t.TempDir()
+	configDir := filepath.Join(dir, "cmdk")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func TestE2E_ConfigCommandsVisible(t *testing.T) {
+	xdg := writeConfig(t, `
+[[commands]]
+name = "my-custom-cmd"
+cmd = "echo hello"
+`)
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	sendKeys(t, sess, "End")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "my-custom-cmd")
+	}, 5*time.Second)
+}
+
+func TestE2E_ExecuteCustomCommand(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "executed")
+	xdg := writeConfig(t, fmt.Sprintf(`
+[[commands]]
+name = "xq-run-this"
+cmd = "touch '%s'"
+`, marker))
+
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+
+	sendKeys(t, sess, "/")
+	time.Sleep(200 * time.Millisecond)
+	typeText(t, sess, "xq-run")
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "filtered")
+	}, 5*time.Second)
+	sendKeys(t, sess, "Enter")
+	time.Sleep(300 * time.Millisecond)
+	sendKeys(t, sess, "Enter")
+
+	waitForExit(t, sess)
+
+	if _, err := os.Stat(marker); err != nil {
+		t.Errorf("expected marker file to be created: %v", err)
+	}
+}
+
+func TestE2E_NoConfigFile(t *testing.T) {
+	xdg := t.TempDir()
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	content := waitForReady(t, sess)
+
+	if !strings.Contains(content, "window") {
+		t.Errorf("expected window items\nCapture:\n%s", content)
+	}
+	if strings.Contains(content, "config error") {
+		t.Errorf("unexpected config error\nCapture:\n%s", content)
+	}
+}
+
+func TestE2E_MalformedConfigShowsError(t *testing.T) {
+	xdg := writeConfig(t, `[[[broken toml`)
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	sendKeys(t, sess, "End")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "config error")
+	}, 5*time.Second)
+
+	sendKeys(t, sess, "Escape")
+	waitForExit(t, sess)
+}
+
+func TestE2E_CWDVisible(t *testing.T) {
+	dir, err := os.MkdirTemp("", "cmdk-cwd-e2e-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	sess := "cmdk-test-" + strings.ReplaceAll(t.Name(), "/", "-")
+	cmd := exec.Command("tmux", "new-session", "-d", "-s", sess, "-c", dir, "-x", "120", "-y", "40",
+		binaryPath, "--pane-id=%0")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("tmux new-session failed: %v\n%s", err, out)
+	}
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	sendKeys(t, sess, "End")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "cmdk-cwd-e2e")
+	}, 5*time.Second)
+}
+
+func TestE2E_ConfigCommandOrder(t *testing.T) {
+	xdg := writeConfig(t, `
+[[commands]]
+name = "alpha-cmd"
+cmd = "echo alpha"
+
+[[commands]]
+name = "beta-cmd"
+cmd = "echo beta"
+
+[[commands]]
+name = "gamma-cmd"
+cmd = "echo gamma"
+`)
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	sendKeys(t, sess, "End")
+
+	content := waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "alpha-cmd") && strings.Contains(s, "gamma-cmd")
+	}, 5*time.Second)
+
+	alphaIdx := strings.Index(content, "alpha-cmd")
+	betaIdx := strings.Index(content, "beta-cmd")
+	gammaIdx := strings.Index(content, "gamma-cmd")
+
+	if alphaIdx < 0 || betaIdx < 0 || gammaIdx < 0 {
+		t.Fatalf("not all commands visible\nCapture:\n%s", content)
+	}
+	if alphaIdx > betaIdx || betaIdx > gammaIdx {
+		t.Errorf("commands not in order: alpha@%d beta@%d gamma@%d\nCapture:\n%s",
+			alphaIdx, betaIdx, gammaIdx, content)
 	}
 }
