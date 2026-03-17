@@ -17,7 +17,7 @@ func ListCWD(_ context.Context) ([]item.Item, error) {
 	it.Type = "dir"
 	it.Source = "cwd"
 	it.Action = item.ActionNextList
-	it.SetDisplayPath(pathfmt.DisplayPath(wd), wd)
+	it.Display = pathfmt.DisplayPath(wd)
 	it.Data["path"] = wd
 	return []item.Item{it}, nil
 }

@@ -55,7 +55,7 @@ func ParseDirs(output string) []item.Item {
 		it := item.NewItem()
 		it.Type = "dir"
 		it.Source = "zoxide"
-		it.SetDisplayPath(pathfmt.DisplayPath(path), path)
+		it.Display = pathfmt.DisplayPath(path)
 		it.Action = item.ActionNextList
 		it.Data["path"] = path
 

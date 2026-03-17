@@ -10,6 +10,7 @@ func DisplayPath(path string) string {
 	if err != nil || home == "" {
 		return path
 	}
+	home = strings.TrimRight(home, "/")
 
 	if path == home {
 		return "~"

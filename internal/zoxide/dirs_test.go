@@ -3,7 +3,6 @@ package zoxide
 import (
 	"fmt"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/jmcampanini/cmdk/internal/item"
@@ -52,9 +51,6 @@ func TestParseDirs_ItemFields(t *testing.T) {
 	}
 	if it.Data["path"] != "/srv/data/projects" {
 		t.Errorf("Data[path] = %q, want %q", it.Data["path"], "/srv/data/projects")
-	}
-	if got := it.FilterValue(); got != "/srv/data/projects" {
-		t.Errorf("FilterValue() = %q, want %q (should fall back to Display for non-home path)", got, "/srv/data/projects")
 	}
 }
 
@@ -143,9 +139,5 @@ func TestParseDirs_HomePathGetsTildeDisplay(t *testing.T) {
 	}
 	if it.Data["path"] != path {
 		t.Errorf("Data[path] = %q, want %q", it.Data["path"], path)
-	}
-	fv := it.FilterValue()
-	if !strings.Contains(fv, "~/projects/myapp") || !strings.Contains(fv, path) {
-		t.Errorf("FilterValue() = %q, want it to contain both tilde and absolute forms", fv)
 	}
 }
