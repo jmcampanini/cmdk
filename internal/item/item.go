@@ -11,7 +11,7 @@ type Item struct {
 	Type    string
 	Source  string
 	Display string
-	Filter  string
+	filter  string
 	Data    map[string]string
 	Action  ActionType
 	Cmd     string
@@ -24,13 +24,13 @@ func NewItem() Item {
 func (i *Item) SetDisplayPath(display, original string) {
 	i.Display = display
 	if display != original {
-		i.Filter = display + " " + original
+		i.filter = display + " " + original
 	}
 }
 
 func (i Item) FilterValue() string {
-	if i.Filter != "" {
-		return i.Filter
+	if i.filter != "" {
+		return i.filter
 	}
 	return i.Display
 }

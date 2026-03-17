@@ -29,12 +29,29 @@ func TestItem_ListMethods(t *testing.T) {
 	}
 }
 
-func TestItem_FilterValueUsesFilter(t *testing.T) {
-	i := Item{
-		Display: "~/projects/foo",
-		Filter:  "~/projects/foo /home/user/projects/foo",
+func TestSetDisplayPath_DifferentPaths(t *testing.T) {
+	i := NewItem()
+	i.SetDisplayPath("~/projects/foo", "/home/user/projects/foo")
+
+	if i.Display != "~/projects/foo" {
+		t.Errorf("Display = %q, want %q", i.Display, "~/projects/foo")
 	}
-	if got := i.FilterValue(); got != i.Filter {
-		t.Errorf("FilterValue() = %q, want %q", got, i.Filter)
+
+	want := "~/projects/foo /home/user/projects/foo"
+	if got := i.FilterValue(); got != want {
+		t.Errorf("FilterValue() = %q, want %q", got, want)
+	}
+}
+
+func TestSetDisplayPath_SamePaths(t *testing.T) {
+	i := NewItem()
+	i.SetDisplayPath("/tmp/scratch", "/tmp/scratch")
+
+	if i.Display != "/tmp/scratch" {
+		t.Errorf("Display = %q, want %q", i.Display, "/tmp/scratch")
+	}
+
+	if got := i.FilterValue(); got != "/tmp/scratch" {
+		t.Errorf("FilterValue() = %q, want %q (should fall back to Display)", got, "/tmp/scratch")
 	}
 }

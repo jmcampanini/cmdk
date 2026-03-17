@@ -1,6 +1,9 @@
 package zoxide
 
 import (
+	"fmt"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/jmcampanini/cmdk/internal/item"
@@ -50,8 +53,8 @@ func TestParseDirs_ItemFields(t *testing.T) {
 	if it.Data["path"] != "/srv/data/projects" {
 		t.Errorf("Data[path] = %q, want %q", it.Data["path"], "/srv/data/projects")
 	}
-	if it.Filter != "" {
-		t.Errorf("Filter = %q, want empty (path not under home dir)", it.Filter)
+	if got := it.FilterValue(); got != "/srv/data/projects" {
+		t.Errorf("FilterValue() = %q, want %q (should fall back to Display for non-home path)", got, "/srv/data/projects")
 	}
 }
 
@@ -118,5 +121,31 @@ func TestParseDirs_WhitespaceOnly(t *testing.T) {
 	items := ParseDirs("   \n  \n  ")
 	if items != nil {
 		t.Errorf("expected nil for whitespace-only input, got %v", items)
+	}
+}
+
+func TestParseDirs_HomePathGetsTildeDisplay(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skipf("no home dir: %v", err)
+	}
+
+	path := home + "/projects/myapp"
+	output := fmt.Sprintf("  42.5 %s\n", path)
+	items := ParseDirs(output)
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
+	}
+
+	it := items[0]
+	if it.Display != "~/projects/myapp" {
+		t.Errorf("Display = %q, want %q", it.Display, "~/projects/myapp")
+	}
+	if it.Data["path"] != path {
+		t.Errorf("Data[path] = %q, want %q", it.Data["path"], path)
+	}
+	fv := it.FilterValue()
+	if !strings.Contains(fv, "~/projects/myapp") || !strings.Contains(fv, path) {
+		t.Errorf("FilterValue() = %q, want it to contain both tilde and absolute forms", fv)
 	}
 }

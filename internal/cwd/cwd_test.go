@@ -43,10 +43,15 @@ func TestListCWD_DataMatchesGetwd(t *testing.T) {
 	if it.Display != wantDisplay {
 		t.Errorf("Display = %q, want %q", it.Display, wantDisplay)
 	}
+	fv := it.FilterValue()
 	if wantDisplay != wd {
 		wantFilter := wantDisplay + " " + wd
-		if it.Filter != wantFilter {
-			t.Errorf("Filter = %q, want %q", it.Filter, wantFilter)
+		if fv != wantFilter {
+			t.Errorf("FilterValue() = %q, want %q", fv, wantFilter)
+		}
+	} else {
+		if fv != wd {
+			t.Errorf("FilterValue() = %q, want %q (should fall back to Display)", fv, wd)
 		}
 	}
 }
