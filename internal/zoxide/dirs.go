@@ -2,6 +2,7 @@ package zoxide
 
 import (
 	"cmp"
+	"context"
 	"os/exec"
 	"slices"
 	"strconv"
@@ -70,8 +71,8 @@ func ParseDirs(output string) []item.Item {
 	return items
 }
 
-func ListDirs() ([]item.Item, error) {
-	out, err := exec.Command("zoxide", "query", "--list", "--score").Output()
+func ListDirs(ctx context.Context) ([]item.Item, error) {
+	out, err := exec.CommandContext(ctx, "zoxide", "query", "--list", "--score").Output()
 	if err != nil {
 		return nil, err
 	}

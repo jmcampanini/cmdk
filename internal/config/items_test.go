@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"testing"
 
 	"github.com/jmcampanini/cmdk/internal/item"
@@ -8,7 +9,7 @@ import (
 
 func TestCommandItems_NilConfig(t *testing.T) {
 	fn := CommandItems(nil)
-	items, err := fn()
+	items, err := fn(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -24,7 +25,7 @@ func TestCommandItems_CorrectFields(t *testing.T) {
 		},
 	}
 	fn := CommandItems(cfg)
-	items, err := fn()
+	items, err := fn(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -58,7 +59,7 @@ func TestCommandItems_PreservesOrder(t *testing.T) {
 		},
 	}
 	fn := CommandItems(cfg)
-	items, err := fn()
+	items, err := fn(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"context"
 	"os/exec"
 	"sort"
 	"strconv"
@@ -69,8 +70,8 @@ func ParseWindows(output string) []item.Item {
 	return items
 }
 
-func ListWindows() ([]item.Item, error) {
-	out, err := exec.Command("tmux", "list-windows", "-a", "-F", "#{session_name}:#{window_index} #{window_name}").Output()
+func ListWindows(ctx context.Context) ([]item.Item, error) {
+	out, err := exec.CommandContext(ctx, "tmux", "list-windows", "-a", "-F", "#{session_name}:#{window_index} #{window_name}").Output()
 	if err != nil {
 		return nil, err
 	}

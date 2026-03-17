@@ -5,17 +5,25 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
+
+const defaultFetchTimeout = 2 * time.Second
 
 type Command struct {
 	Name string `toml:"name"`
 	Cmd  string `toml:"cmd"`
 }
 
+type Timeout struct {
+	Fetch int `toml:"fetch"`
+}
+
 type Config struct {
 	Commands []Command `toml:"commands"`
+	Timeout  Timeout   `toml:"timeout"`
 }
 
 func Load(path string) (*Config, error) {
@@ -28,6 +36,13 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 	return &cfg, nil
+}
+
+func (c *Config) FetchTimeout() time.Duration {
+	if c == nil || c.Timeout.Fetch <= 0 {
+		return defaultFetchTimeout
+	}
+	return time.Duration(c.Timeout.Fetch) * time.Millisecond
 }
 
 func DefaultPath() string {

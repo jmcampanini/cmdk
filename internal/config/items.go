@@ -1,9 +1,13 @@
 package config
 
-import "github.com/jmcampanini/cmdk/internal/item"
+import (
+	"context"
 
-func CommandItems(cfg *Config) func() ([]item.Item, error) {
-	return func() ([]item.Item, error) {
+	"github.com/jmcampanini/cmdk/internal/item"
+)
+
+func CommandItems(cfg *Config) func(context.Context) ([]item.Item, error) {
+	return func(_ context.Context) ([]item.Item, error) {
 		if cfg == nil {
 			return nil, nil
 		}

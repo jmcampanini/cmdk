@@ -1,21 +1,29 @@
 package generator
 
 import (
+	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
+const rootTestFetchTimeout = time.Second
+
+func newRootTestGenerator(sources ...Source) GeneratorFunc {
+	return NewRootGenerator(rootTestFetchTimeout, sources...)
+}
+
 func TestRootGenerator_ReturnsWindows(t *testing.T) {
-	src := Source{Name: "windows", Type: "window", Fetch: func() ([]item.Item, error) {
+	src := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "window", Display: "a:1 zsh"},
 			{Type: "window", Display: "b:1 vim"},
 		}, nil
 	}}
 
-	gen := NewRootGenerator(src)
+	gen := newRootTestGenerator(src)
 	items := gen(nil, Context{})
 
 	if len(items) != 2 {
@@ -30,11 +38,11 @@ func TestRootGenerator_ReturnsWindows(t *testing.T) {
 }
 
 func TestRootGenerator_ErrorProducesErrorItem(t *testing.T) {
-	src := Source{Name: "zoxide", Type: "dir", Fetch: func() ([]item.Item, error) {
+	src := Source{Name: "zoxide", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
 		return nil, errors.New("not installed")
 	}}
 
-	gen := NewRootGenerator(src)
+	gen := newRootTestGenerator(src)
 	items := gen(nil, Context{})
 
 	if len(items) != 1 {
@@ -59,19 +67,19 @@ func TestRootGenerator_ErrorProducesErrorItem(t *testing.T) {
 }
 
 func TestRootGenerator_MultipleSources(t *testing.T) {
-	windows := Source{Name: "windows", Type: "window", Fetch: func() ([]item.Item, error) {
+	windows := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "window", Display: "main:1 zsh"},
 		}, nil
 	}}
-	dirs := Source{Name: "zoxide", Type: "dir", Fetch: func() ([]item.Item, error) {
+	dirs := Source{Name: "zoxide", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "dir", Display: "/home/user"},
 			{Type: "dir", Display: "/tmp"},
 		}, nil
 	}}
 
-	gen := NewRootGenerator(windows, dirs)
+	gen := newRootTestGenerator(windows, dirs)
 	items := gen(nil, Context{})
 
 	if len(items) != 3 {
@@ -86,16 +94,16 @@ func TestRootGenerator_MultipleSources(t *testing.T) {
 }
 
 func TestRootGenerator_OneSourceErrors(t *testing.T) {
-	good := Source{Name: "windows", Type: "window", Fetch: func() ([]item.Item, error) {
+	good := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "window", Display: "main:1 zsh"},
 		}, nil
 	}}
-	bad := Source{Name: "zoxide", Type: "dir", Fetch: func() ([]item.Item, error) {
+	bad := Source{Name: "zoxide", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
 		return nil, errors.New("zoxide not installed")
 	}}
 
-	gen := NewRootGenerator(good, bad)
+	gen := newRootTestGenerator(good, bad)
 	items := gen(nil, Context{})
 
 	if len(items) != 2 {
@@ -113,14 +121,14 @@ func TestRootGenerator_OneSourceErrors(t *testing.T) {
 }
 
 func TestRootGenerator_AllSourcesError(t *testing.T) {
-	bad1 := Source{Name: "src1", Type: "window", Fetch: func() ([]item.Item, error) {
+	bad1 := Source{Name: "src1", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
 		return nil, errors.New("fail 1")
 	}}
-	bad2 := Source{Name: "src2", Type: "dir", Fetch: func() ([]item.Item, error) {
+	bad2 := Source{Name: "src2", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
 		return nil, errors.New("fail 2")
 	}}
 
-	gen := NewRootGenerator(bad1, bad2)
+	gen := newRootTestGenerator(bad1, bad2)
 	items := gen(nil, Context{})
 
 	if len(items) != 2 {
@@ -135,17 +143,17 @@ func TestRootGenerator_AllSourcesError(t *testing.T) {
 }
 
 func TestRootGenerator_ErrorItemInDirGroup(t *testing.T) {
-	windows := Source{Name: "windows", Type: "window", Fetch: func() ([]item.Item, error) {
+	windows := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
 	}}
-	badDirs := Source{Name: "zoxide", Type: "dir", Fetch: func() ([]item.Item, error) {
+	badDirs := Source{Name: "zoxide", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
 		return nil, errors.New("command not found")
 	}}
-	cmds := Source{Name: "commands", Type: "cmd", Fetch: func() ([]item.Item, error) {
+	cmds := Source{Name: "commands", Type: "cmd", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{{Type: "cmd", Display: "htop", Action: item.ActionExecute}}, nil
 	}}
 
-	gen := NewRootGenerator(windows, badDirs, cmds)
+	gen := newRootTestGenerator(windows, badDirs, cmds)
 	items := gen(nil, Context{})
 
 	if len(items) != 3 {
@@ -168,5 +176,70 @@ func TestRootGenerator_ErrorItemInDirGroup(t *testing.T) {
 	}
 	if got2.Type != "cmd" {
 		t.Errorf("ordered[2].Type = %q, want cmd", got2.Type)
+	}
+}
+
+func TestRootGenerator_PreservesSourceOrderWhenConcurrent(t *testing.T) {
+	firstStarted := make(chan struct{})
+	secondDone := make(chan struct{})
+	releaseFirst := make(chan struct{})
+
+	first := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
+		close(firstStarted)
+		select {
+		case <-releaseFirst:
+		case <-time.After(250 * time.Millisecond):
+			return nil, errors.New("first source was not released")
+		}
+		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
+	}}
+	second := Source{Name: "commands", Type: "cmd", Fetch: func(context.Context) ([]item.Item, error) {
+		<-firstStarted
+		close(secondDone)
+		return []item.Item{{Type: "cmd", Display: "htop"}}, nil
+	}}
+
+	go func() {
+		<-secondDone
+		close(releaseFirst)
+	}()
+
+	gen := newRootTestGenerator(first, second)
+	items := gen(nil, Context{})
+
+	if len(items) != 2 {
+		t.Fatalf("got %d items, want 2", len(items))
+	}
+	if items[0].Display != "main:1 zsh" {
+		t.Errorf("items[0].Display = %q, want %q", items[0].Display, "main:1 zsh")
+	}
+	if items[1].Display != "htop" {
+		t.Errorf("items[1].Display = %q, want %q", items[1].Display, "htop")
+	}
+}
+
+func TestRootGenerator_TimeoutProducesErrorItem(t *testing.T) {
+	slow := Source{Name: "zoxide", Type: "dir", Fetch: func(ctx context.Context) ([]item.Item, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}}
+	fast := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
+		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
+	}}
+
+	gen := NewRootGenerator(10*time.Millisecond, fast, slow)
+	items := gen(nil, Context{})
+
+	if len(items) != 2 {
+		t.Fatalf("got %d items, want 2", len(items))
+	}
+	if items[0].Display != "main:1 zsh" {
+		t.Errorf("items[0].Display = %q, want %q", items[0].Display, "main:1 zsh")
+	}
+	if items[1].Type != "dir" {
+		t.Errorf("items[1].Type = %q, want dir", items[1].Type)
+	}
+	if items[1].Display != "zoxide error: context deadline exceeded" {
+		t.Errorf("items[1].Display = %q, want %q", items[1].Display, "zoxide error: context deadline exceeded")
 	}
 }

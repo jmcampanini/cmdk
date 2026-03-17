@@ -1,12 +1,13 @@
 package cwd
 
 import (
+	"context"
 	"os"
 
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
-func ListCWD() ([]item.Item, error) {
+func ListCWD(_ context.Context) ([]item.Item, error) {
 	wd, err := os.Getwd()
 	if err != nil {
 		return nil, err

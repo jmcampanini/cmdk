@@ -1,7 +1,10 @@
 package generator
 
 import (
+	"context"
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/jmcampanini/cmdk/internal/item"
 )
@@ -9,32 +12,57 @@ import (
 type Source struct {
 	Name  string
 	Type  string
-	Fetch func() ([]item.Item, error)
+	Fetch func(context.Context) ([]item.Item, error)
 }
 
-func NewRootGenerator(sources ...Source) GeneratorFunc {
+func NewRootGenerator(timeout time.Duration, sources ...Source) GeneratorFunc {
 	return func(accumulated []item.Item, ctx Context) []item.Item {
-		var all []item.Item
-		for _, src := range sources {
+		results := make([][]item.Item, len(sources))
+		errs := make([]error, len(sources))
+		var wg sync.WaitGroup
+
+		for i, src := range sources {
 			if src.Fetch == nil {
-				errItem := item.NewItem()
-				errItem.Type = src.Type
-				errItem.Source = src.Name
-				errItem.Display = fmt.Sprintf("%s error: no fetch function", src.Name)
-				all = append(all, errItem)
+				errs[i] = fmt.Errorf("no fetch function")
 				continue
 			}
-			items, err := src.Fetch()
-			if err != nil {
-				errItem := item.NewItem()
-				errItem.Type = src.Type
-				errItem.Source = src.Name
-				errItem.Display = fmt.Sprintf("%s error: %s", src.Name, err)
-				all = append(all, errItem)
+
+			wg.Add(1)
+			go func(i int, src Source) {
+				defer wg.Done()
+
+				fetchCtx, cancel := newFetchContext(timeout)
+				defer cancel()
+
+				results[i], errs[i] = src.Fetch(fetchCtx)
+			}(i, src)
+		}
+
+		wg.Wait()
+
+		var all []item.Item
+		for i, src := range sources {
+			if errs[i] != nil {
+				all = append(all, errorItem(src, errs[i]))
 				continue
 			}
-			all = append(all, items...)
+			all = append(all, results[i]...)
 		}
 		return all
 	}
+}
+
+func newFetchContext(timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout <= 0 {
+		return context.WithCancel(context.Background())
+	}
+	return context.WithTimeout(context.Background(), timeout)
+}
+
+func errorItem(src Source, err error) item.Item {
+	errItem := item.NewItem()
+	errItem.Type = src.Type
+	errItem.Source = src.Name
+	errItem.Display = fmt.Sprintf("%s error: %s", src.Name, err)
+	return errItem
 }

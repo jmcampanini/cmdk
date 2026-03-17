@@ -3,7 +3,8 @@
 check: test lint
 
 build: check
-	go build -o cmdk .
+	@mkdir -p build
+	go build -o build/cmdk .
 
 test:
 	go test ./...
