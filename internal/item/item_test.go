@@ -28,3 +28,13 @@ func TestItem_ListMethods(t *testing.T) {
 		t.Errorf("Description() = %q, want %q", got, "window")
 	}
 }
+
+func TestItem_FilterValueUsesFilter(t *testing.T) {
+	i := Item{
+		Display: "~/projects/foo",
+		Filter:  "~/projects/foo /home/user/projects/foo",
+	}
+	if got := i.FilterValue(); got != i.Filter {
+		t.Errorf("FilterValue() = %q, want %q", got, i.Filter)
+	}
+}

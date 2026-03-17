@@ -7,20 +7,20 @@ import (
 )
 
 func TestParseDirs_MultiLine(t *testing.T) {
-	output := `  42.5 /home/user/projects
+	output := `  42.5 /srv/data/projects
   10.0 /tmp/scratch
- 100.0 /home/user/work`
+ 100.0 /srv/data/work`
 
 	items := ParseDirs(output)
 	if len(items) != 3 {
 		t.Fatalf("got %d items, want 3", len(items))
 	}
 
-	if items[0].Display != "/home/user/work" {
-		t.Errorf("items[0].Display = %q, want %q", items[0].Display, "/home/user/work")
+	if items[0].Display != "/srv/data/work" {
+		t.Errorf("items[0].Display = %q, want %q", items[0].Display, "/srv/data/work")
 	}
-	if items[1].Display != "/home/user/projects" {
-		t.Errorf("items[1].Display = %q, want %q", items[1].Display, "/home/user/projects")
+	if items[1].Display != "/srv/data/projects" {
+		t.Errorf("items[1].Display = %q, want %q", items[1].Display, "/srv/data/projects")
 	}
 	if items[2].Display != "/tmp/scratch" {
 		t.Errorf("items[2].Display = %q, want %q", items[2].Display, "/tmp/scratch")
@@ -28,7 +28,7 @@ func TestParseDirs_MultiLine(t *testing.T) {
 }
 
 func TestParseDirs_ItemFields(t *testing.T) {
-	output := "  42.5 /home/user/projects\n"
+	output := "  42.5 /srv/data/projects\n"
 	items := ParseDirs(output)
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
@@ -44,11 +44,14 @@ func TestParseDirs_ItemFields(t *testing.T) {
 	if it.Action != item.ActionNextList {
 		t.Errorf("Action = %q, want %q", it.Action, item.ActionNextList)
 	}
-	if it.Display != "/home/user/projects" {
-		t.Errorf("Display = %q, want %q", it.Display, "/home/user/projects")
+	if it.Display != "/srv/data/projects" {
+		t.Errorf("Display = %q, want %q", it.Display, "/srv/data/projects")
 	}
-	if it.Data["path"] != "/home/user/projects" {
-		t.Errorf("Data[path] = %q, want %q", it.Data["path"], "/home/user/projects")
+	if it.Data["path"] != "/srv/data/projects" {
+		t.Errorf("Data[path] = %q, want %q", it.Data["path"], "/srv/data/projects")
+	}
+	if it.Filter != "" {
+		t.Errorf("Filter = %q, want empty (path not under home dir)", it.Filter)
 	}
 }
 
@@ -98,15 +101,15 @@ just-garbage
 }
 
 func TestParseDirs_PathWithSpaces(t *testing.T) {
-	output := "  42.5 /home/user/my projects/code\n"
+	output := "  42.5 /srv/data/my projects/code\n"
 	items := ParseDirs(output)
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
-	if items[0].Display != "/home/user/my projects/code" {
+	if items[0].Display != "/srv/data/my projects/code" {
 		t.Errorf("Display = %q, want path with spaces preserved", items[0].Display)
 	}
-	if items[0].Data["path"] != "/home/user/my projects/code" {
+	if items[0].Data["path"] != "/srv/data/my projects/code" {
 		t.Errorf("Data[path] = %q, want path with spaces preserved", items[0].Data["path"])
 	}
 }
