@@ -29,6 +29,7 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 
 	l := list.New(items, delegate, 0, 0)
 	l.Title = "cmdk"
+	l.Filter = pathAwareFilter
 	applyListStyles(&l, t)
 
 	return Model{
