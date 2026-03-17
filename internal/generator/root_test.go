@@ -264,3 +264,45 @@ func TestRootGenerator_TimeoutProducesErrorItem(t *testing.T) {
 		t.Errorf("items[1].Display = %q, want prefix %q", items[1].Display, "zoxide error:")
 	}
 }
+
+func TestRootGenerator_LimitTruncatesResults(t *testing.T) {
+	src := Source{Name: "zoxide", Type: "dir", Limit: 2, Fetch: func(context.Context) ([]item.Item, error) {
+		return []item.Item{
+			{Type: "dir", Display: "/a"},
+			{Type: "dir", Display: "/b"},
+			{Type: "dir", Display: "/c"},
+			{Type: "dir", Display: "/d"},
+			{Type: "dir", Display: "/e"},
+		}, nil
+	}}
+
+	gen := newRootTestGenerator(src)
+	items := gen(nil, Context{})
+
+	if len(items) != 2 {
+		t.Fatalf("got %d items, want 2", len(items))
+	}
+	if items[0].Display != "/a" {
+		t.Errorf("items[0].Display = %q, want /a", items[0].Display)
+	}
+	if items[1].Display != "/b" {
+		t.Errorf("items[1].Display = %q, want /b", items[1].Display)
+	}
+}
+
+func TestRootGenerator_ZeroLimitReturnsAll(t *testing.T) {
+	src := Source{Name: "zoxide", Type: "dir", Limit: 0, Fetch: func(context.Context) ([]item.Item, error) {
+		return []item.Item{
+			{Type: "dir", Display: "/a"},
+			{Type: "dir", Display: "/b"},
+			{Type: "dir", Display: "/c"},
+		}, nil
+	}}
+
+	gen := newRootTestGenerator(src)
+	items := gen(nil, Context{})
+
+	if len(items) != 3 {
+		t.Fatalf("got %d items, want 3", len(items))
+	}
+}

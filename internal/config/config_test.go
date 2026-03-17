@@ -51,8 +51,11 @@ func TestLoad_MissingFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected nil error, got: %v", err)
 	}
-	if cfg != nil {
-		t.Fatalf("expected nil config, got: %v", cfg)
+	if cfg == nil {
+		t.Fatal("expected non-nil config")
+	}
+	if len(cfg.Commands) != 0 {
+		t.Errorf("got %d commands, want 0", len(cfg.Commands))
 	}
 }
 
@@ -67,8 +70,8 @@ func TestLoad_MalformedTOML(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for malformed TOML")
 	}
-	if cfg != nil {
-		t.Fatal("expected nil config on error")
+	if cfg == nil {
+		t.Fatal("expected non-nil config even on error")
 	}
 }
 
@@ -145,10 +148,6 @@ func TestDefaultPath_Fallback(t *testing.T) {
 }
 
 func TestFetchTimeout_DefaultsToTwoSeconds(t *testing.T) {
-	if got := (*Config)(nil).FetchTimeout(); got != 2*time.Second {
-		t.Fatalf("nil config FetchTimeout() = %s, want %s", got, 2*time.Second)
-	}
-
 	cfg := &Config{}
 	if got := cfg.FetchTimeout(); got != 2*time.Second {
 		t.Errorf("zero timeout FetchTimeout() = %s, want %s", got, 2*time.Second)
@@ -160,5 +159,60 @@ func TestFetchTimeout_UsesConfiguredMilliseconds(t *testing.T) {
 
 	if got := cfg.FetchTimeout(); got != 750*time.Millisecond {
 		t.Fatalf("FetchTimeout() = %s, want %s", got, 750*time.Millisecond)
+	}
+}
+
+func TestSourceLimit_DefaultForZoxide(t *testing.T) {
+	cfg := &Config{}
+	if got := cfg.SourceLimit("zoxide"); got != 20 {
+		t.Errorf("SourceLimit(zoxide) = %d, want 20", got)
+	}
+}
+
+func TestSourceLimit_ConfiguredValue(t *testing.T) {
+	cfg := &Config{
+		Sources: map[string]SourceConfig{
+			"zoxide": {Limit: 10},
+		},
+	}
+	if got := cfg.SourceLimit("zoxide"); got != 10 {
+		t.Errorf("SourceLimit(zoxide) = %d, want 10", got)
+	}
+}
+
+func TestSourceLimit_ZeroMeansUnlimited(t *testing.T) {
+	cfg := &Config{
+		Sources: map[string]SourceConfig{
+			"zoxide": {Limit: 0},
+		},
+	}
+	if got := cfg.SourceLimit("zoxide"); got != 0 {
+		t.Errorf("SourceLimit(zoxide) = %d, want 0 (unlimited)", got)
+	}
+}
+
+func TestSourceLimit_UnknownSourceReturnsZero(t *testing.T) {
+	cfg := &Config{}
+	if got := cfg.SourceLimit("windows"); got != 0 {
+		t.Errorf("SourceLimit(windows) = %d, want 0", got)
+	}
+}
+
+func TestLoad_SourcesSection(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[sources.zoxide]
+limit = 5
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := cfg.SourceLimit("zoxide"); got != 5 {
+		t.Errorf("SourceLimit(zoxide) = %d, want 5", got)
 	}
 }

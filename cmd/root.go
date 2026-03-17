@@ -48,7 +48,7 @@ var rootCmd = &cobra.Command{
 
 		sources := []generator.Source{
 			{Name: "windows", Type: "window", Fetch: tmux.ListWindows},
-			{Name: "zoxide", Type: "dir", Fetch: zoxide.ListDirs},
+			{Name: "zoxide", Type: "dir", Limit: cfg.SourceLimit("zoxide"), Fetch: zoxide.ListDirs},
 			{Name: "cwd", Type: "dir", Fetch: cwd.ListCWD},
 		}
 		if cfgErr != nil {

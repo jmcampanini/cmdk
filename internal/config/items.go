@@ -8,9 +8,6 @@ import (
 
 func CommandItems(cfg *Config) func(context.Context) ([]item.Item, error) {
 	return func(_ context.Context) ([]item.Item, error) {
-		if cfg == nil {
-			return nil, nil
-		}
 		items := make([]item.Item, len(cfg.Commands))
 		for i, cmd := range cfg.Commands {
 			it := item.NewItem()

@@ -80,8 +80,5 @@ func ListDirs(ctx context.Context) ([]item.Item, error) {
 		}
 		return nil, err
 	}
-	if len(out) > 0 {
-		return ParseDirs(string(out)), nil
-	}
-	return nil, nil
+	return ParseDirs(string(out)), nil
 }
