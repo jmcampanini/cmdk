@@ -12,7 +12,7 @@ func TestLoad_ValidTOML(t *testing.T) {
 	path := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(path, []byte(`
 [timeout]
-fetch = 1500
+fetch_ms = 1500
 
 [[commands]]
 name = "htop"
@@ -41,8 +41,8 @@ cmd = "tail -f /var/log/syslog"
 	if cfg.Commands[1].Cmd != "tail -f /var/log/syslog" {
 		t.Errorf("commands[1].Cmd = %q", cfg.Commands[1].Cmd)
 	}
-	if cfg.Timeout.Fetch != 1500 {
-		t.Errorf("timeout.fetch = %d, want 1500", cfg.Timeout.Fetch)
+	if cfg.Timeout.FetchMs != 1500 {
+		t.Errorf("timeout.fetch_ms = %d, want 1500", cfg.Timeout.FetchMs)
 	}
 }
 
@@ -156,7 +156,7 @@ func TestFetchTimeout_DefaultsToTwoSeconds(t *testing.T) {
 }
 
 func TestFetchTimeout_UsesConfiguredMilliseconds(t *testing.T) {
-	cfg := &Config{Timeout: Timeout{Fetch: 750}}
+	cfg := &Config{Timeout: Timeout{FetchMs: 750}}
 
 	if got := cfg.FetchTimeout(); got != 750*time.Millisecond {
 		t.Fatalf("FetchTimeout() = %s, want %s", got, 750*time.Millisecond)

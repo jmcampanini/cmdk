@@ -18,7 +18,7 @@ type Command struct {
 }
 
 type Timeout struct {
-	Fetch int `toml:"fetch"`
+	FetchMs int `toml:"fetch_ms"`
 }
 
 type Config struct {
@@ -39,10 +39,10 @@ func Load(path string) (*Config, error) {
 }
 
 func (c *Config) FetchTimeout() time.Duration {
-	if c == nil || c.Timeout.Fetch <= 0 {
+	if c == nil || c.Timeout.FetchMs <= 0 {
 		return defaultFetchTimeout
 	}
-	return time.Duration(c.Timeout.Fetch) * time.Millisecond
+	return time.Duration(c.Timeout.FetchMs) * time.Millisecond
 }
 
 func DefaultPath() string {

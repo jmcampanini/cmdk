@@ -30,6 +30,11 @@ func NewRootGenerator(timeout time.Duration, sources ...Source) GeneratorFunc {
 			wg.Add(1)
 			go func(i int, src Source) {
 				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						errs[i] = fmt.Errorf("panic: %v", r)
+					}
+				}()
 
 				fetchCtx, cancel := newFetchContext(timeout)
 				defer cancel()
@@ -54,7 +59,7 @@ func NewRootGenerator(timeout time.Duration, sources ...Source) GeneratorFunc {
 
 func newFetchContext(timeout time.Duration) (context.Context, context.CancelFunc) {
 	if timeout <= 0 {
-		return context.WithCancel(context.Background())
+		timeout = 2 * time.Second
 	}
 	return context.WithTimeout(context.Background(), timeout)
 }

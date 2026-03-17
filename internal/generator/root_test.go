@@ -3,6 +3,7 @@ package generator
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -179,17 +180,37 @@ func TestRootGenerator_ErrorItemInDirGroup(t *testing.T) {
 	}
 }
 
+func TestRootGenerator_NilFetchProducesErrorItem(t *testing.T) {
+	src := Source{Name: "zoxide", Type: "dir", Fetch: nil}
+
+	gen := newRootTestGenerator(src)
+	items := gen(nil, Context{})
+
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
+	}
+	if items[0].Type != "dir" {
+		t.Errorf("Type = %q, want dir", items[0].Type)
+	}
+	if items[0].Source != "zoxide" {
+		t.Errorf("Source = %q, want zoxide", items[0].Source)
+	}
+	if items[0].Display == "" {
+		t.Errorf("Display is empty, want non-empty error message")
+	}
+}
+
 func TestRootGenerator_PreservesSourceOrderWhenConcurrent(t *testing.T) {
 	firstStarted := make(chan struct{})
 	secondDone := make(chan struct{})
 	releaseFirst := make(chan struct{})
 
-	first := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
+	first := Source{Name: "windows", Type: "window", Fetch: func(ctx context.Context) ([]item.Item, error) {
 		close(firstStarted)
 		select {
 		case <-releaseFirst:
-		case <-time.After(250 * time.Millisecond):
-			return nil, errors.New("first source was not released")
+		case <-ctx.Done():
+			return nil, errors.New("first source was not released before context expired")
 		}
 		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
 	}}
@@ -239,7 +260,7 @@ func TestRootGenerator_TimeoutProducesErrorItem(t *testing.T) {
 	if items[1].Type != "dir" {
 		t.Errorf("items[1].Type = %q, want dir", items[1].Type)
 	}
-	if items[1].Display != "zoxide error: context deadline exceeded" {
-		t.Errorf("items[1].Display = %q, want %q", items[1].Display, "zoxide error: context deadline exceeded")
+	if !strings.HasPrefix(items[1].Display, "zoxide error:") {
+		t.Errorf("items[1].Display = %q, want prefix %q", items[1].Display, "zoxide error:")
 	}
 }

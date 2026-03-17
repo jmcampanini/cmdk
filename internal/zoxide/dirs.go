@@ -3,6 +3,7 @@ package zoxide
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"os/exec"
 	"slices"
 	"strconv"
@@ -74,6 +75,9 @@ func ParseDirs(output string) []item.Item {
 func ListDirs(ctx context.Context) ([]item.Item, error) {
 	out, err := exec.CommandContext(ctx, "zoxide", "query", "--list", "--score").Output()
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("zoxide did not respond within the configured timeout")
+		}
 		return nil, err
 	}
 	if len(out) > 0 {
