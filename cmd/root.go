@@ -19,6 +19,9 @@ import (
 	"github.com/jmcampanini/cmdk/internal/zoxide"
 )
 
+// Version is set at build time via ldflags.
+var Version = "n/a"
+
 var paneID string
 
 var rootCmd = &cobra.Command{
@@ -86,6 +89,7 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
+	rootCmd.Version = Version
 	rootCmd.Flags().StringVar(&paneID, "pane-id", "", "tmux pane ID")
 }
 
