@@ -12,6 +12,7 @@ import (
 type Source struct {
 	Name  string
 	Type  string
+	Limit int
 	Fetch func(context.Context) ([]item.Item, error)
 }
 
@@ -38,6 +39,9 @@ func NewRootGenerator(timeout time.Duration, sources ...Source) GeneratorFunc {
 				defer cancel()
 
 				results[i], errs[i] = src.Fetch(ctx)
+				if src.Limit > 0 && len(results[i]) > src.Limit {
+					results[i] = results[i][:src.Limit]
+				}
 			})
 		}
 

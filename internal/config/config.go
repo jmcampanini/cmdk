@@ -21,9 +21,14 @@ type Timeout struct {
 	FetchMs int `toml:"fetch_ms"`
 }
 
+type SourceConfig struct {
+	Limit int `toml:"limit"`
+}
+
 type Config struct {
-	Commands []Command `toml:"commands"`
-	Timeout  Timeout   `toml:"timeout"`
+	Commands []Command               `toml:"commands"`
+	Timeout  Timeout                 `toml:"timeout"`
+	Sources  map[string]SourceConfig `toml:"sources"`
 }
 
 func Load(path string) (*Config, error) {
@@ -43,6 +48,17 @@ func (c *Config) FetchTimeout() time.Duration {
 		return defaultFetchTimeout
 	}
 	return time.Duration(c.Timeout.FetchMs) * time.Millisecond
+}
+
+var defaultSourceLimits = map[string]int{
+	"zoxide": 20,
+}
+
+func (c *Config) SourceLimit(name string) int {
+	if sc, ok := c.Sources[name]; ok && sc.Limit > 0 {
+		return sc.Limit
+	}
+	return defaultSourceLimits[name]
 }
 
 func DefaultPath() string {
