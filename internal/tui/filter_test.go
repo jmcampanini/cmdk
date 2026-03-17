@@ -81,9 +81,13 @@ func TestPathAwareFilter_AbsolutePathMatch(t *testing.T) {
 	if err != nil {
 		t.Skipf("no home dir: %v", err)
 	}
+	if len(home) < 3 {
+		t.Skipf("home dir too short for test: %q", home)
+	}
 
+	term := home[:3]
 	targets := []string{"~/Code/project", "/tmp/scratch"}
-	ranks := pathAwareFilter(home[:6], targets)
+	ranks := pathAwareFilter(term, targets)
 
 	found := false
 	for _, r := range ranks {

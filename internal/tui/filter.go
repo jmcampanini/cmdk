@@ -25,10 +25,19 @@ func pathAwareFilter(term string, targets []string) []list.Rank {
 	var absTargets []string
 	var absIndexes []int
 	for i, t := range targets {
-		if matched[i] || !strings.HasPrefix(t, "~/") {
+		if matched[i] {
 			continue
 		}
-		absTargets = append(absTargets, home+t[1:])
+		var absPath string
+		switch {
+		case t == "~":
+			absPath = home
+		case strings.HasPrefix(t, "~/"):
+			absPath = home + t[1:]
+		default:
+			continue
+		}
+		absTargets = append(absTargets, absPath)
 		absIndexes = append(absIndexes, i)
 	}
 
