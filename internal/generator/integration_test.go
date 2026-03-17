@@ -1,34 +1,42 @@
 package generator
 
 import (
+	"context"
 	"errors"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jmcampanini/cmdk/internal/config"
 	"github.com/jmcampanini/cmdk/internal/execute"
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
+const integrationTestFetchTimeout = time.Second
+
+func newIntegrationRootGenerator(sources ...Source) GeneratorFunc {
+	return NewRootGenerator(integrationTestFetchTimeout, sources...)
+}
+
 func setupRegistry() *Registry {
 	reg := NewRegistry()
 
-	windows := Source{Name: "windows", Type: "window", Fetch: func() ([]item.Item, error) {
+	windows := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute,
-				Cmd: "tmux switch-client -t '{{.session}}:{{.window_index}}'",
+				Cmd:  "tmux switch-client -t '{{.session}}:{{.window_index}}'",
 				Data: map[string]string{"session": "main", "window_index": "1"}},
 		}, nil
 	}}
-	dirs := Source{Name: "zoxide", Type: "dir", Fetch: func() ([]item.Item, error) {
+	dirs := Source{Name: "zoxide", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "dir", Display: "/home/user/projects", Action: item.ActionNextList,
 				Data: map[string]string{"path": "/home/user/projects"}},
 		}, nil
 	}}
 
-	reg.Register("root", NewRootGenerator(windows, dirs))
+	reg.Register("root", newIntegrationRootGenerator(windows, dirs))
 	reg.Register("dir-actions", NewDirActionsGenerator())
 	reg.MapType("", "root")
 	reg.MapType("dir", "dir-actions")
@@ -146,17 +154,17 @@ func TestIntegration_DataFlattening(t *testing.T) {
 }
 
 func TestIntegration_FourSourceTypes(t *testing.T) {
-	windows := Source{Name: "windows", Type: "window", Fetch: func() ([]item.Item, error) {
+	windows := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "window", Display: "main:1 zsh"},
 		}, nil
 	}}
-	dirs := Source{Name: "zoxide", Type: "dir", Fetch: func() ([]item.Item, error) {
+	dirs := Source{Name: "zoxide", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "dir", Source: "zoxide", Display: "/projects"},
 		}, nil
 	}}
-	cwdDir := Source{Name: "cwd", Type: "dir", Fetch: func() ([]item.Item, error) {
+	cwdDir := Source{Name: "cwd", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "dir", Source: "cwd", Display: "/home/user"},
 		}, nil
@@ -167,7 +175,7 @@ func TestIntegration_FourSourceTypes(t *testing.T) {
 		},
 	}
 
-	gen := NewRootGenerator(windows, dirs, cwdDir, Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(cfg)})
+	gen := newIntegrationRootGenerator(windows, dirs, cwdDir, Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(cfg)})
 	items := gen(nil, Context{})
 
 	if len(items) != 4 {
@@ -189,11 +197,11 @@ func TestIntegration_ConfigCommandsInOrder(t *testing.T) {
 			{Name: "gamma", Cmd: "echo gamma"},
 		},
 	}
-	windows := Source{Name: "windows", Type: "window", Fetch: func() ([]item.Item, error) {
+	windows := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
 	}}
 
-	gen := NewRootGenerator(windows, Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(cfg)})
+	gen := newIntegrationRootGenerator(windows, Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(cfg)})
 	items := gen(nil, Context{})
 
 	if len(items) != 4 {
@@ -212,11 +220,11 @@ func TestIntegration_ConfigCommandsInOrder(t *testing.T) {
 }
 
 func TestIntegration_NilConfig(t *testing.T) {
-	windows := Source{Name: "windows", Type: "window", Fetch: func() ([]item.Item, error) {
+	windows := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
 	}}
 
-	gen := NewRootGenerator(windows, Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(nil)})
+	gen := newIntegrationRootGenerator(windows, Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(nil)})
 	items := gen(nil, Context{})
 
 	if len(items) != 1 {
@@ -261,18 +269,18 @@ func TestIntegration_ExecuteWithEnvVars(t *testing.T) {
 }
 
 func TestIntegration_MalformedConfig(t *testing.T) {
-	windows := Source{Name: "windows", Type: "window", Fetch: func() ([]item.Item, error) {
+	windows := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
 	}}
-	dirs := Source{Name: "zoxide", Type: "dir", Fetch: func() ([]item.Item, error) {
+	dirs := Source{Name: "zoxide", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{{Type: "dir", Display: "/projects"}}, nil
 	}}
 	cfgErr := errors.New("bad toml")
-	badConfig := Source{Name: "config", Type: "cmd", Fetch: func() ([]item.Item, error) {
+	badConfig := Source{Name: "config", Type: "cmd", Fetch: func(context.Context) ([]item.Item, error) {
 		return nil, cfgErr
 	}}
 
-	gen := NewRootGenerator(windows, dirs, badConfig, Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(nil)})
+	gen := newIntegrationRootGenerator(windows, dirs, badConfig, Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(nil)})
 	items := gen(nil, Context{})
 
 	if len(items) != 3 {
@@ -294,17 +302,17 @@ func TestIntegration_MalformedConfig(t *testing.T) {
 }
 
 func TestIntegration_OneSourceFailsOthersWork(t *testing.T) {
-	windows := Source{Name: "windows", Type: "window", Fetch: func() ([]item.Item, error) {
+	windows := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
 	}}
-	badDirs := Source{Name: "zoxide", Type: "dir", Fetch: func() ([]item.Item, error) {
+	badDirs := Source{Name: "zoxide", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
 		return nil, errors.New("command not found")
 	}}
-	cmds := Source{Name: "commands", Type: "cmd", Fetch: func() ([]item.Item, error) {
+	cmds := Source{Name: "commands", Type: "cmd", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{{Type: "cmd", Display: "htop", Action: item.ActionExecute}}, nil
 	}}
 
-	gen := NewRootGenerator(windows, badDirs, cmds)
+	gen := newIntegrationRootGenerator(windows, badDirs, cmds)
 	items := gen(nil, Context{})
 
 	if len(items) != 3 {

@@ -1,6 +1,7 @@
 package cwd
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -8,7 +9,7 @@ import (
 )
 
 func TestListCWD_ReturnsOneItem(t *testing.T) {
-	items, err := ListCWD()
+	items, err := ListCWD(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -28,7 +29,7 @@ func TestListCWD_ReturnsOneItem(t *testing.T) {
 }
 
 func TestListCWD_DataMatchesGetwd(t *testing.T) {
-	items, err := ListCWD()
+	items, err := ListCWD(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

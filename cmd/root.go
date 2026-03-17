@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"syscall"
@@ -43,6 +44,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		cfg, cfgErr := config.Load(config.DefaultPath())
+		fetchTimeout := cfg.FetchTimeout()
 
 		sources := []generator.Source{
 			{Name: "windows", Type: "window", Fetch: tmux.ListWindows},
@@ -50,14 +52,14 @@ var rootCmd = &cobra.Command{
 			{Name: "cwd", Type: "dir", Fetch: cwd.ListCWD},
 		}
 		if cfgErr != nil {
-			sources = append(sources, generator.Source{Name: "config", Type: "cmd", Fetch: func() ([]item.Item, error) {
+			sources = append(sources, generator.Source{Name: "config", Type: "cmd", Fetch: func(context.Context) ([]item.Item, error) {
 				return nil, cfgErr
 			}})
 		}
 		sources = append(sources, generator.Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(cfg)})
 
 		reg := generator.NewRegistry()
-		reg.Register("root", generator.NewRootGenerator(sources...))
+		reg.Register("root", generator.NewRootGenerator(fetchTimeout, sources...))
 		reg.Register("dir-actions", generator.NewDirActionsGenerator())
 		reg.MapType("", "root")
 		reg.MapType("dir", "dir-actions")
