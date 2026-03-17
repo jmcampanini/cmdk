@@ -180,6 +180,17 @@ func TestSourceLimit_ConfiguredValue(t *testing.T) {
 	}
 }
 
+func TestSourceLimit_ZeroMeansUnlimited(t *testing.T) {
+	cfg := &Config{
+		Sources: map[string]SourceConfig{
+			"zoxide": {Limit: 0},
+		},
+	}
+	if got := cfg.SourceLimit("zoxide"); got != 0 {
+		t.Errorf("SourceLimit(zoxide) = %d, want 0 (unlimited)", got)
+	}
+}
+
 func TestSourceLimit_UnknownSourceReturnsZero(t *testing.T) {
 	cfg := &Config{}
 	if got := cfg.SourceLimit("windows"); got != 0 {

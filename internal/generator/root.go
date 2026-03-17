@@ -17,6 +17,9 @@ type Source struct {
 }
 
 func NewRootGenerator(timeout time.Duration, sources ...Source) GeneratorFunc {
+	if timeout <= 0 {
+		timeout = 2 * time.Second
+	}
 	return func(_ []item.Item, _ Context) []item.Item {
 		results := make([][]item.Item, len(sources))
 		errs := make([]error, len(sources))

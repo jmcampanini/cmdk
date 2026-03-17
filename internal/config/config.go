@@ -55,7 +55,7 @@ var defaultSourceLimits = map[string]int{
 }
 
 func (c *Config) SourceLimit(name string) int {
-	if sc, ok := c.Sources[name]; ok && sc.Limit > 0 {
+	if sc, ok := c.Sources[name]; ok {
 		return sc.Limit
 	}
 	return defaultSourceLimits[name]
