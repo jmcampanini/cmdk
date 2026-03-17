@@ -2,6 +2,8 @@ package generator
 
 import (
 	"errors"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/jmcampanini/cmdk/internal/config"
@@ -12,19 +14,19 @@ import (
 func setupRegistry() *Registry {
 	reg := NewRegistry()
 
-	windows := func() ([]item.Item, error) {
+	windows := Source{Name: "windows", Type: "window", Fetch: func() ([]item.Item, error) {
 		return []item.Item{
 			{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute,
 				Cmd: "tmux switch-client -t '{{.session}}:{{.window_index}}'",
 				Data: map[string]string{"session": "main", "window_index": "1"}},
 		}, nil
-	}
-	dirs := func() ([]item.Item, error) {
+	}}
+	dirs := Source{Name: "zoxide", Type: "dir", Fetch: func() ([]item.Item, error) {
 		return []item.Item{
 			{Type: "dir", Display: "/home/user/projects", Action: item.ActionNextList,
 				Data: map[string]string{"path": "/home/user/projects"}},
 		}, nil
-	}
+	}}
 
 	reg.Register("root", NewRootGenerator(windows, dirs))
 	reg.Register("dir-actions", NewDirActionsGenerator())
@@ -66,7 +68,7 @@ func TestIntegration_TwoLevelChain(t *testing.T) {
 		t.Errorf("action Display = %q, want %q", actionItems[0].Display, "New window")
 	}
 
-	allAccumulated := append(accumulated, actionItems[0])
+	allAccumulated := slices.Concat(accumulated, []item.Item{actionItems[0]})
 	data := execute.FlattenData(allAccumulated)
 	rendered, err := execute.RenderCmd(actionItems[0].Cmd, data)
 	if err != nil {
@@ -144,28 +146,28 @@ func TestIntegration_DataFlattening(t *testing.T) {
 }
 
 func TestIntegration_FourSourceTypes(t *testing.T) {
-	windows := func() ([]item.Item, error) {
+	windows := Source{Name: "windows", Type: "window", Fetch: func() ([]item.Item, error) {
 		return []item.Item{
 			{Type: "window", Display: "main:1 zsh"},
 		}, nil
-	}
-	dirs := func() ([]item.Item, error) {
+	}}
+	dirs := Source{Name: "zoxide", Type: "dir", Fetch: func() ([]item.Item, error) {
 		return []item.Item{
 			{Type: "dir", Source: "zoxide", Display: "/projects"},
 		}, nil
-	}
-	cwdDir := func() ([]item.Item, error) {
+	}}
+	cwdDir := Source{Name: "cwd", Type: "dir", Fetch: func() ([]item.Item, error) {
 		return []item.Item{
 			{Type: "dir", Source: "cwd", Display: "/home/user"},
 		}, nil
-	}
+	}}
 	cfg := &config.Config{
 		Commands: []config.Command{
 			{Name: "htop", Cmd: "htop"},
 		},
 	}
 
-	gen := NewRootGenerator(windows, dirs, cwdDir, config.CommandItems(cfg))
+	gen := NewRootGenerator(windows, dirs, cwdDir, Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(cfg)})
 	items := gen(nil, Context{})
 
 	if len(items) != 4 {
@@ -187,11 +189,11 @@ func TestIntegration_ConfigCommandsInOrder(t *testing.T) {
 			{Name: "gamma", Cmd: "echo gamma"},
 		},
 	}
-	windows := func() ([]item.Item, error) {
+	windows := Source{Name: "windows", Type: "window", Fetch: func() ([]item.Item, error) {
 		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
-	}
+	}}
 
-	gen := NewRootGenerator(windows, config.CommandItems(cfg))
+	gen := NewRootGenerator(windows, Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(cfg)})
 	items := gen(nil, Context{})
 
 	if len(items) != 4 {
@@ -210,11 +212,11 @@ func TestIntegration_ConfigCommandsInOrder(t *testing.T) {
 }
 
 func TestIntegration_NilConfig(t *testing.T) {
-	windows := func() ([]item.Item, error) {
+	windows := Source{Name: "windows", Type: "window", Fetch: func() ([]item.Item, error) {
 		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
-	}
+	}}
 
-	gen := NewRootGenerator(windows, config.CommandItems(nil))
+	gen := NewRootGenerator(windows, Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(nil)})
 	items := gen(nil, Context{})
 
 	if len(items) != 1 {
@@ -225,15 +227,52 @@ func TestIntegration_NilConfig(t *testing.T) {
 	}
 }
 
-func TestIntegration_MalformedConfig(t *testing.T) {
-	windows := func() ([]item.Item, error) {
-		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
-	}
-	dirs := func() ([]item.Item, error) {
-		return []item.Item{{Type: "dir", Display: "/projects"}}, nil
-	}
+func TestIntegration_ExecuteWithEnvVars(t *testing.T) {
+	reg := setupRegistry()
+	ctx := Context{}
 
-	gen := NewRootGenerator(windows, dirs, config.ErrorSource(errors.New("bad toml")), config.CommandItems(nil))
+	gen, err := reg.Resolve(nil)
+	if err != nil {
+		t.Fatalf("resolve root: %v", err)
+	}
+	rootItems := gen(nil, ctx)
+
+	dirItem := rootItems[1]
+	accumulated := []item.Item{dirItem}
+
+	gen, err = reg.Resolve(accumulated)
+	if err != nil {
+		t.Fatalf("resolve dir-actions: %v", err)
+	}
+	actionItems := gen(accumulated, ctx)
+	selected := actionItems[0]
+
+	all := slices.Concat(accumulated, []item.Item{selected})
+
+	envVars := execute.BuildCMDKEnvVars(all, "%5")
+	envMap := envSliceToMap(envVars)
+
+	if envMap["CMDK_PATH"] != "/home/user/projects" {
+		t.Errorf("CMDK_PATH = %q, want /home/user/projects", envMap["CMDK_PATH"])
+	}
+	if envMap["CMDK_PANE_ID"] != "%5" {
+		t.Errorf("CMDK_PANE_ID = %q, want %%5", envMap["CMDK_PANE_ID"])
+	}
+}
+
+func TestIntegration_MalformedConfig(t *testing.T) {
+	windows := Source{Name: "windows", Type: "window", Fetch: func() ([]item.Item, error) {
+		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
+	}}
+	dirs := Source{Name: "zoxide", Type: "dir", Fetch: func() ([]item.Item, error) {
+		return []item.Item{{Type: "dir", Display: "/projects"}}, nil
+	}}
+	cfgErr := errors.New("bad toml")
+	badConfig := Source{Name: "config", Type: "cmd", Fetch: func() ([]item.Item, error) {
+		return nil, cfgErr
+	}}
+
+	gen := NewRootGenerator(windows, dirs, badConfig, Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(nil)})
 	items := gen(nil, Context{})
 
 	if len(items) != 3 {
@@ -252,4 +291,43 @@ func TestIntegration_MalformedConfig(t *testing.T) {
 	if errItem.Action != "" {
 		t.Errorf("errItem.Action = %q, want empty", errItem.Action)
 	}
+}
+
+func TestIntegration_OneSourceFailsOthersWork(t *testing.T) {
+	windows := Source{Name: "windows", Type: "window", Fetch: func() ([]item.Item, error) {
+		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
+	}}
+	badDirs := Source{Name: "zoxide", Type: "dir", Fetch: func() ([]item.Item, error) {
+		return nil, errors.New("command not found")
+	}}
+	cmds := Source{Name: "commands", Type: "cmd", Fetch: func() ([]item.Item, error) {
+		return []item.Item{{Type: "cmd", Display: "htop", Action: item.ActionExecute}}, nil
+	}}
+
+	gen := NewRootGenerator(windows, badDirs, cmds)
+	items := gen(nil, Context{})
+
+	if len(items) != 3 {
+		t.Fatalf("got %d items, want 3", len(items))
+	}
+	if items[0].Type != "window" {
+		t.Errorf("items[0] = %q, want window", items[0].Type)
+	}
+	if items[1].Display != "zoxide error: command not found" {
+		t.Errorf("items[1].Display = %q", items[1].Display)
+	}
+	if items[2].Display != "htop" {
+		t.Errorf("items[2].Display = %q, want htop", items[2].Display)
+	}
+}
+
+func envSliceToMap(envs []string) map[string]string {
+	m := make(map[string]string)
+	for _, e := range envs {
+		k, v, ok := strings.Cut(e, "=")
+		if ok {
+			m[k] = v
+		}
+	}
+	return m
 }

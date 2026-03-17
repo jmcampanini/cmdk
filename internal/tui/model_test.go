@@ -214,6 +214,37 @@ func TestNextListWithUnmappedType_StaysOnCurrentList(t *testing.T) {
 	}
 }
 
+func TestEnterOnErrorItem_NoAction(t *testing.T) {
+	items := []list.Item{
+		item.Item{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute},
+		item.Item{Type: "dir", Display: "zoxide error: command not found"},
+	}
+	reg := generator.NewRegistry()
+	reg.Register("root", func(accumulated []item.Item, ctx generator.Context) []item.Item { return nil })
+	reg.MapType("", "root")
+
+	m := NewModel(items, "%1", nil, reg, generator.Context{})
+	m.list.SetSize(80, 40)
+
+	down := tea.KeyPressMsg{Code: tea.KeyDown}
+	result, _ := m.Update(down)
+	m = result.(Model)
+
+	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
+	result, cmd := m.Update(enter)
+	m = result.(Model)
+
+	if cmd != nil {
+		t.Error("Enter on error item should not quit")
+	}
+	if m.Selected() != nil {
+		t.Error("Selected() should be nil — error item is non-selectable")
+	}
+	if len(m.list.Items()) != 2 {
+		t.Errorf("list should still have 2 items, got %d", len(m.list.Items()))
+	}
+}
+
 func TestEscapeFromRoot_Quits(t *testing.T) {
 	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{})
 	m.list.SetSize(80, 40)

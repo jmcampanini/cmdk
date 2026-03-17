@@ -10,7 +10,14 @@ import (
 	"time"
 )
 
-var binaryPath string
+var (
+	binaryPath string
+	tmuxSocket string
+)
+
+func tmuxCmd(args ...string) *exec.Cmd {
+	return exec.Command("tmux", append([]string{"-L", tmuxSocket}, args...)...)
+}
 
 func TestMain(m *testing.M) {
 	if _, err := exec.LookPath("tmux"); err != nil {
@@ -23,6 +30,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	binaryPath = tmp + "/cmdk"
+	tmuxSocket = fmt.Sprintf("cmdk-e2e-%d", os.Getpid())
 	build := exec.Command("go", "build", "-o", binaryPath, "..")
 	build.Stderr = os.Stderr
 	if err := build.Run(); err != nil {
@@ -30,6 +38,7 @@ func TestMain(m *testing.M) {
 	}
 
 	code := m.Run()
+	_ = tmuxCmd("kill-server").Run()
 	if err := os.RemoveAll(tmp); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: failed to clean up %s: %v\n", tmp, err)
 	}
@@ -52,7 +61,7 @@ func startSessionWithEnv(t *testing.T, env map[string]string) string {
 		}
 	}
 	args = append(args, binaryPath, "--pane-id=%0")
-	cmd := exec.Command("tmux", args...)
+	cmd := tmuxCmd(args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("tmux new-session failed: %v\n%s", err, out)
 	}
@@ -61,14 +70,14 @@ func startSessionWithEnv(t *testing.T, env map[string]string) string {
 
 func killSession(t *testing.T, sess string) {
 	t.Helper()
-	if err := exec.Command("tmux", "kill-session", "-t", sess).Run(); err != nil {
+	if err := tmuxCmd("kill-session", "-t", sess).Run(); err != nil {
 		t.Logf("warning: failed to kill tmux session %s: %v", sess, err)
 	}
 }
 
 func capturePane(t *testing.T, sess string) string {
 	t.Helper()
-	out, err := exec.Command("tmux", "capture-pane", "-t", sess, "-p").Output()
+	out, err := tmuxCmd("capture-pane", "-t", sess, "-p").Output()
 	if err != nil {
 		t.Fatalf("capture-pane failed: %v", err)
 	}
@@ -78,7 +87,7 @@ func capturePane(t *testing.T, sess string) string {
 func sendKeys(t *testing.T, sess string, keys ...string) {
 	t.Helper()
 	args := append([]string{"send-keys", "-t", sess}, keys...)
-	if out, err := exec.Command("tmux", args...).CombinedOutput(); err != nil {
+	if out, err := tmuxCmd(args...).CombinedOutput(); err != nil {
 		t.Fatalf("send-keys failed: %v\n%s", err, out)
 	}
 }
@@ -99,7 +108,7 @@ func waitForContent(t *testing.T, sess string, check func(string) bool, timeout 
 }
 
 func sessionExists(sess string) bool {
-	return exec.Command("tmux", "has-session", "-t", sess).Run() == nil
+	return tmuxCmd("has-session", "-t", sess).Run() == nil
 }
 
 func waitForReady(t *testing.T, sess string) string {
@@ -155,6 +164,19 @@ func navigateToDirItem(t *testing.T, sess string) {
 	waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, "dir")
 	}, 3*time.Second)
+}
+
+func filterAndExecute(t *testing.T, sess string, query string) {
+	t.Helper()
+	sendKeys(t, sess, "/")
+	time.Sleep(200 * time.Millisecond)
+	typeText(t, sess, query)
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "filtered")
+	}, 5*time.Second)
+	sendKeys(t, sess, "Enter")
+	time.Sleep(300 * time.Millisecond)
+	sendKeys(t, sess, "Enter")
 }
 
 func TestE2E_ItemsVisible(t *testing.T) {
@@ -339,17 +361,7 @@ cmd = "touch '%s'"
 	defer killSession(t, sess)
 
 	waitForReady(t, sess)
-
-	sendKeys(t, sess, "/")
-	time.Sleep(200 * time.Millisecond)
-	typeText(t, sess, "xq-run")
-	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "filtered")
-	}, 5*time.Second)
-	sendKeys(t, sess, "Enter")
-	time.Sleep(300 * time.Millisecond)
-	sendKeys(t, sess, "Enter")
-
+	filterAndExecute(t, sess, "xq-run")
 	waitForExit(t, sess)
 
 	if _, err := os.Stat(marker); err != nil {
@@ -389,14 +401,13 @@ func TestE2E_MalformedConfigShowsError(t *testing.T) {
 }
 
 func TestE2E_CWDVisible(t *testing.T) {
-	dir, err := os.MkdirTemp("", "cmdk-cwd-e2e-*")
-	if err != nil {
+	dir := filepath.Join(t.TempDir(), "cmdk-cwd-e2e-check")
+	if err := os.Mkdir(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 
 	sess := "cmdk-test-" + strings.ReplaceAll(t.Name(), "/", "-")
-	cmd := exec.Command("tmux", "new-session", "-d", "-s", sess, "-c", dir, "-x", "120", "-y", "40",
+	cmd := tmuxCmd("new-session", "-d", "-s", sess, "-c", dir, "-x", "120", "-y", "40",
 		binaryPath, "--pane-id=%0")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("tmux new-session failed: %v\n%s", err, out)
@@ -407,7 +418,7 @@ func TestE2E_CWDVisible(t *testing.T) {
 	sendKeys(t, sess, "End")
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "cmdk-cwd-e2e")
+		return strings.Contains(s, "cmdk-cwd-e2e-check")
 	}, 5*time.Second)
 }
 
@@ -425,7 +436,12 @@ cmd = "echo beta"
 name = "gamma-cmd"
 cmd = "echo gamma"
 `)
-	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	sess := "cmdk-test-" + strings.ReplaceAll(t.Name(), "/", "-")
+	cmd := tmuxCmd("new-session", "-d", "-s", sess, "-x", "120", "-y", "80",
+		"env", "XDG_CONFIG_HOME="+xdg, binaryPath, "--pane-id=%0")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("tmux new-session failed: %v\n%s", err, out)
+	}
 	defer killSession(t, sess)
 
 	waitForReady(t, sess)
@@ -446,4 +462,167 @@ cmd = "echo gamma"
 		t.Errorf("commands not in order: alpha@%d beta@%d gamma@%d\nCapture:\n%s",
 			alphaIdx, betaIdx, gammaIdx, content)
 	}
+}
+
+func restrictedPATH(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	tmuxPath, err := exec.LookPath("tmux")
+	if err != nil {
+		t.Fatal("tmux not found")
+	}
+	if err := os.Symlink(tmuxPath, filepath.Join(dir, "tmux")); err != nil {
+		t.Fatal(err)
+	}
+	return dir + ":/usr/bin:/bin"
+}
+
+func TestE2E_EnvVarsPresent(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "cmdk-env")
+	xdg := writeConfig(t, fmt.Sprintf(`
+[[commands]]
+name = "xq-dump-env"
+cmd = "env | grep CMDK_ > '%s'"
+`, marker))
+
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	filterAndExecute(t, sess, "xq-dump")
+	waitForExit(t, sess)
+
+	got, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatalf("failed to read env dump: %v", err)
+	}
+	if !strings.Contains(string(got), "CMDK_PANE_ID=") {
+		t.Errorf("expected CMDK_PANE_ID in env dump\nGot:\n%s", got)
+	}
+}
+
+func TestE2E_CMDKPaneIDInShell(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "pane-id")
+	xdg := writeConfig(t, fmt.Sprintf(`
+[[commands]]
+name = "xq-pane-id"
+cmd = "sh -c 'echo $CMDK_PANE_ID > %s'"
+`, marker))
+
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	filterAndExecute(t, sess, "xq-pane")
+	waitForExit(t, sess)
+
+	data, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatalf("failed to read pane-id marker: %v", err)
+	}
+	got := strings.TrimSpace(string(data))
+	if got != "%0" {
+		t.Errorf("CMDK_PANE_ID = %q, want %%0", got)
+	}
+}
+
+func TestE2E_ZoxideUnavailable_ErrorItem(t *testing.T) {
+	if !hasZoxide() {
+		t.Skip("zoxide not available — can't test unavailability scenario")
+	}
+
+	path := restrictedPATH(t)
+	sess := startSessionWithEnv(t, map[string]string{"PATH": path})
+	defer killSession(t, sess)
+
+	content := waitForReady(t, sess)
+
+	if !strings.Contains(content, "window") {
+		t.Errorf("expected window items\nCapture:\n%s", content)
+	}
+
+	sendKeys(t, sess, "End")
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "zoxide error")
+	}, 5*time.Second)
+}
+
+func TestE2E_ErrorItemNotSelectable(t *testing.T) {
+	if !hasZoxide() {
+		t.Skip("zoxide not available — can't test error item scenario")
+	}
+
+	path := restrictedPATH(t)
+	sess := startSessionWithEnv(t, map[string]string{"PATH": path})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+
+	content := capturePane(t, sess)
+	windowCount := strings.Count(content, "window")
+	for range windowCount {
+		sendKeys(t, sess, "Down")
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "zoxide error")
+	}, 3*time.Second)
+
+	sendKeys(t, sess, "Enter")
+	time.Sleep(500 * time.Millisecond)
+
+	if !sessionExists(sess) {
+		t.Fatal("session should still exist — error items should not be selectable")
+	}
+
+	content = capturePane(t, sess)
+	if !strings.Contains(content, "zoxide error") {
+		t.Errorf("error item should still be visible\nCapture:\n%s", content)
+	}
+}
+
+func TestE2E_ExitCodePropagation(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "exitcode")
+	xdg := writeConfig(t, `
+[[commands]]
+name = "xq-exit-42"
+cmd = "exit 42"
+`)
+
+	sess := "cmdk-test-" + strings.ReplaceAll(t.Name(), "/", "-")
+	shellCmd := fmt.Sprintf("(%s --pane-id=%%0); echo EXITCODE=$? > '%s'", binaryPath, marker)
+	cmd := tmuxCmd("new-session", "-d", "-s", sess, "-x", "120", "-y", "40",
+		"env", "XDG_CONFIG_HOME="+xdg, "sh", "-c", shellCmd)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("tmux new-session failed: %v\n%s", err, out)
+	}
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	filterAndExecute(t, sess, "xq-exit")
+	waitForExit(t, sess)
+
+	got, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatalf("failed to read exitcode marker: %v", err)
+	}
+	if !strings.Contains(string(got), "EXITCODE=42") {
+		t.Errorf("expected EXITCODE=42, got: %s", got)
+	}
+}
+
+func TestE2E_DisplayPopup(t *testing.T) {
+	sess := "cmdk-test-" + strings.ReplaceAll(t.Name(), "/", "-")
+	shellCmd := fmt.Sprintf("%s --pane-id=$(tmux -L %s display-message -p '#{pane_id}')", binaryPath, tmuxSocket)
+	cmd := tmuxCmd("new-session", "-d", "-s", sess, "-x", "120", "-y", "40", "sh", "-c", shellCmd)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("tmux new-session failed: %v\n%s", err, out)
+	}
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+
+	sendKeys(t, sess, "Escape")
+	waitForExit(t, sess)
 }

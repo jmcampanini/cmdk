@@ -72,11 +72,11 @@ func ParseDirs(output string) []item.Item {
 
 func ListDirs() ([]item.Item, error) {
 	out, err := exec.Command("zoxide", "query", "--list", "--score").Output()
-	if len(out) > 0 {
-		return ParseDirs(string(out)), nil
-	}
 	if err != nil {
 		return nil, err
+	}
+	if len(out) > 0 {
+		return ParseDirs(string(out)), nil
 	}
 	return nil, nil
 }

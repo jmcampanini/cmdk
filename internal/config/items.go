@@ -1,10 +1,6 @@
 package config
 
-import (
-	"fmt"
-
-	"github.com/jmcampanini/cmdk/internal/item"
-)
+import "github.com/jmcampanini/cmdk/internal/item"
 
 func CommandItems(cfg *Config) func() ([]item.Item, error) {
 	return func() ([]item.Item, error) {
@@ -22,15 +18,5 @@ func CommandItems(cfg *Config) func() ([]item.Item, error) {
 			items[i] = it
 		}
 		return items, nil
-	}
-}
-
-func ErrorSource(err error) func() ([]item.Item, error) {
-	it := item.NewItem()
-	it.Type = "cmd"
-	it.Source = "config"
-	it.Display = fmt.Sprintf("config error: %v", err)
-	return func() ([]item.Item, error) {
-		return []item.Item{it}, nil
 	}
 }

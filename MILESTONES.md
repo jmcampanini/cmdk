@@ -115,7 +115,7 @@
 
 ---
 
-## - [ ] Milestone 4: Config File + Custom Commands + Remaining Directory Sources
+## - [x] Milestone 4: Config File + Custom Commands + Remaining Directory Sources
 
 **Goal**: Add TOML config parsing, custom command items, and the CWD directory source.
 
@@ -150,7 +150,7 @@
 
 ---
 
-## - [ ] Milestone 5: Environment Variables + Error Handling + Final Integration
+## - [x] Milestone 5: Environment Variables + Error Handling + Final Integration
 
 **Goal**: Implement CMDK_ environment variable threading, source failure error items, exit code propagation, and comprehensive end-to-end validation of the complete system.
 

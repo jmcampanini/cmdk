@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"log/slog"
 	"slices"
 
 	tea "charm.land/bubbletea/v2"
@@ -85,6 +86,7 @@ func (m Model) handleBack() Model {
 func (m Model) navigateTo(accumulated []item.Item) Model {
 	gen, err := m.registry.Resolve(accumulated)
 	if err != nil {
+		slog.Error("failed to resolve generator", "error", err)
 		return m
 	}
 

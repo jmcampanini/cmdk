@@ -37,15 +37,17 @@ var rootCmd = &cobra.Command{
 
 		cfg, cfgErr := config.Load(config.DefaultPath())
 
-		sources := []func() ([]item.Item, error){
-			tmux.ListWindows,
-			zoxide.ListDirs,
-			cwd.ListCWD,
+		sources := []generator.Source{
+			{Name: "windows", Type: "window", Fetch: tmux.ListWindows},
+			{Name: "zoxide", Type: "dir", Fetch: zoxide.ListDirs},
+			{Name: "cwd", Type: "dir", Fetch: cwd.ListCWD},
 		}
 		if cfgErr != nil {
-			sources = append(sources, config.ErrorSource(cfgErr))
+			sources = append(sources, generator.Source{Name: "config", Type: "cmd", Fetch: func() ([]item.Item, error) {
+				return nil, cfgErr
+			}})
 		}
-		sources = append(sources, config.CommandItems(cfg))
+		sources = append(sources, generator.Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(cfg)})
 
 		reg := generator.NewRegistry()
 		reg.Register("root", generator.NewRootGenerator(sources...))
@@ -79,7 +81,7 @@ var rootCmd = &cobra.Command{
 		if logger != nil {
 			logger.Info("executing", "item", sel.Display, "cmd", sel.Cmd, "data", sel.Data)
 		}
-		return execute.Run(m.Accumulated(), *sel, syscall.Exec)
+		return execute.Run(m.Accumulated(), *sel, paneID, syscall.Exec)
 	},
 }
 

@@ -5,6 +5,7 @@ import (
 	"maps"
 	"os"
 	"os/exec"
+	"regexp"
 	"slices"
 	"strings"
 	"text/template"
@@ -40,7 +41,29 @@ func FlattenData(accumulated []item.Item) map[string]string {
 	return merged
 }
 
-func Run(accumulated []item.Item, selected item.Item, execFn ExecFn) error {
+var nonAlphaNum = regexp.MustCompile(`[^a-zA-Z0-9]`)
+
+func NormalizeKey(key string) string {
+	return "CMDK_" + strings.ToUpper(nonAlphaNum.ReplaceAllString(key, "_"))
+}
+
+func BuildCMDKEnvVars(accumulated []item.Item, paneID string) []string {
+	flat := FlattenData(accumulated)
+	normalized := make(map[string]string, len(flat)+1)
+	for k, v := range flat {
+		normalized[NormalizeKey(k)] = v
+	}
+	if paneID != "" {
+		normalized["CMDK_PANE_ID"] = paneID
+	}
+	envs := make([]string, 0, len(normalized))
+	for k, v := range normalized {
+		envs = append(envs, k+"="+v)
+	}
+	return envs
+}
+
+func Run(accumulated []item.Item, selected item.Item, paneID string, execFn ExecFn) error {
 	if selected.Cmd == "" {
 		return fmt.Errorf("selected item has no command to execute (display: %q)", selected.Display)
 	}
@@ -57,5 +80,9 @@ func Run(accumulated []item.Item, selected item.Item, execFn ExecFn) error {
 		return err
 	}
 
-	return execFn(shPath, []string{"sh", "-c", rendered}, os.Environ())
+	base := slices.DeleteFunc(os.Environ(), func(e string) bool {
+		return strings.HasPrefix(e, "CMDK_")
+	})
+	envv := slices.Concat(base, BuildCMDKEnvVars(all, paneID))
+	return execFn(shPath, []string{"sh", "-c", rendered}, envv)
 }
