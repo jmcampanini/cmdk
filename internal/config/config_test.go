@@ -51,8 +51,11 @@ func TestLoad_MissingFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected nil error, got: %v", err)
 	}
-	if cfg != nil {
-		t.Fatalf("expected nil config, got: %v", cfg)
+	if cfg == nil {
+		t.Fatal("expected non-nil config")
+	}
+	if len(cfg.Commands) != 0 {
+		t.Errorf("got %d commands, want 0", len(cfg.Commands))
 	}
 }
 
@@ -67,8 +70,8 @@ func TestLoad_MalformedTOML(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for malformed TOML")
 	}
-	if cfg != nil {
-		t.Fatal("expected nil config on error")
+	if cfg == nil {
+		t.Fatal("expected non-nil config even on error")
 	}
 }
 
@@ -145,10 +148,6 @@ func TestDefaultPath_Fallback(t *testing.T) {
 }
 
 func TestFetchTimeout_DefaultsToTwoSeconds(t *testing.T) {
-	if got := (*Config)(nil).FetchTimeout(); got != 2*time.Second {
-		t.Fatalf("nil config FetchTimeout() = %s, want %s", got, 2*time.Second)
-	}
-
 	cfg := &Config{}
 	if got := cfg.FetchTimeout(); got != 2*time.Second {
 		t.Errorf("zero timeout FetchTimeout() = %s, want %s", got, 2*time.Second)

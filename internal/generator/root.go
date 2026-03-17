@@ -16,7 +16,7 @@ type Source struct {
 }
 
 func NewRootGenerator(timeout time.Duration, sources ...Source) GeneratorFunc {
-	return func(accumulated []item.Item, ctx Context) []item.Item {
+	return func(_ []item.Item, _ Context) []item.Item {
 		results := make([][]item.Item, len(sources))
 		errs := make([]error, len(sources))
 		var wg sync.WaitGroup
@@ -27,20 +27,18 @@ func NewRootGenerator(timeout time.Duration, sources ...Source) GeneratorFunc {
 				continue
 			}
 
-			wg.Add(1)
-			go func(i int, src Source) {
-				defer wg.Done()
+			wg.Go(func() {
 				defer func() {
 					if r := recover(); r != nil {
 						errs[i] = fmt.Errorf("panic: %v", r)
 					}
 				}()
 
-				fetchCtx, cancel := newFetchContext(timeout)
+				ctx, cancel := context.WithTimeout(context.Background(), timeout)
 				defer cancel()
 
-				results[i], errs[i] = src.Fetch(fetchCtx)
-			}(i, src)
+				results[i], errs[i] = src.Fetch(ctx)
+			})
 		}
 
 		wg.Wait()
@@ -55,13 +53,6 @@ func NewRootGenerator(timeout time.Duration, sources ...Source) GeneratorFunc {
 		}
 		return all
 	}
-}
-
-func newFetchContext(timeout time.Duration) (context.Context, context.CancelFunc) {
-	if timeout <= 0 {
-		timeout = 2 * time.Second
-	}
-	return context.WithTimeout(context.Background(), timeout)
 }
 
 func errorItem(src Source, err error) item.Item {

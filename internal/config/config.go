@@ -31,15 +31,15 @@ func Load(path string) (*Config, error) {
 	_, err := toml.DecodeFile(path, &cfg)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, nil
+			return &Config{}, nil
 		}
-		return nil, err
+		return &Config{}, err
 	}
 	return &cfg, nil
 }
 
 func (c *Config) FetchTimeout() time.Duration {
-	if c == nil || c.Timeout.FetchMs <= 0 {
+	if c.Timeout.FetchMs <= 0 {
 		return defaultFetchTimeout
 	}
 	return time.Duration(c.Timeout.FetchMs) * time.Millisecond
