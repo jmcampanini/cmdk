@@ -14,6 +14,7 @@ import (
 	"github.com/jmcampanini/cmdk/internal/generator"
 	"github.com/jmcampanini/cmdk/internal/item"
 	"github.com/jmcampanini/cmdk/internal/logging"
+	"github.com/jmcampanini/cmdk/internal/theme"
 	"github.com/jmcampanini/cmdk/internal/tmux"
 	"github.com/jmcampanini/cmdk/internal/tui"
 	"github.com/jmcampanini/cmdk/internal/zoxide"
@@ -22,7 +23,10 @@ import (
 // Version is set at build time via ldflags.
 var Version = "n/a"
 
-var paneID string
+var (
+	paneID    string
+	themeFlag string
+)
 
 var rootCmd = &cobra.Command{
 	Use:           "cmdk",
@@ -66,7 +70,11 @@ var rootCmd = &cobra.Command{
 		items := gen(nil, ctx)
 		listItems := item.GroupAndOrder(items)
 
-		model := tui.NewModel(listItems, paneID, nil, reg, ctx)
+		t, err := theme.Resolve(themeFlag)
+		if err != nil {
+			return err
+		}
+		model := tui.NewModel(listItems, paneID, nil, reg, ctx, t)
 		p := tea.NewProgram(model)
 		finalModel, err := p.Run()
 		if err != nil {
@@ -91,6 +99,7 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.Version = Version
 	rootCmd.Flags().StringVar(&paneID, "pane-id", "", "tmux pane ID")
+	rootCmd.Flags().StringVar(&themeFlag, "theme", "", "color theme (light, dark)")
 }
 
 func Execute() {
