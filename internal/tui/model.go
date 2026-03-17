@@ -6,9 +6,12 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/lipgloss/v2"
 
 	"github.com/jmcampanini/cmdk/internal/generator"
 	"github.com/jmcampanini/cmdk/internal/item"
+	"github.com/jmcampanini/cmdk/internal/theme"
 )
 
 type Model struct {
@@ -20,10 +23,14 @@ type Model struct {
 	ctx         generator.Context
 }
 
-func NewModel(items []list.Item, paneID string, accumulated []item.Item, registry *generator.Registry, ctx generator.Context) Model {
+func NewModel(items []list.Item, paneID string, accumulated []item.Item, registry *generator.Registry, ctx generator.Context, t theme.Theme) Model {
 	delegate := list.NewDefaultDelegate()
+	applyDelegateStyles(&delegate, t)
+
 	l := list.New(items, delegate, 0, 0)
 	l.Title = "cmdk"
+	applyListStyles(&l, t)
+
 	return Model{
 		list:        l,
 		paneID:      paneID,
@@ -31,6 +38,68 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 		registry:    registry,
 		ctx:         ctx,
 	}
+}
+
+func applyDelegateStyles(d *list.DefaultDelegate, t theme.Theme) {
+	normalPad := lipgloss.NewStyle().Padding(0, 0, 0, 2)
+	d.Styles.NormalTitle = normalPad.Foreground(t.Text)
+	d.Styles.NormalDesc = normalPad.Foreground(t.Subtext0)
+	d.Styles.DimmedTitle = normalPad.Foreground(t.Overlay0)
+	d.Styles.DimmedDesc = normalPad.Foreground(t.Surface2)
+
+	selectedBase := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder(), false, false, false, true).
+		BorderForeground(t.AccentDim).
+		Padding(0, 0, 0, 1)
+	d.Styles.SelectedTitle = selectedBase.Foreground(t.Accent)
+	d.Styles.SelectedDesc = selectedBase.Foreground(t.AccentDim)
+
+	d.Styles.FilterMatch = lipgloss.NewStyle().Underline(true)
+}
+
+func applyListStyles(l *list.Model, t theme.Theme) {
+	l.Styles.TitleBar = lipgloss.NewStyle().Padding(0, 0, 1, 2)
+
+	l.Styles.Title = lipgloss.NewStyle().
+		Background(t.Accent).
+		Foreground(t.Base).
+		Padding(0, 1)
+
+	prompt := lipgloss.NewStyle().Foreground(t.Accent)
+	filterStyles := textinput.DefaultStyles(t.IsDark)
+	filterStyles.Cursor.Color = t.AccentDim
+	filterStyles.Blurred.Prompt = prompt
+	filterStyles.Focused.Prompt = prompt
+	l.Styles.Filter = filterStyles
+	l.FilterInput.SetStyles(filterStyles)
+
+	l.Styles.DefaultFilterCharacterMatch = lipgloss.NewStyle().Underline(true)
+
+	l.Styles.StatusBar = lipgloss.NewStyle().
+		Foreground(t.Overlay0).
+		Padding(0, 0, 1, 2)
+
+	l.Styles.StatusEmpty = lipgloss.NewStyle().Foreground(t.Overlay0)
+	l.Styles.StatusBarActiveFilter = lipgloss.NewStyle().Foreground(t.Text)
+	l.Styles.StatusBarFilterCount = lipgloss.NewStyle().Foreground(t.Surface2)
+
+	l.Styles.NoItems = lipgloss.NewStyle().Foreground(t.Overlay0)
+
+	l.Styles.PaginationStyle = lipgloss.NewStyle().PaddingLeft(2)
+	l.Styles.HelpStyle = lipgloss.NewStyle().Padding(1, 0, 0, 2)
+	l.Styles.ArabicPagination = lipgloss.NewStyle().Foreground(t.Overlay0)
+
+	dot := lipgloss.NewStyle().SetString("\u2022")
+	activeDot := dot.Foreground(t.Overlay1)
+	inactiveDot := dot.Foreground(t.Surface2)
+	l.Styles.ActivePaginationDot = activeDot
+	l.Styles.InactivePaginationDot = inactiveDot
+	l.Paginator.ActiveDot = activeDot.String()
+	l.Paginator.InactiveDot = inactiveDot.String()
+
+	l.Styles.DividerDot = lipgloss.NewStyle().
+		Foreground(t.Surface2).
+		SetString(" \u2022 ")
 }
 
 func (m Model) Accumulated() []item.Item {
