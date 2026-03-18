@@ -21,5 +21,3 @@ func NewItem() Item {
 }
 
 func (i Item) FilterValue() string { return i.Display }
-func (i Item) Title() string       { return i.Display }
-func (i Item) Description() string { return i.Type }
