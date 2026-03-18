@@ -81,7 +81,7 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, li list.Item)
 	}
 
 	iconWidth := ansi.StringWidth(info.icon)
-	availWidth := max(m.Width()-ansi.StringWidth(leftPad)-iconWidth-1, 0)
+	availWidth := max(m.Width()-ansi.StringWidth(leftPad)-iconWidth-2, 0)
 	display := ansi.Truncate(it.Display, availWidth, "…")
 
 	s := lipgloss.NewStyle().Inline(true)
@@ -91,14 +91,14 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, li list.Item)
 	case filtering && m.FilterValue() == "":
 		iconStr := s.Foreground(d.dimIcon).Render(info.icon)
 		textStr := s.Foreground(d.dimTextFg).Render(display)
-		line = leftPad + iconStr + " " + textStr
+		line = leftPad + iconStr + "  " + textStr
 
 	case index == m.Index() && !filtering:
 		iconStr := s.Foreground(info.color).Background(d.selBg).Render(info.icon)
 		textStr := d.renderText(display, matchedRunes, s.Foreground(d.textFg).Background(d.selBg))
 
 		bgOnly := s.Background(d.selBg)
-		content := bgOnly.Render(leftPad) + iconStr + bgOnly.Render(" ") + textStr
+		content := bgOnly.Render(leftPad) + iconStr + bgOnly.Render("  ") + textStr
 		if remaining := m.Width() - ansi.StringWidth(content); remaining > 0 {
 			content += bgOnly.Render(strings.Repeat(" ", remaining))
 		}
@@ -107,10 +107,10 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, li list.Item)
 	default:
 		iconStr := s.Foreground(info.color).Render(info.icon)
 		textStr := d.renderText(display, matchedRunes, s.Foreground(d.textFg))
-		line = leftPad + iconStr + " " + textStr
+		line = leftPad + iconStr + "  " + textStr
 	}
 
-	fmt.Fprint(w, line)
+	_, _ = fmt.Fprint(w, line)
 }
 
 func (d itemDelegate) renderText(display string, matchedRunes []int, style lipgloss.Style) string {
