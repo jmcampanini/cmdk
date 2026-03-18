@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"io"
+	"log/slog"
 	"strings"
 
 	"charm.land/bubbles/v2/list"
@@ -66,6 +67,7 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, li list.Item)
 
 	info, ok := d.icons[it.Type]
 	if !ok {
+		slog.Warn("no icon for item type, using fallback", "type", it.Type)
 		info = d.icons["cmd"]
 	}
 
