@@ -25,27 +25,35 @@ type Theme struct {
 	Base     color.Color
 	Mantle   color.Color
 	Crust    color.Color
+
+	TypeWindow color.Color
+	TypeDir    color.Color
+	TypeCmd    color.Color
 }
 
 func c(hex string) color.Color { return lipgloss.Color(hex) }
 
 func Light() Theme {
 	return Theme{
-		Name:     "light",
-		IsDark:   false,
-		Accent:   c("#8839ef"),
+		Name:      "light",
+		IsDark:    false,
+		Accent:    c("#8839ef"),
 		AccentDim: c("#7287fd"),
-		Text:     c("#4c4f69"),
-		Subtext1: c("#5c5f77"),
-		Subtext0: c("#6c6f85"),
-		Overlay1: c("#8c8fa1"),
-		Overlay0: c("#9ca0b0"),
-		Surface2: c("#acb0be"),
-		Surface1: c("#bcc0cc"),
-		Surface0: c("#ccd0da"),
-		Base:     c("#eff1f5"),
-		Mantle:   c("#e6e9ef"),
-		Crust:    c("#dce0e8"),
+		Text:      c("#4c4f69"),
+		Subtext1:  c("#5c5f77"),
+		Subtext0:  c("#6c6f85"),
+		Overlay1:  c("#8c8fa1"),
+		Overlay0:  c("#9ca0b0"),
+		Surface2:  c("#acb0be"),
+		Surface1:  c("#bcc0cc"),
+		Surface0:  c("#ccd0da"),
+		Base:      c("#eff1f5"),
+		Mantle:    c("#e6e9ef"),
+		Crust:     c("#dce0e8"),
+
+		TypeWindow: c("#8839ef"),
+		TypeDir:    c("#1e66f5"),
+		TypeCmd:    c("#40a02b"),
 	}
 }
 
@@ -66,6 +74,10 @@ func Dark() Theme {
 		Base:      c("#1e1e2e"),
 		Mantle:    c("#181825"),
 		Crust:     c("#11111b"),
+
+		TypeWindow: c("#cba6f7"),
+		TypeDir:    c("#89b4fa"),
+		TypeCmd:    c("#a6e3a1"),
 	}
 }
 

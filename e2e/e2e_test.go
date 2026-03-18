@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+const (
+	iconWindow = "\uf2d0"
+	iconDir    = "\uf07c"
+)
+
 var (
 	binaryPath string
 	tmuxSocket string
@@ -156,13 +161,13 @@ func requireZoxideEntries(t *testing.T) {
 func navigateToDirItem(t *testing.T, sess string) {
 	t.Helper()
 	content := capturePane(t, sess)
-	windowCount := strings.Count(content, "window")
+	windowCount := strings.Count(content, iconWindow)
 	for range windowCount {
 		sendKeys(t, sess, "Down")
 		time.Sleep(50 * time.Millisecond)
 	}
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "dir")
+		return strings.Contains(s, iconDir)
 	}, 3*time.Second)
 }
 
@@ -189,8 +194,8 @@ func TestE2E_ItemsVisible(t *testing.T) {
 		t.Errorf("expected test session window %q in output\nCapture:\n%s", sess, content)
 	}
 
-	if !strings.Contains(content, "window") {
-		t.Errorf("expected 'window' type in output\nCapture:\n%s", content)
+	if !strings.Contains(content, iconWindow) {
+		t.Errorf("expected window icon in output\nCapture:\n%s", content)
 	}
 }
 
@@ -261,8 +266,8 @@ func TestE2E_ZoxideDirsVisible(t *testing.T) {
 
 	content := waitForReady(t, sess)
 
-	if !strings.Contains(content, "dir") {
-		t.Errorf("expected 'dir' type in output when zoxide available\nCapture:\n%s", content)
+	if !strings.Contains(content, iconDir) {
+		t.Errorf("expected dir icon in output when zoxide available\nCapture:\n%s", content)
 	}
 }
 
@@ -300,7 +305,7 @@ func TestE2E_EscapeFromDirActionsReturnsToRoot(t *testing.T) {
 	sendKeys(t, sess, "Escape")
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "window")
+		return strings.Contains(s, iconWindow)
 	}, 5*time.Second)
 
 	if !sessionExists(sess) {
@@ -314,7 +319,7 @@ func TestE2E_WithoutZoxide_StillLaunches(t *testing.T) {
 
 	content := waitForReady(t, sess)
 
-	if !strings.Contains(content, "window") {
+	if !strings.Contains(content, iconWindow) {
 		t.Errorf("expected window items even without zoxide\nCapture:\n%s", content)
 	}
 }
@@ -376,7 +381,7 @@ func TestE2E_NoConfigFile(t *testing.T) {
 
 	content := waitForReady(t, sess)
 
-	if !strings.Contains(content, "window") {
+	if !strings.Contains(content, iconWindow) {
 		t.Errorf("expected window items\nCapture:\n%s", content)
 	}
 	if strings.Contains(content, "config error") {
@@ -537,7 +542,7 @@ func TestE2E_ZoxideUnavailable_ErrorItem(t *testing.T) {
 
 	content := waitForReady(t, sess)
 
-	if !strings.Contains(content, "window") {
+	if !strings.Contains(content, iconWindow) {
 		t.Errorf("expected window items\nCapture:\n%s", content)
 	}
 
@@ -559,7 +564,7 @@ func TestE2E_ErrorItemNotSelectable(t *testing.T) {
 	waitForReady(t, sess)
 
 	content := capturePane(t, sess)
-	windowCount := strings.Count(content, "window")
+	windowCount := strings.Count(content, iconWindow)
 	for range windowCount {
 		sendKeys(t, sess, "Down")
 		time.Sleep(50 * time.Millisecond)

@@ -4,9 +4,9 @@ import (
 	"log/slog"
 	"slices"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
 	"github.com/jmcampanini/cmdk/internal/generator"
@@ -24,10 +24,7 @@ type Model struct {
 }
 
 func NewModel(items []list.Item, paneID string, accumulated []item.Item, registry *generator.Registry, ctx generator.Context, t theme.Theme) Model {
-	delegate := list.NewDefaultDelegate()
-	applyDelegateStyles(&delegate, t)
-
-	l := list.New(items, delegate, 0, 0)
+	l := list.New(items, newItemDelegate(t), 0, 0)
 	l.Title = "cmdk"
 	l.Filter = pathAwareFilter
 	applyListStyles(&l, t)
@@ -39,23 +36,6 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 		registry:    registry,
 		ctx:         ctx,
 	}
-}
-
-func applyDelegateStyles(d *list.DefaultDelegate, t theme.Theme) {
-	normalPad := lipgloss.NewStyle().Padding(0, 0, 0, 2)
-	d.Styles.NormalTitle = normalPad.Foreground(t.Text)
-	d.Styles.NormalDesc = normalPad.Foreground(t.Subtext0)
-	d.Styles.DimmedTitle = normalPad.Foreground(t.Overlay0)
-	d.Styles.DimmedDesc = normalPad.Foreground(t.Surface2)
-
-	selectedBase := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder(), false, false, false, true).
-		BorderForeground(t.AccentDim).
-		Padding(0, 0, 0, 1)
-	d.Styles.SelectedTitle = selectedBase.Foreground(t.Accent)
-	d.Styles.SelectedDesc = selectedBase.Foreground(t.AccentDim)
-
-	d.Styles.FilterMatch = lipgloss.NewStyle().Underline(true)
 }
 
 func applyListStyles(l *list.Model, t theme.Theme) {
