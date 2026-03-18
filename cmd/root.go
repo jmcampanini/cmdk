@@ -44,11 +44,11 @@ var rootCmd = &cobra.Command{
 		}
 
 		cfg, cfgErr := config.Load(config.DefaultPath())
-		fetchTimeout := cfg.FetchTimeout()
+		fetchTimeout := cfg.Timeout.Fetch
 
 		sources := []generator.Source{
 			{Name: "windows", Type: "window", Fetch: tmux.ListWindows},
-			{Name: "zoxide", Type: "dir", Limit: cfg.SourceLimit("zoxide"), Fetch: zoxide.ListDirs},
+			{Name: "zoxide", Type: "dir", Limit: cfg.Sources["zoxide"].Limit, Fetch: zoxide.ListDirs},
 			{Name: "cwd", Type: "dir", Fetch: cwd.ListCWD},
 		}
 		if cfgErr != nil {
@@ -64,7 +64,7 @@ var rootCmd = &cobra.Command{
 		reg.MapType("", "root")
 		reg.MapType("dir", "dir-actions")
 
-		ctx := generator.Context{PaneID: paneID, Config: cfg}
+		ctx := generator.Context{PaneID: paneID}
 		gen, err := reg.Resolve(nil)
 		if err != nil {
 			return err

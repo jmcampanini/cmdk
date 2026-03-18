@@ -7,12 +7,73 @@ import (
 	"time"
 )
 
+func TestDefaultConfig(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.Timeout.Fetch != 2*time.Second {
+		t.Errorf("Timeout.Fetch = %s, want 2s", cfg.Timeout.Fetch)
+	}
+	if cfg.Sources["zoxide"].Limit != 20 {
+		t.Errorf("Sources[zoxide].Limit = %d, want 20", cfg.Sources["zoxide"].Limit)
+	}
+	if len(cfg.Commands) != 0 {
+		t.Errorf("Commands = %d, want 0", len(cfg.Commands))
+	}
+}
+
+func TestValidate_Valid(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Commands = []Command{{Name: "htop", Cmd: "htop"}}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_ZeroTimeout(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Timeout.Fetch = 0
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("zero timeout should be valid: %v", err)
+	}
+}
+
+func TestValidate_NegativeTimeout(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Timeout.Fetch = -1 * time.Second
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for negative timeout")
+	}
+}
+
+func TestValidate_NegativeLimit(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Sources["zoxide"] = SourceConfig{Limit: -1}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for negative limit")
+	}
+}
+
+func TestValidate_EmptyCommandName(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Commands = []Command{{Name: "", Cmd: "htop"}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for empty command name")
+	}
+}
+
+func TestValidate_EmptyCommandCmd(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Commands = []Command{{Name: "htop", Cmd: ""}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for empty command cmd")
+	}
+}
+
 func TestLoad_ValidTOML(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(path, []byte(`
 [timeout]
-fetch_ms = 1500
+fetch = "1500ms"
 
 [[commands]]
 name = "htop"
@@ -41,12 +102,12 @@ cmd = "tail -f /var/log/syslog"
 	if cfg.Commands[1].Cmd != "tail -f /var/log/syslog" {
 		t.Errorf("commands[1].Cmd = %q", cfg.Commands[1].Cmd)
 	}
-	if cfg.Timeout.FetchMs != 1500 {
-		t.Errorf("timeout.fetch_ms = %d, want 1500", cfg.Timeout.FetchMs)
+	if cfg.Timeout.Fetch != 1500*time.Millisecond {
+		t.Errorf("timeout.fetch = %s, want 1500ms", cfg.Timeout.Fetch)
 	}
 }
 
-func TestLoad_MissingFile(t *testing.T) {
+func TestLoad_MissingFile_ReturnsDefaults(t *testing.T) {
 	cfg, err := Load("/nonexistent/path/config.toml")
 	if err != nil {
 		t.Fatalf("expected nil error, got: %v", err)
@@ -54,8 +115,12 @@ func TestLoad_MissingFile(t *testing.T) {
 	if cfg == nil {
 		t.Fatal("expected non-nil config")
 	}
-	if len(cfg.Commands) != 0 {
-		t.Errorf("got %d commands, want 0", len(cfg.Commands))
+	defaults := DefaultConfig()
+	if cfg.Timeout.Fetch != defaults.Timeout.Fetch {
+		t.Errorf("Timeout.Fetch = %s, want %s", cfg.Timeout.Fetch, defaults.Timeout.Fetch)
+	}
+	if cfg.Sources["zoxide"].Limit != defaults.Sources["zoxide"].Limit {
+		t.Errorf("Sources[zoxide].Limit = %d, want %d", cfg.Sources["zoxide"].Limit, defaults.Sources["zoxide"].Limit)
 	}
 }
 
@@ -89,8 +154,8 @@ func TestLoad_EmptyFile(t *testing.T) {
 	if cfg == nil {
 		t.Fatal("expected non-nil config for empty file")
 	}
-	if len(cfg.Commands) != 0 {
-		t.Errorf("got %d commands, want 0", len(cfg.Commands))
+	if cfg.Timeout.Fetch != 2*time.Second {
+		t.Errorf("Timeout.Fetch = %s, want 2s (default preserved)", cfg.Timeout.Fetch)
 	}
 }
 
@@ -128,73 +193,23 @@ cmd = "echo gamma"
 	}
 }
 
-func TestDefaultPath_XDGOverride(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", "/tmp/xdg-test")
-	got := DefaultPath()
-	want := "/tmp/xdg-test/cmdk/config.toml"
-	if got != want {
-		t.Errorf("DefaultPath() = %q, want %q", got, want)
+func TestLoad_ValidationError_ReturnsDefaults(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[timeout]
+fetch = "-1s"
+`), 0o644); err != nil {
+		t.Fatal(err)
 	}
-}
 
-func TestDefaultPath_Fallback(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", "")
-	got := DefaultPath()
-	home, _ := os.UserHomeDir()
-	want := filepath.Join(home, ".config", "cmdk", "config.toml")
-	if got != want {
-		t.Errorf("DefaultPath() = %q, want %q", got, want)
+	cfg, err := Load(path)
+	if err == nil {
+		t.Fatal("expected validation error")
 	}
-}
-
-func TestFetchTimeout_DefaultsToTwoSeconds(t *testing.T) {
-	cfg := &Config{}
-	if got := cfg.FetchTimeout(); got != 2*time.Second {
-		t.Errorf("zero timeout FetchTimeout() = %s, want %s", got, 2*time.Second)
-	}
-}
-
-func TestFetchTimeout_UsesConfiguredMilliseconds(t *testing.T) {
-	cfg := &Config{Timeout: Timeout{FetchMs: 750}}
-
-	if got := cfg.FetchTimeout(); got != 750*time.Millisecond {
-		t.Fatalf("FetchTimeout() = %s, want %s", got, 750*time.Millisecond)
-	}
-}
-
-func TestSourceLimit_DefaultForZoxide(t *testing.T) {
-	cfg := &Config{}
-	if got := cfg.SourceLimit("zoxide"); got != 20 {
-		t.Errorf("SourceLimit(zoxide) = %d, want 20", got)
-	}
-}
-
-func TestSourceLimit_ConfiguredValue(t *testing.T) {
-	cfg := &Config{
-		Sources: map[string]SourceConfig{
-			"zoxide": {Limit: 10},
-		},
-	}
-	if got := cfg.SourceLimit("zoxide"); got != 10 {
-		t.Errorf("SourceLimit(zoxide) = %d, want 10", got)
-	}
-}
-
-func TestSourceLimit_ZeroMeansUnlimited(t *testing.T) {
-	cfg := &Config{
-		Sources: map[string]SourceConfig{
-			"zoxide": {Limit: 0},
-		},
-	}
-	if got := cfg.SourceLimit("zoxide"); got != 0 {
-		t.Errorf("SourceLimit(zoxide) = %d, want 0 (unlimited)", got)
-	}
-}
-
-func TestSourceLimit_UnknownSourceReturnsZero(t *testing.T) {
-	cfg := &Config{}
-	if got := cfg.SourceLimit("windows"); got != 0 {
-		t.Errorf("SourceLimit(windows) = %d, want 0", got)
+	defaults := DefaultConfig()
+	if cfg.Timeout.Fetch != defaults.Timeout.Fetch {
+		t.Errorf("Timeout.Fetch = %s, want default %s", cfg.Timeout.Fetch, defaults.Timeout.Fetch)
 	}
 }
 
@@ -212,7 +227,56 @@ limit = 5
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got := cfg.SourceLimit("zoxide"); got != 5 {
-		t.Errorf("SourceLimit(zoxide) = %d, want 5", got)
+	if cfg.Sources["zoxide"].Limit != 5 {
+		t.Errorf("Sources[zoxide].Limit = %d, want 5", cfg.Sources["zoxide"].Limit)
+	}
+}
+
+func TestValidate_SuspiciouslySmallTimeout(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Timeout.Fetch = 500 * time.Nanosecond
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for sub-millisecond timeout")
+	}
+}
+
+func TestLoad_OtherSourcePreservesZoxideDefault(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[sources.fish]
+limit = 10
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Sources["fish"].Limit != 10 {
+		t.Errorf("Sources[fish].Limit = %d, want 10", cfg.Sources["fish"].Limit)
+	}
+	if cfg.Sources["zoxide"].Limit != 20 {
+		t.Errorf("Sources[zoxide].Limit = %d, want 20 (default backfilled)", cfg.Sources["zoxide"].Limit)
+	}
+}
+
+func TestDefaultPath_XDGOverride(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/tmp/xdg-test")
+	got := DefaultPath()
+	want := "/tmp/xdg-test/cmdk/config.toml"
+	if got != want {
+		t.Errorf("DefaultPath() = %q, want %q", got, want)
+	}
+}
+
+func TestDefaultPath_Fallback(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "")
+	got := DefaultPath()
+	home, _ := os.UserHomeDir()
+	want := filepath.Join(home, ".config", "cmdk", "config.toml")
+	if got != want {
+		t.Errorf("DefaultPath() = %q, want %q", got, want)
 	}
 }
