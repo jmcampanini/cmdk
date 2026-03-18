@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/jmcampanini/cmdk/internal/item"
+	"github.com/jmcampanini/cmdk/internal/pathfmt"
 )
 
 func TestListCWD_ReturnsOneItem(t *testing.T) {
@@ -38,7 +39,8 @@ func TestListCWD_DataMatchesGetwd(t *testing.T) {
 	if it.Data["path"] != wd {
 		t.Errorf("Data[path] = %q, want %q", it.Data["path"], wd)
 	}
-	if it.Display != wd {
-		t.Errorf("Display = %q, want %q", it.Display, wd)
+	wantDisplay := pathfmt.DisplayPath(wd)
+	if it.Display != wantDisplay {
+		t.Errorf("Display = %q, want %q", it.Display, wantDisplay)
 	}
 }

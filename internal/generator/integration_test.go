@@ -219,12 +219,12 @@ func TestIntegration_ConfigCommandsInOrder(t *testing.T) {
 	}
 }
 
-func TestIntegration_NilConfig(t *testing.T) {
+func TestIntegration_EmptyConfig(t *testing.T) {
 	windows := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
 	}}
 
-	gen := newIntegrationRootGenerator(windows, Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(nil)})
+	gen := newIntegrationRootGenerator(windows, Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(&config.Config{})})
 	items := gen(nil, Context{})
 
 	if len(items) != 1 {
@@ -280,7 +280,7 @@ func TestIntegration_MalformedConfig(t *testing.T) {
 		return nil, cfgErr
 	}}
 
-	gen := newIntegrationRootGenerator(windows, dirs, badConfig, Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(nil)})
+	gen := newIntegrationRootGenerator(windows, dirs, badConfig, Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(&config.Config{})})
 	items := gen(nil, Context{})
 
 	if len(items) != 3 {

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/jmcampanini/cmdk/internal/item"
+	"github.com/jmcampanini/cmdk/internal/pathfmt"
 )
 
 func splitScorePath(line string) (float64, string, bool) {
@@ -54,7 +55,7 @@ func ParseDirs(output string) []item.Item {
 		it := item.NewItem()
 		it.Type = "dir"
 		it.Source = "zoxide"
-		it.Display = path
+		it.Display = pathfmt.DisplayPath(path)
 		it.Action = item.ActionNextList
 		it.Data["path"] = path
 
@@ -80,8 +81,5 @@ func ListDirs(ctx context.Context) ([]item.Item, error) {
 		}
 		return nil, err
 	}
-	if len(out) > 0 {
-		return ParseDirs(string(out)), nil
-	}
-	return nil, nil
+	return ParseDirs(string(out)), nil
 }

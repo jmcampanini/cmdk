@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/jmcampanini/cmdk/internal/item"
+	"github.com/jmcampanini/cmdk/internal/pathfmt"
 )
 
 func ListCWD(_ context.Context) ([]item.Item, error) {
@@ -16,7 +17,7 @@ func ListCWD(_ context.Context) ([]item.Item, error) {
 	it.Type = "dir"
 	it.Source = "cwd"
 	it.Action = item.ActionNextList
-	it.Display = wd
+	it.Display = pathfmt.DisplayPath(wd)
 	it.Data["path"] = wd
 	return []item.Item{it}, nil
 }

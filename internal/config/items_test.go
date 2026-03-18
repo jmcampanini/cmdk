@@ -7,14 +7,14 @@ import (
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
-func TestCommandItems_NilConfig(t *testing.T) {
-	fn := CommandItems(nil)
+func TestCommandItems_EmptyConfig(t *testing.T) {
+	fn := CommandItems(&Config{})
 	items, err := fn(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if items != nil {
-		t.Fatalf("expected nil items, got %v", items)
+	if len(items) != 0 {
+		t.Fatalf("expected 0 items, got %d", len(items))
 	}
 }
 
