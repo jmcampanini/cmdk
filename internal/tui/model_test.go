@@ -248,8 +248,12 @@ func TestEnterOnErrorItem_NoAction(t *testing.T) {
 
 func TestNewModel_StartFiltered(t *testing.T) {
 	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light(), true)
+	m.list.SetSize(80, 40)
 	if m.list.FilterState() != list.Filtering {
 		t.Errorf("FilterState() = %v, want %v", m.list.FilterState(), list.Filtering)
+	}
+	if got := len(m.list.VisibleItems()); got != 3 {
+		t.Errorf("VisibleItems() count = %d, want 3", got)
 	}
 }
 

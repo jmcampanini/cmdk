@@ -30,7 +30,8 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 	applyListStyles(&l, t)
 
 	if startFiltered {
-		l.SetFilterState(list.Filtering)
+		l.SetSize(1, 1)
+		l, _ = l.Update(tea.KeyPressMsg{Code: rune('/')})
 	}
 
 	return Model{
