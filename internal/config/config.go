@@ -21,7 +21,8 @@ type Timeout struct {
 }
 
 type SourceConfig struct {
-	Limit int `toml:"limit"`
+	Limit    int     `toml:"limit"`
+	MinScore float64 `toml:"min_score"`
 }
 
 type Config struct {
@@ -33,7 +34,7 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Timeout: Timeout{Fetch: 2 * time.Second},
-		Sources: map[string]SourceConfig{"zoxide": {Limit: 20}},
+		Sources: map[string]SourceConfig{"zoxide": {Limit: 0}},
 	}
 }
 
@@ -47,6 +48,9 @@ func (c Config) Validate() error {
 	for name, sc := range c.Sources {
 		if sc.Limit < 0 {
 			return fmt.Errorf("sources.%s.limit cannot be negative", name)
+		}
+		if sc.MinScore < 0 {
+			return fmt.Errorf("sources.%s.min_score cannot be negative", name)
 		}
 	}
 	for i, cmd := range c.Commands {

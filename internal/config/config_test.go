@@ -12,8 +12,11 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Timeout.Fetch != 2*time.Second {
 		t.Errorf("Timeout.Fetch = %s, want 2s", cfg.Timeout.Fetch)
 	}
-	if cfg.Sources["zoxide"].Limit != 20 {
-		t.Errorf("Sources[zoxide].Limit = %d, want 20", cfg.Sources["zoxide"].Limit)
+	if cfg.Sources["zoxide"].Limit != 0 {
+		t.Errorf("Sources[zoxide].Limit = %d, want 0", cfg.Sources["zoxide"].Limit)
+	}
+	if cfg.Sources["zoxide"].MinScore != 0 {
+		t.Errorf("Sources[zoxide].MinScore = %f, want 0", cfg.Sources["zoxide"].MinScore)
 	}
 	if len(cfg.Commands) != 0 {
 		t.Errorf("Commands = %d, want 0", len(cfg.Commands))
@@ -49,6 +52,14 @@ func TestValidate_NegativeLimit(t *testing.T) {
 	cfg.Sources["zoxide"] = SourceConfig{Limit: -1}
 	if err := cfg.Validate(); err == nil {
 		t.Error("expected error for negative limit")
+	}
+}
+
+func TestValidate_NegativeMinScore(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Sources["zoxide"] = SourceConfig{MinScore: -1.0}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for negative min_score")
 	}
 }
 
@@ -232,6 +243,25 @@ limit = 5
 	}
 }
 
+func TestLoad_MinScoreFromTOML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[sources.zoxide]
+min_score = 2.5
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Sources["zoxide"].MinScore != 2.5 {
+		t.Errorf("Sources[zoxide].MinScore = %f, want 2.5", cfg.Sources["zoxide"].MinScore)
+	}
+}
+
 func TestValidate_SuspiciouslySmallTimeout(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Timeout.Fetch = 500 * time.Nanosecond
@@ -257,8 +287,8 @@ limit = 10
 	if cfg.Sources["fish"].Limit != 10 {
 		t.Errorf("Sources[fish].Limit = %d, want 10", cfg.Sources["fish"].Limit)
 	}
-	if cfg.Sources["zoxide"].Limit != 20 {
-		t.Errorf("Sources[zoxide].Limit = %d, want 20 (default backfilled)", cfg.Sources["zoxide"].Limit)
+	if cfg.Sources["zoxide"].Limit != 0 {
+		t.Errorf("Sources[zoxide].Limit = %d, want 0 (default backfilled)", cfg.Sources["zoxide"].Limit)
 	}
 }
 
