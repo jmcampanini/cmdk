@@ -23,11 +23,16 @@ type Model struct {
 	ctx         generator.Context
 }
 
-func NewModel(items []list.Item, paneID string, accumulated []item.Item, registry *generator.Registry, ctx generator.Context, t theme.Theme) Model {
+func NewModel(items []list.Item, paneID string, accumulated []item.Item, registry *generator.Registry, ctx generator.Context, t theme.Theme, startFiltered bool) Model {
 	l := list.New(items, newItemDelegate(t), 0, 0)
 	l.Title = "cmdk"
 	l.Filter = pathAwareFilter
 	applyListStyles(&l, t)
+
+	if startFiltered {
+		l.SetSize(1, 1)
+		l, _ = l.Update(tea.KeyPressMsg{Code: rune('/')})
+	}
 
 	return Model{
 		list:        l,
