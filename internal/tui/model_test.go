@@ -39,28 +39,28 @@ func testItems() []list.Item {
 }
 
 func TestNewModel_ItemCount(t *testing.T) {
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light(), false)
 	if got := len(m.list.Items()); got != 3 {
 		t.Errorf("item count = %d, want 3", got)
 	}
 }
 
 func TestNewModel_InitReturnsNil(t *testing.T) {
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light(), false)
 	if cmd := m.Init(); cmd != nil {
 		t.Error("Init() should return nil")
 	}
 }
 
 func TestSelectedReturnsNilByDefault(t *testing.T) {
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light(), false)
 	if m.Selected() != nil {
 		t.Error("Selected() should be nil before any selection")
 	}
 }
 
 func TestEnterOnExecuteItem_SetsSelectedAndQuits(t *testing.T) {
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light(), false)
 	m.list.SetSize(80, 40)
 
 	msg := tea.KeyPressMsg{Code: tea.KeyEnter}
@@ -79,7 +79,7 @@ func TestEnterOnExecuteItem_SetsSelectedAndQuits(t *testing.T) {
 }
 
 func TestEnterDuringFiltering_NotIntercepted(t *testing.T) {
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light(), false)
 	m.list.SetSize(80, 40)
 
 	slash := tea.KeyPressMsg{Code: rune('/')}
@@ -113,7 +113,7 @@ func drillDownToDirItem(t *testing.T, m Model) Model {
 }
 
 func TestEnterOnNextListItem_DrillsDown(t *testing.T) {
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light(), false)
 	m.list.SetSize(80, 40)
 
 	m = drillDownToDirItem(t, m)
@@ -139,7 +139,7 @@ func TestEnterOnNextListItem_DrillsDown(t *testing.T) {
 }
 
 func TestEscapeFromDrillDown_PopsBack(t *testing.T) {
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light(), false)
 	m.list.SetSize(80, 40)
 
 	m = drillDownToDirItem(t, m)
@@ -164,7 +164,7 @@ func TestEscapeFromDrillDown_PopsBack(t *testing.T) {
 }
 
 func TestDrillDownThenExecute_SetsSelectedAndQuits(t *testing.T) {
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light(), false)
 	m.list.SetSize(80, 40)
 
 	m = drillDownToDirItem(t, m)
@@ -194,7 +194,7 @@ func TestNextListWithUnmappedType_StaysOnCurrentList(t *testing.T) {
 	items := []list.Item{
 		item.Item{Type: "unknown", Display: "unmapped item", Action: item.ActionNextList, Data: map[string]string{}},
 	}
-	m := NewModel(items, "%1", nil, reg, generator.Context{}, theme.Light())
+	m := NewModel(items, "%1", nil, reg, generator.Context{}, theme.Light(), false)
 	m.list.SetSize(80, 40)
 
 	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
@@ -224,7 +224,7 @@ func TestEnterOnErrorItem_NoAction(t *testing.T) {
 	reg.Register("root", func(accumulated []item.Item, ctx generator.Context) []item.Item { return nil })
 	reg.MapType("", "root")
 
-	m := NewModel(items, "%1", nil, reg, generator.Context{}, theme.Light())
+	m := NewModel(items, "%1", nil, reg, generator.Context{}, theme.Light(), false)
 	m.list.SetSize(80, 40)
 
 	down := tea.KeyPressMsg{Code: tea.KeyDown}
@@ -246,8 +246,15 @@ func TestEnterOnErrorItem_NoAction(t *testing.T) {
 	}
 }
 
+func TestNewModel_StartFiltered(t *testing.T) {
+	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light(), true)
+	if m.list.FilterState() != list.Filtering {
+		t.Errorf("FilterState() = %v, want %v", m.list.FilterState(), list.Filtering)
+	}
+}
+
 func TestEscapeFromRoot_Quits(t *testing.T) {
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light(), false)
 	m.list.SetSize(80, 40)
 
 	esc := tea.KeyPressMsg{Code: tea.KeyEscape}

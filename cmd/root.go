@@ -25,8 +25,9 @@ import (
 var Version = "n/a"
 
 var (
-	paneID    string
-	themeFlag string
+	paneID        string
+	themeFlag     string
+	startFiltered bool
 )
 
 var rootCmd = &cobra.Command{
@@ -76,7 +77,7 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		model := tui.NewModel(listItems, paneID, nil, reg, ctx, t)
+		model := tui.NewModel(listItems, paneID, nil, reg, ctx, t, startFiltered)
 		p := tea.NewProgram(model)
 		finalModel, err := p.Run()
 		if err != nil {
@@ -102,6 +103,7 @@ func init() {
 	rootCmd.Version = Version
 	rootCmd.Flags().StringVar(&paneID, "pane-id", "", "tmux pane ID")
 	rootCmd.Flags().StringVar(&themeFlag, "theme", "", "color theme (light, dark)")
+	rootCmd.Flags().BoolVar(&startFiltered, "start-filtered", false, "start in filter mode")
 }
 
 func Execute() {
