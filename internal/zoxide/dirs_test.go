@@ -13,7 +13,7 @@ func TestParseDirs_MultiLine(t *testing.T) {
   10.0 /tmp/scratch
  100.0 /srv/data/work`
 
-	items := ParseDirs(output)
+	items := ParseDirs(output, 0)
 	if len(items) != 3 {
 		t.Fatalf("got %d items, want 3", len(items))
 	}
@@ -31,7 +31,7 @@ func TestParseDirs_MultiLine(t *testing.T) {
 
 func TestParseDirs_ItemFields(t *testing.T) {
 	output := "  42.5 /srv/data/projects\n"
-	items := ParseDirs(output)
+	items := ParseDirs(output, 0)
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
@@ -59,7 +59,7 @@ func TestParseDirs_SortedByScoreDescending(t *testing.T) {
   50.0 /mid
  200.0 /high`
 
-	items := ParseDirs(output)
+	items := ParseDirs(output, 0)
 	if len(items) != 3 {
 		t.Fatalf("got %d items, want 3", len(items))
 	}
@@ -75,7 +75,7 @@ func TestParseDirs_SortedByScoreDescending(t *testing.T) {
 }
 
 func TestParseDirs_Empty(t *testing.T) {
-	items := ParseDirs("")
+	items := ParseDirs("", 0)
 	if items != nil {
 		t.Errorf("expected nil, got %v", items)
 	}
@@ -87,7 +87,7 @@ not-a-score /bad
 just-garbage
   10.0 /another/good`
 
-	items := ParseDirs(output)
+	items := ParseDirs(output, 0)
 	if len(items) != 2 {
 		t.Fatalf("got %d items, want 2", len(items))
 	}
@@ -101,7 +101,7 @@ just-garbage
 
 func TestParseDirs_PathWithSpaces(t *testing.T) {
 	output := "  42.5 /srv/data/my projects/code\n"
-	items := ParseDirs(output)
+	items := ParseDirs(output, 0)
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
@@ -114,7 +114,7 @@ func TestParseDirs_PathWithSpaces(t *testing.T) {
 }
 
 func TestParseDirs_WhitespaceOnly(t *testing.T) {
-	items := ParseDirs("   \n  \n  ")
+	items := ParseDirs("   \n  \n  ", 0)
 	if items != nil {
 		t.Errorf("expected nil for whitespace-only input, got %v", items)
 	}
@@ -128,7 +128,7 @@ func TestParseDirs_HomePathGetsTildeDisplay(t *testing.T) {
 
 	path := home + "/projects/myapp"
 	output := fmt.Sprintf("  42.5 %s\n", path)
-	items := ParseDirs(output)
+	items := ParseDirs(output, 0)
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
@@ -139,5 +139,53 @@ func TestParseDirs_HomePathGetsTildeDisplay(t *testing.T) {
 	}
 	if it.Data["path"] != path {
 		t.Errorf("Data[path] = %q, want %q", it.Data["path"], path)
+	}
+}
+
+func TestParseDirs_MinScoreFilters(t *testing.T) {
+	output := `   1.0 /low
+  50.0 /mid
+ 200.0 /high`
+
+	items := ParseDirs(output, 50.0)
+	if len(items) != 2 {
+		t.Fatalf("got %d items, want 2", len(items))
+	}
+	if items[0].Display != "/high" {
+		t.Errorf("items[0].Display = %q, want /high", items[0].Display)
+	}
+	if items[1].Display != "/mid" {
+		t.Errorf("items[1].Display = %q, want /mid", items[1].Display)
+	}
+}
+
+func TestParseDirs_MinScoreZeroKeepsAll(t *testing.T) {
+	output := `   0.5 /tiny
+   1.0 /low
+  50.0 /mid`
+
+	items := ParseDirs(output, 0)
+	if len(items) != 3 {
+		t.Fatalf("got %d items, want 3", len(items))
+	}
+}
+
+func TestParseDirs_MinScoreIncludesBoundary(t *testing.T) {
+	output := `   1.0 /low
+  10.0 /mid1
+  20.0 /mid2
+  30.0 /mid3
+  50.0 /high1
+ 100.0 /high2`
+
+	items := ParseDirs(output, 10.0)
+	if len(items) != 5 {
+		t.Fatalf("got %d items, want 5", len(items))
+	}
+	if items[0].Display != "/high2" {
+		t.Errorf("items[0].Display = %q, want /high2", items[0].Display)
+	}
+	if items[4].Display != "/mid1" {
+		t.Errorf("items[4].Display = %q, want /mid1", items[4].Display)
 	}
 }

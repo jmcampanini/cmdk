@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"log/slog"
 	"os/exec"
 	"slices"
 	"strconv"
@@ -29,7 +30,7 @@ func splitScorePath(line string) (float64, string, bool) {
 	return score, path, true
 }
 
-func ParseDirs(output string) []item.Item {
+func ParseDirs(output string, minScore float64) []item.Item {
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) == 1 && lines[0] == "" {
 		return nil
@@ -41,6 +42,7 @@ func ParseDirs(output string) []item.Item {
 	}
 
 	var entries []entry
+	var filtered int
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -49,6 +51,10 @@ func ParseDirs(output string) []item.Item {
 
 		score, path, ok := splitScorePath(line)
 		if !ok {
+			continue
+		}
+		if minScore > 0 && score < minScore {
+			filtered++
 			continue
 		}
 
@@ -62,6 +68,10 @@ func ParseDirs(output string) []item.Item {
 		entries = append(entries, entry{score: score, item: it})
 	}
 
+	if filtered > 0 {
+		slog.Debug("zoxide: filtered entries below min_score", "min_score", minScore, "filtered", filtered, "kept", len(entries))
+	}
+
 	slices.SortStableFunc(entries, func(a, b entry) int {
 		return cmp.Compare(b.score, a.score)
 	})
@@ -73,7 +83,7 @@ func ParseDirs(output string) []item.Item {
 	return items
 }
 
-func ListDirs(ctx context.Context) ([]item.Item, error) {
+func ListDirs(ctx context.Context, minScore float64) ([]item.Item, error) {
 	out, err := exec.CommandContext(ctx, "zoxide", "query", "--list", "--score").Output()
 	if err != nil {
 		if ctx.Err() != nil {
@@ -81,5 +91,5 @@ func ListDirs(ctx context.Context) ([]item.Item, error) {
 		}
 		return nil, err
 	}
-	return ParseDirs(string(out)), nil
+	return ParseDirs(string(out), minScore), nil
 }

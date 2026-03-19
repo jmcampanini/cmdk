@@ -177,7 +177,7 @@ func filterAndExecute(t *testing.T, sess string, query string) {
 	time.Sleep(200 * time.Millisecond)
 	typeText(t, sess, query)
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "filtered")
+		return strings.Contains(s, "apply filter")
 	}, 5*time.Second)
 	sendKeys(t, sess, "Enter")
 	time.Sleep(300 * time.Millisecond)
@@ -210,7 +210,7 @@ func TestE2E_FilterItems(t *testing.T) {
 	typeText(t, sess, "cmdk-test")
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, sess) && strings.Contains(s, "filtered")
+		return strings.Contains(s, sess) && strings.Contains(s, "apply filter")
 	}, 5*time.Second)
 }
 
@@ -225,13 +225,13 @@ func TestE2E_EscapeDuringFilterDoesNotQuit(t *testing.T) {
 	typeText(t, sess, "cmdk-test")
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "filtered")
+		return strings.Contains(s, "apply filter")
 	}, 5*time.Second)
 
 	sendKeys(t, sess, "Escape")
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, sess) && !strings.Contains(s, "filtered")
+		return strings.Contains(s, sess) && !strings.Contains(s, "apply filter")
 	}, 5*time.Second)
 
 	if !sessionExists(sess) {
