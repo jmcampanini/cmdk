@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"log/slog"
 	"os/exec"
 	"slices"
 	"strconv"
@@ -41,6 +42,7 @@ func ParseDirs(output string, minScore float64) []item.Item {
 	}
 
 	var entries []entry
+	var filtered int
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -52,6 +54,7 @@ func ParseDirs(output string, minScore float64) []item.Item {
 			continue
 		}
 		if minScore > 0 && score < minScore {
+			filtered++
 			continue
 		}
 
@@ -63,6 +66,10 @@ func ParseDirs(output string, minScore float64) []item.Item {
 		it.Data["path"] = path
 
 		entries = append(entries, entry{score: score, item: it})
+	}
+
+	if filtered > 0 {
+		slog.Debug("zoxide: filtered entries below min_score", "min_score", minScore, "filtered", filtered, "kept", len(entries))
 	}
 
 	slices.SortStableFunc(entries, func(a, b entry) int {
