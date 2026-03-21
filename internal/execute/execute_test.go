@@ -359,6 +359,65 @@ func TestRun_StripsExistingCMDKVars(t *testing.T) {
 	}
 }
 
+func TestRun_PaneIDAvailableInTemplate(t *testing.T) {
+	selected := item.Item{
+		Cmd:  "tmux split-window -t {{.pane_id}}",
+		Data: map[string]string{},
+	}
+
+	var capturedArgv []string
+	mockExec := func(argv0 string, argv []string, envv []string) error {
+		capturedArgv = argv
+		return nil
+	}
+
+	err := Run(nil, selected, "%5", mockExec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedArgv[2] != "tmux split-window -t %5" {
+		t.Errorf("rendered cmd = %q, want %q", capturedArgv[2], "tmux split-window -t %5")
+	}
+}
+
+func TestRun_PaneIDWithSq(t *testing.T) {
+	selected := item.Item{
+		Cmd:  "tmux split-window -t {{sq .pane_id}} -c {{sq .path}}",
+		Data: map[string]string{"path": "/home/user"},
+	}
+
+	var capturedArgv []string
+	mockExec := func(argv0 string, argv []string, envv []string) error {
+		capturedArgv = argv
+		return nil
+	}
+
+	err := Run(nil, selected, "%5", mockExec)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "tmux split-window -t '%5' -c '/home/user'"
+	if capturedArgv[2] != want {
+		t.Errorf("rendered cmd = %q, want %q", capturedArgv[2], want)
+	}
+}
+
+func TestRun_EmptyPaneIDNotInTemplateData(t *testing.T) {
+	selected := item.Item{
+		Cmd:  "echo {{.pane_id}}",
+		Data: map[string]string{},
+	}
+
+	mockExec := func(argv0 string, argv []string, envv []string) error {
+		return nil
+	}
+
+	err := Run(nil, selected, "", mockExec)
+	if err == nil {
+		t.Error("expected error when pane_id is empty and template references it")
+	}
+}
+
 func envSliceToMap(envs []string) map[string]string {
 	m := make(map[string]string)
 	for _, e := range envs {

@@ -369,3 +369,120 @@ func TestValidate_EmptyDisplayRuleKey(t *testing.T) {
 		t.Error("expected error for empty rule key")
 	}
 }
+
+func TestValidate_ValidDirCommands(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.DirCommands = []Command{
+		{Name: "Yazi", Cmd: "tmux split-window -h yazi"},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_EmptyDirCommandName(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.DirCommands = []Command{{Name: "", Cmd: "yazi"}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for empty dir_command name")
+	}
+}
+
+func TestValidate_EmptyDirCommandCmd(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.DirCommands = []Command{{Name: "Yazi", Cmd: ""}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for empty dir_command cmd")
+	}
+}
+
+func TestLoad_DirCommands(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[[dir_commands]]
+name = "Yazi"
+cmd = "tmux split-window -h yazi"
+
+[[dir_commands]]
+name = "New pane"
+cmd = "tmux split-window -v"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.DirCommands) != 2 {
+		t.Fatalf("got %d dir_commands, want 2", len(cfg.DirCommands))
+	}
+	if cfg.DirCommands[0].Name != "Yazi" {
+		t.Errorf("dir_commands[0].Name = %q, want %q", cfg.DirCommands[0].Name, "Yazi")
+	}
+	if cfg.DirCommands[1].Cmd != "tmux split-window -v" {
+		t.Errorf("dir_commands[1].Cmd = %q", cfg.DirCommands[1].Cmd)
+	}
+}
+
+func TestLoad_DirCommandsPreservesOrder(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[[dir_commands]]
+name = "alpha"
+cmd = "echo alpha"
+
+[[dir_commands]]
+name = "beta"
+cmd = "echo beta"
+
+[[dir_commands]]
+name = "gamma"
+cmd = "echo gamma"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.DirCommands) != 3 {
+		t.Fatalf("got %d dir_commands, want 3", len(cfg.DirCommands))
+	}
+	want := []string{"alpha", "beta", "gamma"}
+	for i, w := range want {
+		if cfg.DirCommands[i].Name != w {
+			t.Errorf("dir_commands[%d].Name = %q, want %q", i, cfg.DirCommands[i].Name, w)
+		}
+	}
+}
+
+func TestLoad_NoDirCommands(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[[commands]]
+name = "htop"
+cmd = "htop"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.DirCommands) != 0 {
+		t.Errorf("got %d dir_commands, want 0", len(cfg.DirCommands))
+	}
+}
+
+func TestDefaultConfig_NoDirCommands(t *testing.T) {
+	cfg := DefaultConfig()
+	if len(cfg.DirCommands) != 0 {
+		t.Errorf("DirCommands = %d, want 0", len(cfg.DirCommands))
+	}
+}

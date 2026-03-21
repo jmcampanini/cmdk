@@ -69,6 +69,9 @@ func Run(accumulated []item.Item, selected item.Item, paneID string, execFn Exec
 	}
 	all := slices.Concat(accumulated, []item.Item{selected})
 	data := FlattenData(all)
+	if paneID != "" {
+		data["pane_id"] = paneID
+	}
 
 	rendered, err := RenderCmd(selected.Cmd, data)
 	if err != nil {

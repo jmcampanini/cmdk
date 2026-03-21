@@ -469,6 +469,77 @@ cmd = "echo gamma"
 	}
 }
 
+func TestE2E_DirCommandsVisible(t *testing.T) {
+	requireZoxideEntries(t)
+
+	xdg := writeConfig(t, `
+[[dir_commands]]
+name = "xq-yazi-action"
+cmd = "echo yazi"
+`)
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	navigateToDirItem(t, sess)
+	sendKeys(t, sess, "Enter")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "New window") && strings.Contains(s, "xq-yazi-action")
+	}, 5*time.Second)
+}
+
+func TestE2E_DirCommandsOrder(t *testing.T) {
+	requireZoxideEntries(t)
+
+	xdg := writeConfig(t, `
+[[dir_commands]]
+name = "xq-alpha-dirc"
+cmd = "echo alpha"
+
+[[dir_commands]]
+name = "xq-beta-dirc"
+cmd = "echo beta"
+`)
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	navigateToDirItem(t, sess)
+	sendKeys(t, sess, "Enter")
+
+	content := waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "New window") &&
+			strings.Contains(s, "xq-alpha-dirc") &&
+			strings.Contains(s, "xq-beta-dirc")
+	}, 5*time.Second)
+
+	newWindowIdx := strings.Index(content, "New window")
+	alphaIdx := strings.Index(content, "xq-alpha-dirc")
+	betaIdx := strings.Index(content, "xq-beta-dirc")
+
+	if newWindowIdx > alphaIdx || alphaIdx > betaIdx {
+		t.Errorf("items not in expected order: New window@%d alpha@%d beta@%d\nCapture:\n%s",
+			newWindowIdx, alphaIdx, betaIdx, content)
+	}
+}
+
+func TestE2E_NoDirCommandsShowsDefault(t *testing.T) {
+	requireZoxideEntries(t)
+
+	xdg := t.TempDir()
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	navigateToDirItem(t, sess)
+	sendKeys(t, sess, "Enter")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "New window")
+	}, 5*time.Second)
+}
+
 func restrictedPATH(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
