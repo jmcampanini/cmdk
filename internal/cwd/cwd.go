@@ -8,7 +8,7 @@ import (
 	"github.com/jmcampanini/cmdk/internal/pathfmt"
 )
 
-func ListCWD(_ context.Context) ([]item.Item, error) {
+func ListCWD(_ context.Context, home, shortenHome string, rules []pathfmt.Rule) ([]item.Item, error) {
 	wd, err := os.Getwd()
 	if err != nil {
 		return nil, err
@@ -17,7 +17,7 @@ func ListCWD(_ context.Context) ([]item.Item, error) {
 	it.Type = "dir"
 	it.Source = "cwd"
 	it.Action = item.ActionNextList
-	it.Display = pathfmt.DisplayPath(wd)
+	it.Display = pathfmt.DisplayPath(wd, home, shortenHome, rules)
 	it.Data["path"] = wd
 	return []item.Item{it}, nil
 }

@@ -30,7 +30,7 @@ func splitScorePath(line string) (float64, string, bool) {
 	return score, path, true
 }
 
-func ParseDirs(output string, minScore float64) []item.Item {
+func ParseDirs(output string, minScore float64, home, shortenHome string, rules []pathfmt.Rule) []item.Item {
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) == 1 && lines[0] == "" {
 		return nil
@@ -51,6 +51,7 @@ func ParseDirs(output string, minScore float64) []item.Item {
 
 		score, path, ok := splitScorePath(line)
 		if !ok {
+			slog.Debug("zoxide: skipping unparseable line", "line", line)
 			continue
 		}
 		if minScore > 0 && score < minScore {
@@ -61,7 +62,7 @@ func ParseDirs(output string, minScore float64) []item.Item {
 		it := item.NewItem()
 		it.Type = "dir"
 		it.Source = "zoxide"
-		it.Display = pathfmt.DisplayPath(path)
+		it.Display = pathfmt.DisplayPath(path, home, shortenHome, rules)
 		it.Action = item.ActionNextList
 		it.Data["path"] = path
 
@@ -83,13 +84,13 @@ func ParseDirs(output string, minScore float64) []item.Item {
 	return items
 }
 
-func ListDirs(ctx context.Context, minScore float64) ([]item.Item, error) {
+func ListDirs(ctx context.Context, minScore float64, home, shortenHome string, rules []pathfmt.Rule) ([]item.Item, error) {
 	out, err := exec.CommandContext(ctx, "zoxide", "query", "--list", "--score").Output()
 	if err != nil {
 		if ctx.Err() != nil {
-			return nil, fmt.Errorf("zoxide did not respond within the configured timeout")
+			return nil, fmt.Errorf("zoxide did not respond within the configured timeout: %w", err)
 		}
 		return nil, err
 	}
-	return ParseDirs(string(out), minScore), nil
+	return ParseDirs(string(out), minScore, home, shortenHome, rules), nil
 }

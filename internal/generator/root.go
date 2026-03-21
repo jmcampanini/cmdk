@@ -3,6 +3,8 @@ package generator
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -34,6 +36,7 @@ func NewRootGenerator(timeout time.Duration, sources ...Source) GeneratorFunc {
 			wg.Go(func() {
 				defer func() {
 					if r := recover(); r != nil {
+						slog.Error("source panicked", "source", src.Name, "panic", r, "stack", string(debug.Stack()))
 						errs[i] = fmt.Errorf("panic: %v", r)
 					}
 				}()

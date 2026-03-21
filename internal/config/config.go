@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -25,16 +26,24 @@ type SourceConfig struct {
 	MinScore float64 `toml:"min_score"`
 }
 
+type Display struct {
+	ShortenHome *string           `toml:"shorten_home"`
+	Rules       map[string]string `toml:"rules"`
+}
+
 type Config struct {
 	Commands []Command               `toml:"commands"`
 	Timeout  Timeout                 `toml:"timeout"`
 	Sources  map[string]SourceConfig `toml:"sources"`
+	Display  Display                 `toml:"display"`
 }
 
 func DefaultConfig() Config {
+	defaultShortenHome := "~"
 	return Config{
 		Timeout: Timeout{Fetch: 2 * time.Second},
 		Sources: map[string]SourceConfig{"zoxide": {Limit: 0}},
+		Display: Display{ShortenHome: &defaultShortenHome},
 	}
 }
 
@@ -61,9 +70,15 @@ func (c Config) Validate() error {
 			return fmt.Errorf("commands[%d].cmd cannot be empty", i)
 		}
 	}
+	for match := range c.Display.Rules {
+		if match == "" {
+			return errors.New("display.rules: match key cannot be empty")
+		}
+	}
 	return nil
 }
 
+// Load always returns a valid *Config, even when err is non-nil (defaults are used as fallback).
 func Load(path string) (*Config, error) {
 	cfg := DefaultConfig()
 
@@ -75,8 +90,9 @@ func Load(path string) (*Config, error) {
 		return newDefaultConfig(), err
 	}
 
-	// Backfill default source entries that the TOML file didn't mention.
 	defaults := DefaultConfig()
+
+	// Backfill default source entries that the TOML file didn't mention.
 	for name, sc := range defaults.Sources {
 		if _, ok := cfg.Sources[name]; !ok {
 			cfg.Sources[name] = sc
@@ -98,6 +114,9 @@ func DefaultPath() string {
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
 		return filepath.Join(xdg, "cmdk", "config.toml")
 	}
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		slog.Warn("could not determine home directory for config path", "error", err)
+	}
 	return filepath.Join(home, ".config", "cmdk", "config.toml")
 }

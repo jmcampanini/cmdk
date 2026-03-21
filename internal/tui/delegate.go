@@ -59,6 +59,7 @@ func (d itemDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 func (d itemDelegate) Render(w io.Writer, m list.Model, index int, li list.Item) {
 	it, ok := li.(item.Item)
 	if !ok {
+		slog.Warn("delegate received non-item.Item type", "type", fmt.Sprintf("%T", li))
 		return
 	}
 	if m.Width() <= 0 {
