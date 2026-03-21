@@ -10,7 +10,7 @@ import (
 )
 
 func TestListCWD_ReturnsOneItem(t *testing.T) {
-	items, err := ListCWD(context.Background())
+	items, err := ListCWD(context.Background(), "~", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -30,7 +30,7 @@ func TestListCWD_ReturnsOneItem(t *testing.T) {
 }
 
 func TestListCWD_DataMatchesGetwd(t *testing.T) {
-	items, err := ListCWD(context.Background())
+	items, err := ListCWD(context.Background(), "~", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -39,7 +39,7 @@ func TestListCWD_DataMatchesGetwd(t *testing.T) {
 	if it.Data["path"] != wd {
 		t.Errorf("Data[path] = %q, want %q", it.Data["path"], wd)
 	}
-	wantDisplay := pathfmt.DisplayPath(wd)
+	wantDisplay := pathfmt.DisplayPath(wd, "~", nil)
 	if it.Display != wantDisplay {
 		t.Errorf("Display = %q, want %q", it.Display, wantDisplay)
 	}

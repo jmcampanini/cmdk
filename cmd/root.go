@@ -15,6 +15,7 @@ import (
 	"github.com/jmcampanini/cmdk/internal/generator"
 	"github.com/jmcampanini/cmdk/internal/item"
 	"github.com/jmcampanini/cmdk/internal/logging"
+	"github.com/jmcampanini/cmdk/internal/pathfmt"
 	"github.com/jmcampanini/cmdk/internal/theme"
 	"github.com/jmcampanini/cmdk/internal/tmux"
 	"github.com/jmcampanini/cmdk/internal/tui"
@@ -46,13 +47,17 @@ var rootCmd = &cobra.Command{
 
 		cfg, cfgErr := config.Load(config.DefaultPath())
 		zoxideCfg := cfg.Sources["zoxide"]
+		shortenHome := *cfg.Display.ShortenHome
+		rules := pathfmt.CompileRules(cfg.Display.Rules)
 
 		sources := []generator.Source{
 			{Name: "windows", Type: "window", Fetch: tmux.ListWindows},
 			{Name: "zoxide", Type: "dir", Limit: zoxideCfg.Limit, Fetch: func(ctx context.Context) ([]item.Item, error) {
-				return zoxide.ListDirs(ctx, zoxideCfg.MinScore)
+				return zoxide.ListDirs(ctx, zoxideCfg.MinScore, shortenHome, rules)
 			}},
-			{Name: "cwd", Type: "dir", Fetch: cwd.ListCWD},
+			{Name: "cwd", Type: "dir", Fetch: func(ctx context.Context) ([]item.Item, error) {
+				return cwd.ListCWD(ctx, shortenHome, rules)
+			}},
 		}
 		if cfgErr != nil {
 			sources = append(sources, generator.Source{Name: "config", Type: "cmd", Fetch: func(context.Context) ([]item.Item, error) {

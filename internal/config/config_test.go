@@ -21,6 +21,9 @@ func TestDefaultConfig(t *testing.T) {
 	if len(cfg.Commands) != 0 {
 		t.Errorf("Commands = %d, want 0", len(cfg.Commands))
 	}
+	if cfg.Display.ShortenHome == nil || *cfg.Display.ShortenHome != "~" {
+		t.Errorf("Display.ShortenHome = %v, want pointer to \"~\"", cfg.Display.ShortenHome)
+	}
 }
 
 func TestValidate_Valid(t *testing.T) {
@@ -308,5 +311,61 @@ func TestDefaultPath_Fallback(t *testing.T) {
 	want := filepath.Join(home, ".config", "cmdk", "config.toml")
 	if got != want {
 		t.Errorf("DefaultPath() = %q, want %q", got, want)
+	}
+}
+
+func TestLoad_DisplayRules(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[display.rules]
+"github.palantir.build" = "gpb"
+"~/Code" = "~/dev"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Display.Rules) != 2 {
+		t.Fatalf("got %d rules, want 2", len(cfg.Display.Rules))
+	}
+	if cfg.Display.Rules["github.palantir.build"] != "gpb" {
+		t.Errorf("rule = %q, want %q", cfg.Display.Rules["github.palantir.build"], "gpb")
+	}
+	if *cfg.Display.ShortenHome != "~" {
+		t.Errorf("ShortenHome = %q, want default %q", *cfg.Display.ShortenHome, "~")
+	}
+}
+
+func TestLoad_ShortenHomeDisabled(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[display]
+shorten_home = ""
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Display.ShortenHome == nil {
+		t.Fatal("ShortenHome should not be nil")
+	}
+	if *cfg.Display.ShortenHome != "" {
+		t.Errorf("ShortenHome = %q, want empty string", *cfg.Display.ShortenHome)
+	}
+}
+
+func TestValidate_EmptyDisplayRuleKey(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Display.Rules = map[string]string{"": "bad"}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for empty rule key")
 	}
 }

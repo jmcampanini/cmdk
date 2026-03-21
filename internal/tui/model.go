@@ -26,7 +26,7 @@ type Model struct {
 func NewModel(items []list.Item, paneID string, accumulated []item.Item, registry *generator.Registry, ctx generator.Context, t theme.Theme, startFiltered bool) Model {
 	l := list.New(items, newItemDelegate(t), 0, 0)
 	l.Title = "cmdk"
-	l.Filter = pathAwareFilter
+	l.Filter = list.DefaultFilter
 	l.SetShowStatusBar(false)
 	l.SetShowPagination(false)
 	applyListStyles(&l, t)
