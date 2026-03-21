@@ -10,6 +10,9 @@ import (
 )
 
 func TestSetup_CreatesDirAndFile(t *testing.T) {
+	prev := log.Default()
+	defer log.SetDefault(prev)
+
 	dir := filepath.Join(t.TempDir(), "state", "cmdk")
 
 	logger, err := SetupWithDir(dir)
@@ -38,6 +41,9 @@ func TestSetup_CreatesDirAndFile(t *testing.T) {
 }
 
 func TestSetup_DefaultLoggerWritesToFile(t *testing.T) {
+	prev := log.Default()
+	defer log.SetDefault(prev)
+
 	dir := filepath.Join(t.TempDir(), "state", "cmdk")
 
 	logger, err := SetupWithDir(dir)
