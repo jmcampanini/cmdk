@@ -1,7 +1,6 @@
 package pathfmt
 
 import (
-	"os"
 	"slices"
 	"strings"
 )
@@ -25,21 +24,16 @@ func CompileRules(rules map[string]string) []Rule {
 	return compiled
 }
 
-func DisplayPath(path string, shortenHome string, rules []Rule) string {
-	path = replaceHome(path, shortenHome)
+func DisplayPath(path, home, shortenHome string, rules []Rule) string {
+	path = replaceHome(path, home, shortenHome)
 	for _, r := range rules {
 		path = strings.Replace(path, r.Match, r.Replace, 1)
 	}
 	return path
 }
 
-// TODO: resolve os.UserHomeDir() once at startup and pass it in to avoid per-item syscalls.
-func replaceHome(path string, shortenHome string) string {
-	if shortenHome == "" {
-		return path
-	}
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
+func replaceHome(path, home, shortenHome string) string {
+	if shortenHome == "" || home == "" {
 		return path
 	}
 	home = strings.TrimRight(home, "/")

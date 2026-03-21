@@ -1,72 +1,59 @@
 package pathfmt
 
-import (
-	"os"
-	"testing"
-)
+import "testing"
+
+const testHome = "/home/testuser"
 
 func TestDisplayPath_ReplacesHomePrefix(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skipf("no home dir: %v", err)
-	}
-
-	got := DisplayPath(home+"/Code/project", "~", nil)
+	got := DisplayPath(testHome+"/Code/project", testHome, "~", nil)
 	want := "~/Code/project"
 	if got != want {
-		t.Errorf("DisplayPath(%q) = %q, want %q", home+"/Code/project", got, want)
+		t.Errorf("DisplayPath(%q) = %q, want %q", testHome+"/Code/project", got, want)
 	}
 }
 
 func TestDisplayPath_ExactHomeDir(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skipf("no home dir: %v", err)
-	}
-
-	got := DisplayPath(home, "~", nil)
+	got := DisplayPath(testHome, testHome, "~", nil)
 	if got != "~" {
-		t.Errorf("DisplayPath(%q) = %q, want %q", home, got, "~")
+		t.Errorf("DisplayPath(%q) = %q, want %q", testHome, got, "~")
 	}
 }
 
 func TestDisplayPath_NonHomePath(t *testing.T) {
-	got := DisplayPath("/tmp/scratch", "~", nil)
+	got := DisplayPath("/tmp/scratch", testHome, "~", nil)
 	if got != "/tmp/scratch" {
 		t.Errorf("DisplayPath(%q) = %q, want unchanged", "/tmp/scratch", got)
 	}
 }
 
 func TestDisplayPath_SimilarPrefix(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skipf("no home dir: %v", err)
-	}
-
-	path := home + "XYZ/not-a-child"
-	got := DisplayPath(path, "~", nil)
+	path := testHome + "XYZ/not-a-child"
+	got := DisplayPath(path, testHome, "~", nil)
 	if got != path {
 		t.Errorf("DisplayPath(%q) = %q, want unchanged", path, got)
 	}
 }
 
 func TestDisplayPath_EmptyPath(t *testing.T) {
-	got := DisplayPath("", "~", nil)
+	got := DisplayPath("", testHome, "~", nil)
 	if got != "" {
 		t.Errorf("DisplayPath(%q) = %q, want empty", "", got)
 	}
 }
 
 func TestDisplayPath_ShortenHomeDisabled(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skipf("no home dir: %v", err)
-	}
-
-	path := home + "/Code/project"
-	got := DisplayPath(path, "", nil)
+	path := testHome + "/Code/project"
+	got := DisplayPath(path, testHome, "", nil)
 	if got != path {
 		t.Errorf("DisplayPath(%q) with empty shortenHome = %q, want unchanged", path, got)
+	}
+}
+
+func TestDisplayPath_EmptyHome(t *testing.T) {
+	path := "/some/path"
+	got := DisplayPath(path, "", "~", nil)
+	if got != path {
+		t.Errorf("DisplayPath(%q) with empty home = %q, want unchanged", path, got)
 	}
 }
 
@@ -74,7 +61,7 @@ func TestDisplayPath_SingleRule(t *testing.T) {
 	rules := CompileRules(map[string]string{
 		"github.palantir.build": "gpb",
 	})
-	got := DisplayPath("~/Code/github.palantir.build/PRX/iris", "", rules)
+	got := DisplayPath("~/Code/github.palantir.build/PRX/iris", "", "", rules)
 	want := "~/Code/gpb/PRX/iris"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
@@ -86,7 +73,7 @@ func TestDisplayPath_MultipleRulesApply(t *testing.T) {
 		"github.palantir.build": "gpb",
 		"~/Code":                "~/\uf121 ",
 	})
-	got := DisplayPath("~/Code/github.palantir.build/PRX/iris", "", rules)
+	got := DisplayPath("~/Code/github.palantir.build/PRX/iris", "", "", rules)
 	want := "~/\uf121 /gpb/PRX/iris"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
@@ -98,7 +85,7 @@ func TestDisplayPath_LongestKeyFirst(t *testing.T) {
 		"abc":    "X",
 		"abcdef": "Y",
 	})
-	got := DisplayPath("_abcdef_", "", rules)
+	got := DisplayPath("_abcdef_", "", "", rules)
 	want := "_Y_"
 	if got != want {
 		t.Errorf("got %q, want %q (longest key should match first)", got, want)
@@ -106,15 +93,10 @@ func TestDisplayPath_LongestKeyFirst(t *testing.T) {
 }
 
 func TestDisplayPath_ShortenHomeThenRules(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skipf("no home dir: %v", err)
-	}
-
 	rules := CompileRules(map[string]string{
 		"~/Code": "~/\uf121 ",
 	})
-	got := DisplayPath(home+"/Code/myproject", "~", rules)
+	got := DisplayPath(testHome+"/Code/myproject", testHome, "~", rules)
 	want := "~/\uf121 /myproject"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
@@ -122,7 +104,7 @@ func TestDisplayPath_ShortenHomeThenRules(t *testing.T) {
 }
 
 func TestDisplayPath_NoRulesNoShortenHome(t *testing.T) {
-	got := DisplayPath("/some/path", "", nil)
+	got := DisplayPath("/some/path", "", "", nil)
 	if got != "/some/path" {
 		t.Errorf("got %q, want unchanged", got)
 	}

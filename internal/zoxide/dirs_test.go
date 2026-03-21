@@ -1,20 +1,20 @@
 package zoxide
 
 import (
-	"fmt"
-	"os"
 	"testing"
 
 	"github.com/jmcampanini/cmdk/internal/item"
 	"github.com/jmcampanini/cmdk/internal/pathfmt"
 )
 
+const testHome = "/home/testuser"
+
 func TestParseDirs_MultiLine(t *testing.T) {
 	output := `  42.5 /srv/data/projects
   10.0 /tmp/scratch
  100.0 /srv/data/work`
 
-	items := ParseDirs(output, 0, "~", nil)
+	items := ParseDirs(output, 0, "", "~", nil)
 	if len(items) != 3 {
 		t.Fatalf("got %d items, want 3", len(items))
 	}
@@ -32,7 +32,7 @@ func TestParseDirs_MultiLine(t *testing.T) {
 
 func TestParseDirs_ItemFields(t *testing.T) {
 	output := "  42.5 /srv/data/projects\n"
-	items := ParseDirs(output, 0, "~", nil)
+	items := ParseDirs(output, 0, "", "~", nil)
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
@@ -60,7 +60,7 @@ func TestParseDirs_SortedByScoreDescending(t *testing.T) {
   50.0 /mid
  200.0 /high`
 
-	items := ParseDirs(output, 0, "~", nil)
+	items := ParseDirs(output, 0, "", "~", nil)
 	if len(items) != 3 {
 		t.Fatalf("got %d items, want 3", len(items))
 	}
@@ -76,7 +76,7 @@ func TestParseDirs_SortedByScoreDescending(t *testing.T) {
 }
 
 func TestParseDirs_Empty(t *testing.T) {
-	items := ParseDirs("", 0, "~", nil)
+	items := ParseDirs("", 0, "", "~", nil)
 	if items != nil {
 		t.Errorf("expected nil, got %v", items)
 	}
@@ -88,7 +88,7 @@ not-a-score /bad
 just-garbage
   10.0 /another/good`
 
-	items := ParseDirs(output, 0, "~", nil)
+	items := ParseDirs(output, 0, "", "~", nil)
 	if len(items) != 2 {
 		t.Fatalf("got %d items, want 2", len(items))
 	}
@@ -102,7 +102,7 @@ just-garbage
 
 func TestParseDirs_PathWithSpaces(t *testing.T) {
 	output := "  42.5 /srv/data/my projects/code\n"
-	items := ParseDirs(output, 0, "~", nil)
+	items := ParseDirs(output, 0, "", "~", nil)
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
@@ -115,21 +115,16 @@ func TestParseDirs_PathWithSpaces(t *testing.T) {
 }
 
 func TestParseDirs_WhitespaceOnly(t *testing.T) {
-	items := ParseDirs("   \n  \n  ", 0, "~", nil)
+	items := ParseDirs("   \n  \n  ", 0, "", "~", nil)
 	if items != nil {
 		t.Errorf("expected nil for whitespace-only input, got %v", items)
 	}
 }
 
 func TestParseDirs_HomePathGetsTildeDisplay(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skipf("no home dir: %v", err)
-	}
-
-	path := home + "/projects/myapp"
-	output := fmt.Sprintf("  42.5 %s\n", path)
-	items := ParseDirs(output, 0, "~", nil)
+	path := testHome + "/projects/myapp"
+	output := "  42.5 " + path + "\n"
+	items := ParseDirs(output, 0, testHome, "~", nil)
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
@@ -148,7 +143,7 @@ func TestParseDirs_MinScoreFilters(t *testing.T) {
   50.0 /mid
  200.0 /high`
 
-	items := ParseDirs(output, 50.0, "~", nil)
+	items := ParseDirs(output, 50.0, "", "~", nil)
 	if len(items) != 2 {
 		t.Fatalf("got %d items, want 2", len(items))
 	}
@@ -165,7 +160,7 @@ func TestParseDirs_MinScoreZeroKeepsAll(t *testing.T) {
    1.0 /low
   50.0 /mid`
 
-	items := ParseDirs(output, 0, "~", nil)
+	items := ParseDirs(output, 0, "", "~", nil)
 	if len(items) != 3 {
 		t.Fatalf("got %d items, want 3", len(items))
 	}
@@ -179,7 +174,7 @@ func TestParseDirs_MinScoreIncludesBoundary(t *testing.T) {
   50.0 /high1
  100.0 /high2`
 
-	items := ParseDirs(output, 10.0, "~", nil)
+	items := ParseDirs(output, 10.0, "", "~", nil)
 	if len(items) != 5 {
 		t.Fatalf("got %d items, want 5", len(items))
 	}
@@ -196,7 +191,7 @@ func TestParseDirs_WithDisplayRules(t *testing.T) {
 		"/srv/data": "/d",
 	})
 	output := "  42.5 /srv/data/projects\n"
-	items := ParseDirs(output, 0, "", rules)
+	items := ParseDirs(output, 0, "", "", rules)
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
