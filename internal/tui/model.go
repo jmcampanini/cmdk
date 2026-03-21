@@ -2,13 +2,13 @@ package tui
 
 import (
 	"fmt"
-	"log/slog"
 	"slices"
 
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	log "charm.land/log/v2"
 
 	"github.com/jmcampanini/cmdk/internal/generator"
 	"github.com/jmcampanini/cmdk/internal/item"
@@ -146,7 +146,7 @@ func (m Model) handleBack() Model {
 func (m Model) navigateTo(accumulated []item.Item) Model {
 	gen, err := m.registry.Resolve(accumulated)
 	if err != nil {
-		slog.Error("failed to resolve generator", "error", err)
+		log.Error("failed to resolve generator", "error", err)
 		errItem := item.NewItem()
 		errItem.Display = fmt.Sprintf("navigation error: %s", err)
 		m.list.SetItems([]list.Item{errItem})

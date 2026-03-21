@@ -3,11 +3,11 @@ package generator
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"runtime/debug"
 	"sync"
 	"time"
 
+	log "charm.land/log/v2"
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
@@ -36,7 +36,7 @@ func NewRootGenerator(timeout time.Duration, sources ...Source) GeneratorFunc {
 			wg.Go(func() {
 				defer func() {
 					if r := recover(); r != nil {
-						slog.Error("source panicked", "source", src.Name, "panic", r, "stack", string(debug.Stack()))
+						log.Error("source panicked", "source", src.Name, "panic", r, "stack", string(debug.Stack()))
 						errs[i] = fmt.Errorf("panic: %v", r)
 					}
 				}()
