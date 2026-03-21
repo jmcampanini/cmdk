@@ -49,6 +49,16 @@ func TestDirActionsGenerator_NoPathData(t *testing.T) {
 	}
 }
 
+func TestDirActionsGenerator_EmptyPathString(t *testing.T) {
+	accumulated := []item.Item{
+		{Type: "dir", Data: map[string]string{"path": ""}},
+	}
+	items := runDirActions(accumulated, Context{})
+	if items != nil {
+		t.Errorf("expected nil when path is empty string, got %v", items)
+	}
+}
+
 func TestDirActionsGenerator_UsesLastItem(t *testing.T) {
 	accumulated := []item.Item{
 		{Type: "window", Data: map[string]string{"session": "main"}},
@@ -94,6 +104,14 @@ func TestDirActionsGenerator_WithConfigDirCommands(t *testing.T) {
 	}
 	if items[2].Display != "New pane" {
 		t.Errorf("items[2].Display = %q, want %q", items[2].Display, "New pane")
+	}
+	for i, it := range items {
+		if it.Action != item.ActionExecute {
+			t.Errorf("items[%d].Action = %q, want %q", i, it.Action, item.ActionExecute)
+		}
+	}
+	if items[1].Cmd != "tmux split-window -h yazi" {
+		t.Errorf("items[1].Cmd = %q, want config cmd passed through", items[1].Cmd)
 	}
 }
 

@@ -376,12 +376,18 @@ func TestIntegration_DirActionConfigCmdRendersWithPathAndPaneID(t *testing.T) {
 	reg := setupRegistry()
 	ctx := Context{PaneID: "%5", Config: cfg}
 
-	gen, _ := reg.Resolve(nil)
+	gen, err := reg.Resolve(nil)
+	if err != nil {
+		t.Fatalf("resolve root: %v", err)
+	}
 	rootItems := gen(nil, ctx)
 
 	dirItem := rootItems[1]
 	accumulated := []item.Item{dirItem}
-	gen, _ = reg.Resolve(accumulated)
+	gen, err = reg.Resolve(accumulated)
+	if err != nil {
+		t.Fatalf("resolve dir-actions: %v", err)
+	}
 	actionItems := gen(accumulated, ctx)
 
 	yaziItem := actionItems[1]
@@ -402,12 +408,18 @@ func TestIntegration_DirActionsEmptyConfig(t *testing.T) {
 	reg := setupRegistry()
 	ctx := Context{PaneID: "%1", Config: cfg}
 
-	gen, _ := reg.Resolve(nil)
+	gen, err := reg.Resolve(nil)
+	if err != nil {
+		t.Fatalf("resolve root: %v", err)
+	}
 	rootItems := gen(nil, ctx)
 
 	dirItem := rootItems[1]
 	accumulated := []item.Item{dirItem}
-	gen, _ = reg.Resolve(accumulated)
+	gen, err = reg.Resolve(accumulated)
+	if err != nil {
+		t.Fatalf("resolve dir-actions: %v", err)
+	}
 	actionItems := gen(accumulated, ctx)
 
 	if len(actionItems) != 1 {
