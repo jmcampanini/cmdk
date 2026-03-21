@@ -77,7 +77,7 @@ var rootCmd = &cobra.Command{
 		reg.MapType("", "root")
 		reg.MapType("dir", "dir-actions")
 
-		ctx := generator.Context{PaneID: paneID}
+		ctx := generator.Context{PaneID: paneID, Config: cfg}
 		gen, err := reg.Resolve(nil)
 		if err != nil {
 			return err

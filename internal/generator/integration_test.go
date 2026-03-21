@@ -329,6 +329,107 @@ func TestIntegration_OneSourceFailsOthersWork(t *testing.T) {
 	}
 }
 
+func TestIntegration_DirActionsWithConfig(t *testing.T) {
+	cfg := &config.Config{
+		DirCommands: []config.Command{
+			{Name: "Yazi", Cmd: "tmux split-window -h -t {{sq .pane_id}} -c {{sq .path}} yazi"},
+			{Name: "New pane", Cmd: "tmux split-window -v -c {{sq .path}}"},
+		},
+	}
+	reg := setupRegistry()
+	ctx := Context{PaneID: "%5", Config: cfg}
+
+	gen, err := reg.Resolve(nil)
+	if err != nil {
+		t.Fatalf("resolve root: %v", err)
+	}
+	rootItems := gen(nil, ctx)
+
+	dirItem := rootItems[1]
+	accumulated := []item.Item{dirItem}
+	gen, err = reg.Resolve(accumulated)
+	if err != nil {
+		t.Fatalf("resolve dir-actions: %v", err)
+	}
+	actionItems := gen(accumulated, ctx)
+
+	if len(actionItems) != 3 {
+		t.Fatalf("action items = %d, want 3", len(actionItems))
+	}
+	if actionItems[0].Display != "New window" {
+		t.Errorf("actionItems[0].Display = %q, want New window", actionItems[0].Display)
+	}
+	if actionItems[1].Display != "Yazi" {
+		t.Errorf("actionItems[1].Display = %q, want Yazi", actionItems[1].Display)
+	}
+	if actionItems[2].Display != "New pane" {
+		t.Errorf("actionItems[2].Display = %q, want New pane", actionItems[2].Display)
+	}
+}
+
+func TestIntegration_DirActionConfigCmdRendersWithPathAndPaneID(t *testing.T) {
+	cfg := &config.Config{
+		DirCommands: []config.Command{
+			{Name: "Yazi", Cmd: "tmux split-window -h -t {{sq .pane_id}} -c {{sq .path}} yazi"},
+		},
+	}
+	reg := setupRegistry()
+	ctx := Context{PaneID: "%5", Config: cfg}
+
+	gen, err := reg.Resolve(nil)
+	if err != nil {
+		t.Fatalf("resolve root: %v", err)
+	}
+	rootItems := gen(nil, ctx)
+
+	dirItem := rootItems[1]
+	accumulated := []item.Item{dirItem}
+	gen, err = reg.Resolve(accumulated)
+	if err != nil {
+		t.Fatalf("resolve dir-actions: %v", err)
+	}
+	actionItems := gen(accumulated, ctx)
+
+	yaziItem := actionItems[1]
+	allAccumulated := slices.Concat(accumulated, []item.Item{yaziItem})
+	data := execute.FlattenData(allAccumulated)
+	rendered, err := execute.RenderCmd(yaziItem.Cmd, data)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	want := "tmux split-window -h -t '%5' -c '/home/user/projects' yazi"
+	if rendered != want {
+		t.Errorf("rendered = %q, want %q", rendered, want)
+	}
+}
+
+func TestIntegration_DirActionsEmptyConfig(t *testing.T) {
+	cfg := &config.Config{DirCommands: []config.Command{}}
+	reg := setupRegistry()
+	ctx := Context{PaneID: "%1", Config: cfg}
+
+	gen, err := reg.Resolve(nil)
+	if err != nil {
+		t.Fatalf("resolve root: %v", err)
+	}
+	rootItems := gen(nil, ctx)
+
+	dirItem := rootItems[1]
+	accumulated := []item.Item{dirItem}
+	gen, err = reg.Resolve(accumulated)
+	if err != nil {
+		t.Fatalf("resolve dir-actions: %v", err)
+	}
+	actionItems := gen(accumulated, ctx)
+
+	if len(actionItems) != 1 {
+		t.Fatalf("action items = %d, want 1 (only New window)", len(actionItems))
+	}
+	if actionItems[0].Display != "New window" {
+		t.Errorf("Display = %q, want New window", actionItems[0].Display)
+	}
+}
+
 func envSliceToMap(envs []string) map[string]string {
 	m := make(map[string]string)
 	for _, e := range envs {

@@ -32,10 +32,11 @@ type Display struct {
 }
 
 type Config struct {
-	Commands []Command               `toml:"commands"`
-	Timeout  Timeout                 `toml:"timeout"`
-	Sources  map[string]SourceConfig `toml:"sources"`
-	Display  Display                 `toml:"display"`
+	Commands    []Command               `toml:"commands"`
+	DirCommands []Command               `toml:"dir_commands"`
+	Timeout     Timeout                 `toml:"timeout"`
+	Sources     map[string]SourceConfig `toml:"sources"`
+	Display     Display                 `toml:"display"`
 }
 
 func DefaultConfig() Config {
@@ -62,17 +63,27 @@ func (c Config) Validate() error {
 			return fmt.Errorf("sources.%s.min_score cannot be negative", name)
 		}
 	}
-	for i, cmd := range c.Commands {
-		if cmd.Name == "" {
-			return fmt.Errorf("commands[%d].name cannot be empty", i)
-		}
-		if cmd.Cmd == "" {
-			return fmt.Errorf("commands[%d].cmd cannot be empty", i)
-		}
+	if err := validateCommands("commands", c.Commands); err != nil {
+		return err
+	}
+	if err := validateCommands("dir_commands", c.DirCommands); err != nil {
+		return err
 	}
 	for match := range c.Display.Rules {
 		if match == "" {
 			return errors.New("display.rules: match key cannot be empty")
+		}
+	}
+	return nil
+}
+
+func validateCommands(section string, cmds []Command) error {
+	for i, cmd := range cmds {
+		if cmd.Name == "" {
+			return fmt.Errorf("%s[%d].name cannot be empty", section, i)
+		}
+		if cmd.Cmd == "" {
+			return fmt.Errorf("%s[%d].cmd cannot be empty", section, i)
 		}
 	}
 	return nil
