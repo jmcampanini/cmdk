@@ -33,6 +33,7 @@ func DisplayPath(path string, shortenHome string, rules []Rule) string {
 	return path
 }
 
+// TODO: resolve os.UserHomeDir() once at startup and pass it in to avoid per-item syscalls.
 func replaceHome(path string, shortenHome string) string {
 	if shortenHome == "" {
 		return path
