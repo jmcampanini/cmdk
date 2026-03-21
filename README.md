@@ -1,0 +1,50 @@
+# cmdk
+
+Keyboard-driven tmux launcher. Runs as a TUI inside a tmux popup, presenting fuzzy-filterable lists of items for switching windows, opening directories, and running shell commands.
+
+## Installation
+
+### Homebrew (macOS)
+
+```sh
+brew tap jmcampanini/cmdk https://github.com/jmcampanini/cmdk
+brew install --HEAD jmcampanini/cmdk/cmdk
+```
+
+To upgrade to the latest commit:
+
+```sh
+brew upgrade --fetch-HEAD cmdk
+```
+
+### From source
+
+```sh
+make install
+```
+
+## Usage
+
+```
+$ cmdk --help
+Keyboard-driven tmux launcher
+
+Usage:
+  cmdk [flags]
+  cmdk [command]
+
+Available Commands:
+  completion  Generate the autocompletion script for the specified shell
+  config      Show resolved configuration
+  help        Help about any command
+  shorten     Apply display rules to shorten a path
+
+Flags:
+  -h, --help             help for cmdk
+      --pane-id string   tmux pane ID
+      --start-filtered   start in filter mode
+      --theme string     color theme (light, dark)
+  -v, --version          version for cmdk
+
+Use "cmdk [command] --help" for more information about a command.
+```
