@@ -20,12 +20,15 @@ var shortenCmd = &cobra.Command{
 		if len(args) == 1 {
 			path = args[0]
 		} else {
-			stat, _ := os.Stdin.Stat()
-			if stat.Mode()&os.ModeCharDevice != 0 {
+			stat, err := os.Stdin.Stat()
+			if err != nil || stat.Mode()&os.ModeCharDevice != 0 {
 				return fmt.Errorf("usage: cmdk shorten <path> or echo <path> | cmdk shorten")
 			}
 			scanner := bufio.NewScanner(os.Stdin)
 			if !scanner.Scan() {
+				if err := scanner.Err(); err != nil {
+					return fmt.Errorf("reading stdin: %w", err)
+				}
 				return fmt.Errorf("no input on stdin")
 			}
 			path = scanner.Text()
