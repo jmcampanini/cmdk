@@ -34,7 +34,11 @@ var shortenCmd = &cobra.Command{
 			path = scanner.Text()
 		}
 
-		cfg, err := config.Load(config.DefaultPath())
+		cfgPath, err := resolveConfigPath()
+		if err != nil {
+			return err
+		}
+		cfg, err := config.Load(cfgPath)
 		if err != nil {
 			return fmt.Errorf("loading config: %w", err)
 		}

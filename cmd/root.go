@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"os"
 	"syscall"
@@ -27,6 +29,7 @@ import (
 var Version = "n/a"
 
 var (
+	configPath    string
 	paneID        string
 	themeFlag     string
 	startFiltered bool
@@ -46,7 +49,11 @@ var rootCmd = &cobra.Command{
 			defer func() { _ = logger.Close() }()
 		}
 
-		cfg, cfgErr := config.Load(config.DefaultPath())
+		cfgPath, err := resolveConfigPath()
+		if err != nil {
+			return err
+		}
+		cfg, cfgErr := config.Load(cfgPath)
 		zoxideCfg := cfg.Sources["zoxide"]
 		shortenHome := *cfg.Display.ShortenHome
 		rules := pathfmt.CompileRules(cfg.Display.Rules)
@@ -111,8 +118,22 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+func resolveConfigPath() (string, error) {
+	if configPath != "" {
+		if _, err := os.Stat(configPath); err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return "", fmt.Errorf("config file not found: %s", configPath)
+			}
+			return "", fmt.Errorf("config file not accessible: %w", err)
+		}
+		return configPath, nil
+	}
+	return config.DefaultPath(), nil
+}
+
 func init() {
 	rootCmd.Version = Version
+	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "path to config file")
 	rootCmd.Flags().StringVar(&paneID, "pane-id", "", "tmux pane ID")
 	rootCmd.Flags().StringVar(&themeFlag, "theme", "", "color theme (light, dark)")
 	rootCmd.Flags().BoolVar(&startFiltered, "start-filtered", false, "start in filter mode")

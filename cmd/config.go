@@ -16,7 +16,10 @@ var configCmd = &cobra.Command{
 	Long:  "Show resolved configuration.\n\n" + config.RenderHelp(),
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		path := config.DefaultPath()
+		path, err := resolveConfigPath()
+		if err != nil {
+			return err
+		}
 		cfg, err := config.Load(path)
 		if err != nil {
 			return err
