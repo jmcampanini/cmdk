@@ -24,7 +24,7 @@ type Model struct {
 	ctx         generator.Context
 }
 
-func NewModel(items []list.Item, paneID string, accumulated []item.Item, registry *generator.Registry, ctx generator.Context, t theme.Theme, startFiltered bool) Model {
+func NewModel(items []list.Item, paneID string, accumulated []item.Item, registry *generator.Registry, ctx generator.Context, t theme.Theme) Model {
 	l := list.New(items, newItemDelegate(t), 0, 0)
 	l.Title = "cmdk"
 	l.Filter = list.DefaultFilter
@@ -32,12 +32,11 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 	l.SetShowPagination(false)
 	applyListStyles(&l, t)
 
-	if startFiltered {
-		l.SetSize(1, 1)
-		// tea.Cmd is intentionally discarded here; moving this to Init() would be
-		// cleaner but requires a larger refactor to thread the flag through.
-		l, _ = l.Update(tea.KeyPressMsg{Code: rune('/')})
-	}
+	// Start in filter mode so the user can begin typing immediately.
+	// tea.Cmd is intentionally discarded; moving this to Init() would be
+	// cleaner but requires a larger refactor.
+	l.SetSize(1, 1)
+	l, _ = l.Update(tea.KeyPressMsg{Code: rune('/')})
 
 	return Model{
 		list:        l,
@@ -56,15 +55,33 @@ func applyListStyles(l *list.Model, t theme.Theme) {
 		Foreground(t.Base).
 		Padding(0, 1)
 
-	prompt := lipgloss.NewStyle().Foreground(t.Accent)
+	// Filter prompt style: NO padding — the spaces in the Prompt string provide
+	// visual badge padding. Title style has Padding(0,1) which adds 2 extra chars
+	// to the width measurement in list.SetSize(), compensating for TitleBar's
+	// left padding of 2.
+	promptStyle := lipgloss.NewStyle().
+		Background(t.Accent).
+		Foreground(t.Base)
+
+	textboxActive := lipgloss.NewStyle().
+		Foreground(t.Text).
+		Background(t.TextboxBg)
+	textboxDim := lipgloss.NewStyle().
+		Foreground(t.Overlay0).
+		Background(t.TextboxBg)
+
 	filterStyles := textinput.DefaultStyles(t.IsDark)
 	filterStyles.Cursor.Color = t.AccentDim
-	filterStyles.Blurred.Prompt = prompt
-	filterStyles.Focused.Prompt = prompt
+	filterStyles.Focused.Prompt = promptStyle
+	filterStyles.Blurred.Prompt = promptStyle
+	filterStyles.Focused.Text = textboxActive
+	filterStyles.Blurred.Text = textboxDim
+	filterStyles.Focused.Placeholder = textboxDim
 	l.Styles.Filter = filterStyles
 	l.FilterInput.SetStyles(filterStyles)
+	l.FilterInput.Prompt = " cmdk "
 
-	l.Styles.DefaultFilterCharacterMatch = lipgloss.NewStyle().Underline(true)
+	l.Styles.DefaultFilterCharacterMatch = lipgloss.NewStyle().Background(t.MatchHighlight)
 
 	l.Styles.StatusBar = lipgloss.NewStyle().
 		Foreground(t.Overlay0).
