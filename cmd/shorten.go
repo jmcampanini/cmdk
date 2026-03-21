@@ -40,7 +40,10 @@ var shortenCmd = &cobra.Command{
 		}
 		shortenHome := *cfg.Display.ShortenHome
 		rules := pathfmt.CompileRules(cfg.Display.Rules)
-		home, _ := os.UserHomeDir()
+		home, err := os.UserHomeDir()
+		if err != nil && shortenHome != "" {
+			return fmt.Errorf("cannot shorten home prefix: %w", err)
+		}
 
 		fmt.Println(pathfmt.DisplayPath(path, home, shortenHome, rules))
 		return nil

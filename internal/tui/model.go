@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"log/slog"
 	"slices"
 
@@ -33,6 +34,8 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 
 	if startFiltered {
 		l.SetSize(1, 1)
+		// tea.Cmd is intentionally discarded here; moving this to Init() would be
+		// cleaner but requires a larger refactor to thread the flag through.
 		l, _ = l.Update(tea.KeyPressMsg{Code: rune('/')})
 	}
 
@@ -144,6 +147,11 @@ func (m Model) navigateTo(accumulated []item.Item) Model {
 	gen, err := m.registry.Resolve(accumulated)
 	if err != nil {
 		slog.Error("failed to resolve generator", "error", err)
+		errItem := item.NewItem()
+		errItem.Display = fmt.Sprintf("navigation error: %s", err)
+		m.list.SetItems([]list.Item{errItem})
+		m.list.ResetSelected()
+		m.list.ResetFilter()
 		return m
 	}
 

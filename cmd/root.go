@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"syscall"
 
@@ -49,7 +50,10 @@ var rootCmd = &cobra.Command{
 		zoxideCfg := cfg.Sources["zoxide"]
 		shortenHome := *cfg.Display.ShortenHome
 		rules := pathfmt.CompileRules(cfg.Display.Rules)
-		home, _ := os.UserHomeDir()
+		home, err := os.UserHomeDir()
+		if err != nil {
+			slog.Warn("could not determine home directory; path shortening disabled", "error", err)
+		}
 
 		sources := []generator.Source{
 			{Name: "windows", Type: "window", Fetch: tmux.ListWindows},

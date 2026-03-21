@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -77,6 +78,7 @@ func (c Config) Validate() error {
 	return nil
 }
 
+// Load always returns a valid *Config, even when err is non-nil (defaults are used as fallback).
 func Load(path string) (*Config, error) {
 	cfg := DefaultConfig()
 
@@ -112,6 +114,9 @@ func DefaultPath() string {
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
 		return filepath.Join(xdg, "cmdk", "config.toml")
 	}
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		slog.Warn("could not determine home directory for config path", "error", err)
+	}
 	return filepath.Join(home, ".config", "cmdk", "config.toml")
 }
