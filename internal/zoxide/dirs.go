@@ -4,12 +4,12 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"log/slog"
 	"os/exec"
 	"slices"
 	"strconv"
 	"strings"
 
+	log "charm.land/log/v2"
 	"github.com/jmcampanini/cmdk/internal/item"
 	"github.com/jmcampanini/cmdk/internal/pathfmt"
 )
@@ -51,7 +51,7 @@ func ParseDirs(output string, minScore float64, home, shortenHome string, rules 
 
 		score, path, ok := splitScorePath(line)
 		if !ok {
-			slog.Debug("zoxide: skipping unparseable line", "line", line)
+			log.Debug("zoxide: skipping unparseable line", "line", line)
 			continue
 		}
 		if minScore > 0 && score < minScore {
@@ -70,7 +70,7 @@ func ParseDirs(output string, minScore float64, home, shortenHome string, rules 
 	}
 
 	if filtered > 0 {
-		slog.Debug("zoxide: filtered entries below min_score", "min_score", minScore, "filtered", filtered, "kept", len(entries))
+		log.Debug("zoxide: filtered entries below min_score", "min_score", minScore, "filtered", filtered, "kept", len(entries))
 	}
 
 	slices.SortStableFunc(entries, func(a, b entry) int {

@@ -11,7 +11,6 @@ import (
 var defaultDir = filepath.Join(os.Getenv("HOME"), ".local", "state", "cmdk")
 
 type Logger struct {
-	*log.Logger
 	closer io.Closer
 }
 
@@ -35,5 +34,6 @@ func SetupWithDir(dir string) (*Logger, error) {
 
 	l := log.New(f)
 	l.SetReportTimestamp(true)
-	return &Logger{Logger: l, closer: f}, nil
+	log.SetDefault(l)
+	return &Logger{closer: f}, nil
 }

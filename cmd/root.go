@@ -3,11 +3,11 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"syscall"
 
 	tea "charm.land/bubbletea/v2"
+	log "charm.land/log/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/jmcampanini/cmdk/internal/config"
@@ -52,7 +52,7 @@ var rootCmd = &cobra.Command{
 		rules := pathfmt.CompileRules(cfg.Display.Rules)
 		home, err := os.UserHomeDir()
 		if err != nil {
-			slog.Warn("could not determine home directory; path shortening disabled", "error", err)
+			log.Warn("could not determine home directory; path shortening disabled", "error", err)
 		}
 
 		sources := []generator.Source{
@@ -104,9 +104,7 @@ var rootCmd = &cobra.Command{
 		if sel == nil {
 			return nil
 		}
-		if logger != nil {
-			logger.Info("executing", "item", sel.Display, "cmd", sel.Cmd, "data", sel.Data)
-		}
+		log.Info("executing", "item", sel.Display, "cmd", sel.Cmd, "data", sel.Data)
 		return execute.Run(m.Accumulated(), *sel, paneID, syscall.Exec)
 	},
 }
