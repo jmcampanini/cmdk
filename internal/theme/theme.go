@@ -3,6 +3,7 @@ package theme
 import (
 	"fmt"
 	"image/color"
+	"os"
 
 	"charm.land/lipgloss/v2"
 )
@@ -35,6 +36,10 @@ type Theme struct {
 }
 
 func c(hex string) color.Color { return lipgloss.Color(hex) }
+
+var hasDarkBackground = func() bool {
+	return lipgloss.HasDarkBackground(os.Stdin, os.Stdout)
+}
 
 func Light() Theme {
 	return Theme{
@@ -92,7 +97,12 @@ func Dark() Theme {
 
 func Resolve(name string) (Theme, error) {
 	switch name {
-	case "", "light":
+	case "":
+		if hasDarkBackground() {
+			return Dark(), nil
+		}
+		return Light(), nil
+	case "light":
 		return Light(), nil
 	case "dark":
 		return Dark(), nil

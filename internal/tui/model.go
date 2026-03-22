@@ -25,6 +25,7 @@ type Model struct {
 	registry    *generator.Registry
 	ctx         generator.Context
 	stackStyle  lipgloss.Style
+	filterStyle lipgloss.Style
 	winWidth    int
 	winHeight   int
 }
@@ -58,6 +59,7 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 		registry:    registry,
 		ctx:         ctx,
 		stackStyle:  lipgloss.NewStyle().Foreground(t.Overlay0),
+		filterStyle: lipgloss.NewStyle().Inline(true).Background(t.TextboxBg),
 	}
 }
 
@@ -92,6 +94,9 @@ func applyListStyles(l *list.Model, t theme.Theme) {
 	filterStyles.Focused.Text = textboxActive
 	filterStyles.Blurred.Text = textboxDim
 	filterStyles.Focused.Placeholder = textboxDim
+	filterStyles.Blurred.Placeholder = textboxDim
+	filterStyles.Focused.Suggestion = textboxDim
+	filterStyles.Blurred.Suggestion = textboxDim
 	l.Styles.Filter = filterStyles
 	l.FilterInput.SetStyles(filterStyles)
 	badge := lipgloss.NewStyle().
@@ -232,7 +237,13 @@ func (m Model) navigateTo(accumulated []item.Item) Model {
 func (m Model) headerView() string {
 	var view string
 	if m.list.FilterState() == list.Filtering {
-		view = m.list.FilterInput.View()
+		filterView := m.list.FilterInput.View()
+		body, hadPrompt := strings.CutPrefix(filterView, m.list.FilterInput.Prompt)
+		if hadPrompt {
+			view = m.list.FilterInput.Prompt + m.filterStyle.Render(body)
+		} else {
+			view = m.filterStyle.Render(filterView)
+		}
 	} else {
 		view = m.list.Styles.Title.Render(m.list.Title)
 	}
