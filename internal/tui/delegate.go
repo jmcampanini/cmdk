@@ -20,7 +20,7 @@ const (
 	iconWindow = "\uf2d0"
 	iconDir    = "\uf07c"
 	iconCmd    = "\uf120"
-	leftPad    = "  "
+	itemGap    = "  "
 )
 
 type iconInfo struct {
@@ -77,8 +77,9 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, li list.Item)
 		matchedRunes = m.MatchesForItem(index)
 	}
 
+	leftPad := strings.Repeat(" ", horizontalPadding)
 	iconWidth := ansi.StringWidth(info.icon)
-	availWidth := max(m.Width()-ansi.StringWidth(leftPad)-iconWidth-2, 0)
+	availWidth := max(m.Width()-ansi.StringWidth(leftPad)-iconWidth-ansi.StringWidth(itemGap), 0)
 	display := ansi.Truncate(it.Display, availWidth, "…")
 
 	s := lipgloss.NewStyle().Inline(true)
@@ -90,7 +91,7 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, li list.Item)
 		textStr := d.renderText(display, matchedRunes, s.Foreground(d.textFg).Background(d.selBg))
 
 		bgOnly := s.Background(d.selBg)
-		content := bgOnly.Render(leftPad) + iconStr + bgOnly.Render("  ") + textStr
+		content := bgOnly.Render(leftPad) + iconStr + bgOnly.Render(itemGap) + textStr
 		if remaining := m.Width() - ansi.StringWidth(content); remaining > 0 {
 			content += bgOnly.Render(strings.Repeat(" ", remaining))
 		}
@@ -99,7 +100,7 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, li list.Item)
 	default:
 		iconStr := s.Foreground(info.color).Render(info.icon)
 		textStr := d.renderText(display, matchedRunes, s.Foreground(d.textFg))
-		line = leftPad + iconStr + "  " + textStr
+		line = leftPad + iconStr + itemGap + textStr
 	}
 
 	_, _ = fmt.Fprint(w, line)

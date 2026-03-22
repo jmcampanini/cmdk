@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"charm.land/bubbles/v2/list"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/jmcampanini/cmdk/internal/item"
 	"github.com/jmcampanini/cmdk/internal/theme"
@@ -46,6 +47,22 @@ func TestDelegate_RenderContainsIcon(t *testing.T) {
 	}
 	if !strings.Contains(out, "main:1 zsh") {
 		t.Errorf("expected display text in output, got %q", out)
+	}
+}
+
+func TestDelegate_RenderUsesSingleLeftPaddingColumn(t *testing.T) {
+	d := testDelegate()
+	items := []list.Item{
+		item.Item{Type: "window", Display: "main:1 zsh"},
+	}
+	out := ansi.Strip(renderItem(d, items, 80, 0))
+
+	wantPrefix := " " + iconWindow + itemGap + "main:1 zsh"
+	if !strings.HasPrefix(out, wantPrefix) {
+		t.Errorf("expected %q prefix, got %q", wantPrefix, out)
+	}
+	if strings.HasPrefix(out, "  "+iconWindow) {
+		t.Errorf("expected a single left padding column, got %q", out)
 	}
 }
 
