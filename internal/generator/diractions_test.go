@@ -84,9 +84,9 @@ func runDirActions(accumulated []item.Item, ctx Context) []item.Item {
 	return NewDirActionsGenerator()(accumulated, ctx)
 }
 
-func TestDirActionsGenerator_WithConfigDirCommands(t *testing.T) {
+func TestDirActionsGenerator_WithConfigDirActions(t *testing.T) {
 	cfg := &config.Config{
-		DirCommands: []config.Command{
+		DirActions: []config.Command{
 			{Name: "Yazi", Cmd: "tmux split-window -h yazi"},
 			{Name: "New pane", Cmd: "tmux split-window -v"},
 		},
@@ -117,7 +117,7 @@ func TestDirActionsGenerator_WithConfigDirCommands(t *testing.T) {
 
 func TestDirActionsGenerator_NewWindowAlwaysFirst(t *testing.T) {
 	cfg := &config.Config{
-		DirCommands: []config.Command{
+		DirActions: []config.Command{
 			{Name: "Alpha", Cmd: "echo alpha"},
 		},
 	}
@@ -133,7 +133,7 @@ func TestDirActionsGenerator_NewWindowAlwaysFirst(t *testing.T) {
 
 func TestDirActionsGenerator_ConfigItemsHavePathAndPaneID(t *testing.T) {
 	cfg := &config.Config{
-		DirCommands: []config.Command{
+		DirActions: []config.Command{
 			{Name: "Yazi", Cmd: "yazi"},
 		},
 	}
@@ -151,7 +151,7 @@ func TestDirActionsGenerator_ConfigItemsHavePathAndPaneID(t *testing.T) {
 
 func TestDirActionsGenerator_ConfigItemSource(t *testing.T) {
 	cfg := &config.Config{
-		DirCommands: []config.Command{
+		DirActions: []config.Command{
 			{Name: "Yazi", Cmd: "yazi"},
 		},
 	}
@@ -172,8 +172,8 @@ func TestDirActionsGenerator_NilConfig(t *testing.T) {
 	}
 }
 
-func TestDirActionsGenerator_EmptyDirCommands(t *testing.T) {
-	cfg := &config.Config{DirCommands: []config.Command{}}
+func TestDirActionsGenerator_EmptyDirActions(t *testing.T) {
+	cfg := &config.Config{DirActions: []config.Command{}}
 
 	items := runDirActions(dirAccumulated("/tmp"), Context{Config: cfg})
 	if len(items) != 1 {
@@ -190,7 +190,7 @@ func TestDirActionsGenerator_NoPaneID_NoKeyInData(t *testing.T) {
 
 func TestDirActionsGenerator_DataMapsAreIndependent(t *testing.T) {
 	cfg := &config.Config{
-		DirCommands: []config.Command{
+		DirActions: []config.Command{
 			{Name: "A", Cmd: "a"},
 		},
 	}
