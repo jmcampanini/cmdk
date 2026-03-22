@@ -9,3 +9,8 @@ Use `make` targets — not raw `go` commands:
 - `make lint` — run golangci-lint
 - `make test` — run unit tests
 - `make clean` — remove build artifacts
+
+## Documentation
+
+- Keep the `cmdk --help` code block in README.md in sync with actual CLI output
+- Keep `internal/config/docs.go` (rendered by `cmdk docs` and `cmdk config --help`) in sync with config struct fields and validation rules

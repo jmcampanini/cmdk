@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"syscall"
 
@@ -27,8 +29,9 @@ import (
 var Version = "n/a"
 
 var (
-	paneID    string
-	themeFlag string
+	configPath string
+	paneID     string
+	themeFlag  string
 )
 
 var rootCmd = &cobra.Command{
@@ -45,7 +48,14 @@ var rootCmd = &cobra.Command{
 			defer func() { _ = logger.Close() }()
 		}
 
-		cfg, cfgErr := config.Load(config.DefaultPath())
+		cfgPath, err := resolveConfigPath()
+		if err != nil {
+			return err
+		}
+		cfg, cfgErr := config.Load(cfgPath)
+		if cfgErr != nil && configPath != "" {
+			return cfgErr
+		}
 		zoxideCfg := cfg.Sources["zoxide"]
 		shortenHome := *cfg.Display.ShortenHome
 		rules := pathfmt.CompileRules(cfg.Display.Rules)
@@ -108,8 +118,26 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+func resolveConfigPath() (string, error) {
+	if configPath != "" {
+		fi, err := os.Stat(configPath)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return "", fmt.Errorf("config file not found: %s", configPath)
+			}
+			return "", fmt.Errorf("config file not accessible: %w", err)
+		}
+		if !fi.Mode().IsRegular() {
+			return "", fmt.Errorf("config path is not a regular file: %s", configPath)
+		}
+		return configPath, nil
+	}
+	return config.DefaultPath(), nil
+}
+
 func init() {
 	rootCmd.Version = Version
+	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "path to config file (also validates; exits 1 on error)")
 	rootCmd.Flags().StringVar(&paneID, "pane-id", "", "tmux pane ID")
 	rootCmd.Flags().StringVar(&themeFlag, "theme", "", "color theme (light, dark)")
 }

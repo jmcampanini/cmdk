@@ -35,14 +35,15 @@ Usage:
 
 Available Commands:
   completion  Generate the autocompletion script for the specified shell
-  config      Show resolved configuration
+  config      Show resolved configuration and validate a config file
+  docs        Show configuration reference
   help        Help about any command
   shorten     Apply display rules to shorten a path
 
 Flags:
+  -c, --config string    path to config file (also validates; exits 1 on error)
   -h, --help             help for cmdk
       --pane-id string   tmux pane ID
-      --start-filtered   start in filter mode
       --theme string     color theme (light, dark)
   -v, --version          version for cmdk
 
