@@ -189,15 +189,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // allowing Enter to fall through to the list's built-in filter acceptance.
 // Outside filter mode, the normal list selection is returned.
 func (m Model) resolveEnterTarget() (item.Item, bool) {
-	if m.list.FilterState() == list.Filtering && len(m.list.VisibleItems()) == 1 {
+	switch {
+	case m.list.FilterState() == list.Filtering && len(m.list.VisibleItems()) == 1:
 		sel, ok := m.list.VisibleItems()[0].(item.Item)
 		return sel, ok
-	}
-	if m.list.FilterState() != list.Filtering {
+	case m.list.FilterState() != list.Filtering:
 		sel, ok := m.list.SelectedItem().(item.Item)
 		return sel, ok
+	default:
+		return item.Item{}, false
 	}
-	return item.Item{}, false
 }
 
 func (m Model) handleNextList(sel item.Item) Model {
@@ -215,17 +216,11 @@ func (m Model) navigateTo(accumulated []item.Item) Model {
 		errItem := item.NewItem()
 		errItem.Display = fmt.Sprintf("navigation error: %s", err)
 		m.list.SetItems([]list.Item{errItem})
-		m.list.ResetSelected()
-		m.list.ResetFilter()
-		if m.winHeight > 0 {
-			m.list.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
-		}
-		return m
+	} else {
+		m.accumulated = accumulated
+		m.list.SetItems(item.GroupAndOrder(gen(m.accumulated, m.ctx)))
 	}
 
-	m.accumulated = accumulated
-	listItems := item.GroupAndOrder(gen(m.accumulated, m.ctx))
-	m.list.SetItems(listItems)
 	m.list.ResetSelected()
 	m.list.ResetFilter()
 	if m.winHeight > 0 {
@@ -235,19 +230,17 @@ func (m Model) navigateTo(accumulated []item.Item) Model {
 }
 
 func (m Model) headerView() string {
-	var view string
+	content := m.list.Styles.Title.Render(m.list.Title)
 	if m.list.FilterState() == list.Filtering {
 		filterView := m.list.FilterInput.View()
 		body, hadPrompt := strings.CutPrefix(filterView, m.list.FilterInput.Prompt)
 		if hadPrompt {
-			view = m.list.FilterInput.Prompt + m.filterStyle.Render(body)
+			content = m.list.FilterInput.Prompt + m.filterStyle.Render(body)
 		} else {
-			view = m.filterStyle.Render(filterView)
+			content = m.filterStyle.Render(filterView)
 		}
-	} else {
-		view = m.list.Styles.Title.Render(m.list.Title)
 	}
-	return m.list.Styles.TitleBar.Render(view)
+	return m.list.Styles.TitleBar.Render(content)
 }
 
 func (m Model) stackView() string {
