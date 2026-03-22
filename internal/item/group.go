@@ -2,7 +2,7 @@ package item
 
 import "charm.land/bubbles/v2/list"
 
-var TypeOrder = []string{"window", "dir", "cmd"}
+var TypeOrder = []string{"cmd", "dir", "window"}
 
 func GroupAndOrder(items []Item) []list.Item {
 	buckets := make(map[string][]Item)

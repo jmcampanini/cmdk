@@ -19,9 +19,9 @@ func TestParseWindows_MultiSession(t *testing.T) {
 		session string
 		index   string
 	}{
-		{"dev:1 node", "dev", "1"},
-		{"main:1 zsh", "main", "1"},
-		{"main:2 vim", "main", "2"},
+		{"tmux: dev:1 node", "dev", "1"},
+		{"tmux: main:1 zsh", "main", "1"},
+		{"tmux: main:2 vim", "main", "2"},
 	}
 
 	for i, w := range want {
@@ -51,7 +51,7 @@ func TestParseWindows_SortBySessionThenIndex(t *testing.T) {
 		t.Fatalf("got %d items, want 4", len(items))
 	}
 
-	wantOrder := []string{"a:1 vim", "a:3 zsh", "z:1 fish", "z:2 bash"}
+	wantOrder := []string{"tmux: a:1 vim", "tmux: a:3 zsh", "tmux: z:1 fish", "tmux: z:2 bash"}
 	for i, w := range wantOrder {
 		if items[i].Display != w {
 			t.Errorf("item[%d].Display = %q, want %q", i, items[i].Display, w)
@@ -66,8 +66,8 @@ func TestParseWindows_WindowNameWithSpaces(t *testing.T) {
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
-	if items[0].Display != "work:1 my cool app" {
-		t.Errorf("Display = %q, want %q", items[0].Display, "work:1 my cool app")
+	if items[0].Display != "tmux: work:1 my cool app" {
+		t.Errorf("Display = %q, want %q", items[0].Display, "tmux: work:1 my cool app")
 	}
 	if items[0].Data["session"] != "work" {
 		t.Errorf("session = %q, want %q", items[0].Data["session"], "work")
