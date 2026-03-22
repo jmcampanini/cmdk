@@ -37,7 +37,7 @@ func ConfigDocs() []SectionDoc {
 				{Name: "name", Type: "string", Description: "Display name in the action list.", Validation: "cannot be empty"},
 				{Name: "cmd", Type: "string", Description: "Shell command or Go template to execute.", Validation: "cannot be empty"},
 			},
-			Example: "[[dir_commands]]\nname = \"Yazi\"\ncmd = \"tmux split-window -h yazi {{sq .path}}\"\n\n[[dir_commands]]\nname = \"Git Status\"\ncmd = \"git status\"",
+			Example: "# simple command (no template variables)\n[[dir_commands]]\nname = \"Git Status\"\ncmd = \"git status\"\n\n# using {{.path}} directly\n[[dir_commands]]\nname = \"List Files\"\ncmd = \"ls -la {{.path}}\"\n\n# using {{sq .path}} for shell-safe quoting\n[[dir_commands]]\nname = \"Yazi\"\ncmd = \"tmux split-window -h yazi {{sq .path}}\"\n\n# using CMDK_PANE_ID environment variable\n[[dir_commands]]\nname = \"Split Here\"\ncmd = \"tmux split-window -t \\\"$CMDK_PANE_ID\\\" -c {{sq .path}}\"",
 		},
 		{
 			Name:        "timeout",
