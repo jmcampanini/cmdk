@@ -170,7 +170,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // resolveEnterTarget returns the item that Enter should act on.
 // When filtering with exactly one visible match, that match is returned
 // directly so the user doesn't have to explicitly accept the filter first.
-// Otherwise the normal list selection is used (only outside filter mode).
+// When filtering with multiple matches, no item is returned (false),
+// allowing Enter to fall through to the list's built-in filter acceptance.
+// Outside filter mode, the normal list selection is returned.
 func (m Model) resolveEnterTarget() (item.Item, bool) {
 	if m.list.FilterState() == list.Filtering && len(m.list.VisibleItems()) == 1 {
 		sel, ok := m.list.VisibleItems()[0].(item.Item)

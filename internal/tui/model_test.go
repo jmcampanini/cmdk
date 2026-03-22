@@ -138,7 +138,7 @@ func TestEnterOnExecuteItem_SetsSelectedAndQuits(t *testing.T) {
 	}
 }
 
-func TestEnterDuringFiltering_NotIntercepted(t *testing.T) {
+func TestEnterDuringFiltering_MultipleItems_NotIntercepted(t *testing.T) {
 	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
 	m.list.SetSize(80, 40)
 
@@ -152,6 +152,29 @@ func TestEnterDuringFiltering_NotIntercepted(t *testing.T) {
 
 	if model.Selected() != nil {
 		t.Error("Selected() should be nil during filtering — Enter should be forwarded to list")
+	}
+}
+
+func TestEnterDuringFiltering_ZeroItems_NoSelection(t *testing.T) {
+	m := NewModel(nil, "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m.list.SetSize(80, 40)
+
+	if m.list.FilterState() != list.Filtering {
+		t.Skip("could not enter filtering state")
+	}
+	if got := len(m.list.VisibleItems()); got != 0 {
+		t.Fatalf("VisibleItems() = %d, want 0", got)
+	}
+
+	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
+	result, cmd := m.Update(enter)
+	model := result.(Model)
+
+	if model.Selected() != nil {
+		t.Error("Selected() should be nil when no items are visible")
+	}
+	if cmd != nil {
+		t.Error("should not quit when no items are visible")
 	}
 }
 
