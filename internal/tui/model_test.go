@@ -468,6 +468,28 @@ func TestListHeightReducedForStack(t *testing.T) {
 	}
 }
 
+func TestWindowSizeMsg_RootListHeight(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+	winH := 30
+	m = setWindowSize(t, m, 80, winH)
+
+	want := winH - m.overheadHeight()
+	if got := m.list.Height(); got != want {
+		t.Errorf("list height at root = %d, want %d", got, want)
+	}
+}
+
+func TestWindowSizeMsg_TinyTerminalClampsToOne(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+	m = drillDownToDirItem(t, m)
+
+	m = setWindowSize(t, m, 80, 3)
+	if got := m.list.Height(); got != 1 {
+		t.Errorf("list height in tiny terminal = %d, want 1", got)
+	}
+}
+
 func TestView_StackAppearsAfterDrillDown(t *testing.T) {
 	m := newTestModel(testItems(), testRegistry())
 	m = setWindowSize(t, m, 80, 40)

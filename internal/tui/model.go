@@ -212,6 +212,9 @@ func (m Model) navigateTo(accumulated []item.Item) Model {
 		m.list.SetItems([]list.Item{errItem})
 		m.list.ResetSelected()
 		m.list.ResetFilter()
+		if m.winHeight > 0 {
+			m.list.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
+		}
 		return m
 	}
 
@@ -243,7 +246,7 @@ func (m Model) stackView() string {
 	pad := strings.Repeat(" ", horizontalPadding)
 	var b strings.Builder
 	for _, it := range m.accumulated {
-		display := ansi.Truncate(it.Display, max(m.winWidth-horizontalPadding, 0), "…")
+		display := ansi.Truncate(it.Display, max(m.winWidth-2*horizontalPadding, 0), "…")
 		b.WriteString(pad + m.stackStyle.Render(display))
 		b.WriteByte('\n')
 	}
