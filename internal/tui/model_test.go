@@ -120,6 +120,61 @@ func TestEnterDuringFiltering_NotIntercepted(t *testing.T) {
 	}
 }
 
+func TestEnterDuringFiltering_SingleExecuteItem_AutoSelects(t *testing.T) {
+	items := []list.Item{
+		item.Item{Type: "window", Display: "only-window", Action: item.ActionExecute},
+	}
+	m := NewModel(items, "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m.list.SetSize(80, 40)
+
+	if m.list.FilterState() != list.Filtering {
+		t.Skip("could not enter filtering state")
+	}
+	if got := len(m.list.VisibleItems()); got != 1 {
+		t.Fatalf("VisibleItems() = %d, want 1", got)
+	}
+
+	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
+	result, cmd := m.Update(enter)
+	model := result.(Model)
+
+	if model.Selected() == nil {
+		t.Fatal("Selected() should be set when Enter pressed with single filtered item")
+	}
+	if model.Selected().Display != "only-window" {
+		t.Errorf("Selected().Display = %q, want %q", model.Selected().Display, "only-window")
+	}
+	if cmd == nil {
+		t.Error("expected Quit command")
+	}
+}
+
+func TestEnterDuringFiltering_SingleNextListItem_DrillsDown(t *testing.T) {
+	items := []list.Item{
+		item.Item{Type: "dir", Display: "~/projects/foo", Action: item.ActionNextList, Data: map[string]string{"path": "~/projects/foo"}},
+	}
+	m := NewModel(items, "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m.list.SetSize(80, 40)
+
+	if m.list.FilterState() != list.Filtering {
+		t.Skip("could not enter filtering state")
+	}
+	if got := len(m.list.VisibleItems()); got != 1 {
+		t.Fatalf("VisibleItems() = %d, want 1", got)
+	}
+
+	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
+	result, _ := m.Update(enter)
+	model := result.(Model)
+
+	if len(model.Accumulated()) != 1 {
+		t.Fatalf("Accumulated() len = %d, want 1", len(model.Accumulated()))
+	}
+	if model.Accumulated()[0].Display != "~/projects/foo" {
+		t.Errorf("Accumulated()[0].Display = %q, want %q", model.Accumulated()[0].Display, "~/projects/foo")
+	}
+}
+
 func drillDownToDirItem(t *testing.T, m Model) Model {
 	t.Helper()
 	m = exitFilterMode(t, m)

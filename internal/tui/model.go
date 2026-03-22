@@ -138,8 +138,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.list.SetSize(msg.Width, msg.Height)
 		return m, nil
 	case tea.KeyPressMsg:
-		if msg.String() == "enter" && m.list.FilterState() != list.Filtering {
-			if sel, ok := m.list.SelectedItem().(item.Item); ok {
+		if msg.String() == "enter" {
+			sel, ok := m.resolveEnterTarget()
+			if ok {
 				switch sel.Action {
 				case item.ActionExecute:
 					m.selected = &sel
@@ -160,6 +161,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
 	return m, cmd
+}
+
+// resolveEnterTarget returns the item that Enter should act on.
+// When filtering with exactly one visible match, that match is returned
+// directly so the user doesn't have to explicitly accept the filter first.
+// Otherwise the normal list selection is used (only outside filter mode).
+func (m Model) resolveEnterTarget() (item.Item, bool) {
+	if m.list.FilterState() == list.Filtering && len(m.list.VisibleItems()) == 1 {
+		sel, ok := m.list.VisibleItems()[0].(item.Item)
+		return sel, ok
+	}
+	if m.list.FilterState() != list.Filtering {
+		sel, ok := m.list.SelectedItem().(item.Item)
+		return sel, ok
+	}
+	return item.Item{}, false
 }
 
 func (m Model) handleNextList(sel item.Item) Model {
