@@ -72,6 +72,7 @@ func applyListStyles(l *list.Model, t theme.Theme) {
 
 	filterStyles := textinput.DefaultStyles(t.IsDark)
 	filterStyles.Cursor.Color = t.AccentDim
+	filterStyles.Cursor.Blink = false
 	filterStyles.Focused.Prompt = promptStyle
 	filterStyles.Blurred.Prompt = promptStyle
 	filterStyles.Focused.Text = textboxActive
