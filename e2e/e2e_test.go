@@ -185,8 +185,6 @@ func filterAndExecute(t *testing.T, sess string, query string) {
 		return strings.Contains(s, "apply filter")
 	}, 5*time.Second)
 	sendKeys(t, sess, "Enter")
-	time.Sleep(300 * time.Millisecond)
-	sendKeys(t, sess, "Enter")
 }
 
 func TestE2E_ItemsVisible(t *testing.T) {
