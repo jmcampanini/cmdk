@@ -24,7 +24,7 @@ type Model struct {
 	ctx         generator.Context
 }
 
-func NewModel(items []list.Item, paneID string, accumulated []item.Item, registry *generator.Registry, ctx generator.Context, t theme.Theme, startFiltered bool) Model {
+func NewModel(items []list.Item, paneID string, accumulated []item.Item, registry *generator.Registry, ctx generator.Context, t theme.Theme) Model {
 	l := list.New(items, newItemDelegate(t), 0, 0)
 	l.Title = "cmdk"
 	l.Filter = list.DefaultFilter
@@ -32,11 +32,14 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 	l.SetShowPagination(false)
 	applyListStyles(&l, t)
 
-	if startFiltered {
-		l.SetSize(1, 1)
-		// tea.Cmd is intentionally discarded here; moving this to Init() would be
-		// cleaner but requires a larger refactor to thread the flag through.
-		l, _ = l.Update(tea.KeyPressMsg{Code: rune('/')})
+	// Start in filter mode so the user can begin typing immediately.
+	// tea.Cmd is intentionally discarded — it returns textinput.Blink which is
+	// unused because Cursor.Blink is set to false in applyListStyles. Moving
+	// this to Init() would be cleaner but requires a larger refactor.
+	l.SetSize(1, 1)
+	l, _ = l.Update(tea.KeyPressMsg{Code: rune('/')})
+	if l.FilterState() != list.Filtering {
+		log.Warn("failed to enter filter mode during init; falling back to browse mode")
 	}
 
 	return Model{
@@ -49,22 +52,47 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 }
 
 func applyListStyles(l *list.Model, t theme.Theme) {
-	l.Styles.TitleBar = lipgloss.NewStyle().Padding(0, 0, 1, 2)
+	l.Styles.TitleBar = lipgloss.NewStyle().Padding(0, 1, 1, 2)
 
+	// Title style padding is asymmetric (left=1, right=2) because the bubbles
+	// list uses Title.Render(FilterInput.Prompt) to compute the prompt width
+	// reserved in the filter text input. This 3-char total matches TitleBar's
+	// horizontal padding (left=2 + right=1 = 3) so the badge aligns visually.
 	l.Styles.Title = lipgloss.NewStyle().
 		Background(t.Accent).
 		Foreground(t.Base).
-		Padding(0, 1)
+		Padding(0, 2, 0, 1)
 
-	prompt := lipgloss.NewStyle().Foreground(t.Accent)
+	// Filter prompt is a pre-rendered ANSI badge followed by a plain space
+	// separator. The prompt style is a no-op so the badge's existing ANSI
+	// sequences pass through unchanged.
+	promptStyle := lipgloss.NewStyle()
+
+	textboxActive := lipgloss.NewStyle().
+		Foreground(t.Text).
+		Background(t.TextboxBg)
+	textboxDim := lipgloss.NewStyle().
+		Foreground(t.Overlay0).
+		Background(t.TextboxBg)
+
 	filterStyles := textinput.DefaultStyles(t.IsDark)
 	filterStyles.Cursor.Color = t.AccentDim
-	filterStyles.Blurred.Prompt = prompt
-	filterStyles.Focused.Prompt = prompt
+	filterStyles.Cursor.Blink = false
+	filterStyles.Focused.Prompt = promptStyle
+	filterStyles.Blurred.Prompt = promptStyle
+	filterStyles.Focused.Text = textboxActive
+	filterStyles.Blurred.Text = textboxDim
+	filterStyles.Focused.Placeholder = textboxDim
 	l.Styles.Filter = filterStyles
 	l.FilterInput.SetStyles(filterStyles)
+	badge := lipgloss.NewStyle().
+		Background(t.Accent).
+		Foreground(t.Base).
+		Padding(0, 1).
+		Render("cmdk")
+	l.FilterInput.Prompt = badge + " "
 
-	l.Styles.DefaultFilterCharacterMatch = lipgloss.NewStyle().Underline(true)
+	l.Styles.DefaultFilterCharacterMatch = lipgloss.NewStyle().Background(t.MatchHighlight)
 
 	l.Styles.StatusBar = lipgloss.NewStyle().
 		Foreground(t.Overlay0).

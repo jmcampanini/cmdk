@@ -30,9 +30,7 @@ type iconInfo struct {
 
 type itemDelegate struct {
 	icons       map[string]iconInfo
-	dimIcon     color.Color
 	textFg      color.Color
-	dimTextFg   color.Color
 	selBg       color.Color
 	filterMatch lipgloss.Style
 }
@@ -44,11 +42,9 @@ func newItemDelegate(t theme.Theme) itemDelegate {
 			"dir":    {iconDir, t.TypeDir},
 			"cmd":    {iconCmd, t.TypeCmd},
 		},
-		dimIcon:     t.Surface2,
 		textFg:      t.Text,
-		dimTextFg:   t.Overlay0,
 		selBg:       t.Surface1,
-		filterMatch: lipgloss.NewStyle().Underline(true),
+		filterMatch: lipgloss.NewStyle().Background(t.MatchHighlight),
 	}
 }
 
@@ -89,11 +85,6 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, li list.Item)
 
 	var line string
 	switch {
-	case filtering && m.FilterValue() == "":
-		iconStr := s.Foreground(d.dimIcon).Render(info.icon)
-		textStr := s.Foreground(d.dimTextFg).Render(display)
-		line = leftPad + iconStr + "  " + textStr
-
 	case index == m.Index() && !filtering:
 		iconStr := s.Foreground(info.color).Background(d.selBg).Render(info.icon)
 		textStr := d.renderText(display, matchedRunes, s.Foreground(d.textFg).Background(d.selBg))

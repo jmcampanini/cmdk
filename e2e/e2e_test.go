@@ -160,6 +160,7 @@ func requireZoxideEntries(t *testing.T) {
 
 func navigateToDirItem(t *testing.T, sess string) {
 	t.Helper()
+	exitFilterModeE2E(t, sess)
 	content := capturePane(t, sess)
 	windowCount := strings.Count(content, iconWindow)
 	for range windowCount {
@@ -171,10 +172,14 @@ func navigateToDirItem(t *testing.T, sess string) {
 	}, 3*time.Second)
 }
 
+func exitFilterModeE2E(t *testing.T, sess string) {
+	t.Helper()
+	sendKeys(t, sess, "Escape")
+	time.Sleep(200 * time.Millisecond)
+}
+
 func filterAndExecute(t *testing.T, sess string, query string) {
 	t.Helper()
-	sendKeys(t, sess, "/")
-	time.Sleep(200 * time.Millisecond)
 	typeText(t, sess, query)
 	waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, "apply filter")
@@ -205,8 +210,6 @@ func TestE2E_FilterItems(t *testing.T) {
 
 	waitForReady(t, sess)
 
-	sendKeys(t, sess, "/")
-	time.Sleep(200 * time.Millisecond)
 	typeText(t, sess, "cmdk-test")
 
 	waitForContent(t, sess, func(s string) bool {
@@ -220,8 +223,6 @@ func TestE2E_EscapeDuringFilterDoesNotQuit(t *testing.T) {
 
 	waitForReady(t, sess)
 
-	sendKeys(t, sess, "/")
-	time.Sleep(200 * time.Millisecond)
 	typeText(t, sess, "cmdk-test")
 
 	waitForContent(t, sess, func(s string) bool {
@@ -245,6 +246,7 @@ func TestE2E_EscapeQuits(t *testing.T) {
 
 	waitForReady(t, sess)
 
+	exitFilterModeE2E(t, sess)
 	sendKeys(t, sess, "Escape")
 	waitForExit(t, sess)
 }
@@ -255,6 +257,7 @@ func TestE2E_EnterExecutesAndExits(t *testing.T) {
 
 	waitForReady(t, sess)
 
+	exitFilterModeE2E(t, sess)
 	sendKeys(t, sess, "Enter")
 	waitForExit(t, sess)
 }
@@ -401,6 +404,7 @@ func TestE2E_MalformedConfigShowsError(t *testing.T) {
 		return strings.Contains(s, "config error")
 	}, 5*time.Second)
 
+	exitFilterModeE2E(t, sess)
 	sendKeys(t, sess, "Escape")
 	waitForExit(t, sess)
 }
@@ -699,6 +703,7 @@ func TestE2E_DisplayPopup(t *testing.T) {
 
 	waitForReady(t, sess)
 
+	exitFilterModeE2E(t, sess)
 	sendKeys(t, sess, "Escape")
 	waitForExit(t, sess)
 }
