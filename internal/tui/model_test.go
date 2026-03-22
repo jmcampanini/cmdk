@@ -1,10 +1,12 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/jmcampanini/cmdk/internal/generator"
 	"github.com/jmcampanini/cmdk/internal/item"
@@ -38,7 +40,15 @@ func testItems() []list.Item {
 	}
 }
 
-var escMsg = tea.KeyPressMsg{Code: tea.KeyEscape}
+var (
+	escMsg   = tea.KeyPressMsg{Code: tea.KeyEscape}
+	enterMsg = tea.KeyPressMsg{Code: tea.KeyEnter}
+	downMsg  = tea.KeyPressMsg{Code: tea.KeyDown}
+)
+
+func newTestModel(items []list.Item, reg *generator.Registry) Model {
+	return NewModel(items, "%1", nil, reg, generator.Context{}, theme.Light())
+}
 
 func exitFilterMode(t *testing.T, m Model) Model {
 	t.Helper()
@@ -51,21 +61,21 @@ func exitFilterMode(t *testing.T, m Model) Model {
 }
 
 func TestNewModel_ItemCount(t *testing.T) {
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := newTestModel(testItems(), testRegistry())
 	if got := len(m.list.Items()); got != 3 {
 		t.Errorf("item count = %d, want 3", got)
 	}
 }
 
 func TestNewModel_InitReturnsNil(t *testing.T) {
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := newTestModel(testItems(), testRegistry())
 	if cmd := m.Init(); cmd != nil {
 		t.Error("Init() should return nil")
 	}
 }
 
 func TestNewModel_StartsInFilterMode(t *testing.T) {
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := newTestModel(testItems(), testRegistry())
 	m.list.SetSize(80, 40)
 	if m.list.FilterState() != list.Filtering {
 		t.Errorf("FilterState() = %v, want %v", m.list.FilterState(), list.Filtering)
@@ -76,55 +86,43 @@ func TestNewModel_StartsInFilterMode(t *testing.T) {
 }
 
 func TestNewModel_UsesSingleColumnFramePadding(t *testing.T) {
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := newTestModel(testItems(), testRegistry())
 
-	if got := m.list.Styles.TitleBar.GetPaddingLeft(); got != horizontalPadding {
-		t.Errorf("TitleBar left padding = %d, want %d", got, horizontalPadding)
+	checks := []struct {
+		name  string
+		left  int
+		right int
+	}{
+		{"TitleBar", m.list.Styles.TitleBar.GetPaddingLeft(), m.list.Styles.TitleBar.GetPaddingRight()},
+		{"StatusBar", m.list.Styles.StatusBar.GetPaddingLeft(), m.list.Styles.StatusBar.GetPaddingRight()},
+		{"NoItems", m.list.Styles.NoItems.GetPaddingLeft(), m.list.Styles.NoItems.GetPaddingRight()},
+		{"PaginationStyle", m.list.Styles.PaginationStyle.GetPaddingLeft(), m.list.Styles.PaginationStyle.GetPaddingRight()},
+		{"HelpStyle", m.list.Styles.HelpStyle.GetPaddingLeft(), m.list.Styles.HelpStyle.GetPaddingRight()},
 	}
-	if got := m.list.Styles.TitleBar.GetPaddingRight(); got != horizontalPadding {
-		t.Errorf("TitleBar right padding = %d, want %d", got, horizontalPadding)
-	}
-	if got := m.list.Styles.StatusBar.GetPaddingLeft(); got != horizontalPadding {
-		t.Errorf("StatusBar left padding = %d, want %d", got, horizontalPadding)
-	}
-	if got := m.list.Styles.StatusBar.GetPaddingRight(); got != horizontalPadding {
-		t.Errorf("StatusBar right padding = %d, want %d", got, horizontalPadding)
-	}
-	if got := m.list.Styles.NoItems.GetPaddingLeft(); got != horizontalPadding {
-		t.Errorf("NoItems left padding = %d, want %d", got, horizontalPadding)
-	}
-	if got := m.list.Styles.NoItems.GetPaddingRight(); got != horizontalPadding {
-		t.Errorf("NoItems right padding = %d, want %d", got, horizontalPadding)
-	}
-	if got := m.list.Styles.PaginationStyle.GetPaddingLeft(); got != horizontalPadding {
-		t.Errorf("PaginationStyle left padding = %d, want %d", got, horizontalPadding)
-	}
-	if got := m.list.Styles.PaginationStyle.GetPaddingRight(); got != horizontalPadding {
-		t.Errorf("PaginationStyle right padding = %d, want %d", got, horizontalPadding)
-	}
-	if got := m.list.Styles.HelpStyle.GetPaddingLeft(); got != horizontalPadding {
-		t.Errorf("HelpStyle left padding = %d, want %d", got, horizontalPadding)
-	}
-	if got := m.list.Styles.HelpStyle.GetPaddingRight(); got != horizontalPadding {
-		t.Errorf("HelpStyle right padding = %d, want %d", got, horizontalPadding)
+	for _, c := range checks {
+		if c.left != horizontalPadding {
+			t.Errorf("%s left padding = %d, want %d", c.name, c.left, horizontalPadding)
+		}
+		if c.right != horizontalPadding {
+			t.Errorf("%s right padding = %d, want %d", c.name, c.right, horizontalPadding)
+		}
 	}
 }
 
 func TestSelectedReturnsNilByDefault(t *testing.T) {
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := newTestModel(testItems(), testRegistry())
 	if m.Selected() != nil {
 		t.Error("Selected() should be nil before any selection")
 	}
 }
 
 func TestEnterOnExecuteItem_SetsSelectedAndQuits(t *testing.T) {
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := newTestModel(testItems(), testRegistry())
 	m.list.SetSize(80, 40)
 
 	m = exitFilterMode(t, m)
 
-	msg := tea.KeyPressMsg{Code: tea.KeyEnter}
-	result, cmd := m.Update(msg)
+	result, cmd := m.Update(enterMsg)
 
 	model := result.(Model)
 	if model.Selected() == nil {
@@ -139,15 +137,14 @@ func TestEnterOnExecuteItem_SetsSelectedAndQuits(t *testing.T) {
 }
 
 func TestEnterDuringFiltering_MultipleItems_NotIntercepted(t *testing.T) {
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := newTestModel(testItems(), testRegistry())
 	m.list.SetSize(80, 40)
 
 	if m.list.FilterState() != list.Filtering {
 		t.Skip("could not enter filtering state")
 	}
 
-	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
-	result, _ := m.Update(enter)
+	result, _ := m.Update(enterMsg)
 	model := result.(Model)
 
 	if model.Selected() != nil {
@@ -156,7 +153,7 @@ func TestEnterDuringFiltering_MultipleItems_NotIntercepted(t *testing.T) {
 }
 
 func TestEnterDuringFiltering_ZeroItems_NoSelection(t *testing.T) {
-	m := NewModel(nil, "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := newTestModel(nil, testRegistry())
 	m.list.SetSize(80, 40)
 
 	if m.list.FilterState() != list.Filtering {
@@ -166,8 +163,7 @@ func TestEnterDuringFiltering_ZeroItems_NoSelection(t *testing.T) {
 		t.Fatalf("VisibleItems() = %d, want 0", got)
 	}
 
-	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
-	result, cmd := m.Update(enter)
+	result, cmd := m.Update(enterMsg)
 	model := result.(Model)
 
 	if model.Selected() != nil {
@@ -182,7 +178,7 @@ func TestEnterDuringFiltering_SingleExecuteItem_AutoSelects(t *testing.T) {
 	items := []list.Item{
 		item.Item{Type: "window", Display: "only-window", Action: item.ActionExecute},
 	}
-	m := NewModel(items, "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := newTestModel(items, testRegistry())
 	m.list.SetSize(80, 40)
 
 	if m.list.FilterState() != list.Filtering {
@@ -192,8 +188,7 @@ func TestEnterDuringFiltering_SingleExecuteItem_AutoSelects(t *testing.T) {
 		t.Fatalf("VisibleItems() = %d, want 1", got)
 	}
 
-	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
-	result, cmd := m.Update(enter)
+	result, cmd := m.Update(enterMsg)
 	model := result.(Model)
 
 	if model.Selected() == nil {
@@ -211,7 +206,7 @@ func TestEnterDuringFiltering_SingleNextListItem_DrillsDown(t *testing.T) {
 	items := []list.Item{
 		item.Item{Type: "dir", Display: "~/projects/foo", Action: item.ActionNextList, Data: map[string]string{"path": "~/projects/foo"}},
 	}
-	m := NewModel(items, "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := newTestModel(items, testRegistry())
 	m.list.SetSize(80, 40)
 
 	if m.list.FilterState() != list.Filtering {
@@ -221,8 +216,7 @@ func TestEnterDuringFiltering_SingleNextListItem_DrillsDown(t *testing.T) {
 		t.Fatalf("VisibleItems() = %d, want 1", got)
 	}
 
-	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
-	result, _ := m.Update(enter)
+	result, _ := m.Update(enterMsg)
 	model := result.(Model)
 
 	if len(model.Accumulated()) != 1 {
@@ -237,19 +231,17 @@ func drillDownToDirItem(t *testing.T, m Model) Model {
 	t.Helper()
 	m = exitFilterMode(t, m)
 
-	down := tea.KeyPressMsg{Code: tea.KeyDown}
-	result, _ := m.Update(down)
+	result, _ := m.Update(downMsg)
 	m = result.(Model)
-	result, _ = m.Update(down)
+	result, _ = m.Update(downMsg)
 	m = result.(Model)
 
-	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
-	result, _ = m.Update(enter)
+	result, _ = m.Update(enterMsg)
 	return result.(Model)
 }
 
 func TestEnterOnNextListItem_DrillsDown(t *testing.T) {
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := newTestModel(testItems(), testRegistry())
 	m.list.SetSize(80, 40)
 
 	m = drillDownToDirItem(t, m)
@@ -275,7 +267,7 @@ func TestEnterOnNextListItem_DrillsDown(t *testing.T) {
 }
 
 func TestEscapeFromDrillDown_PopsBack(t *testing.T) {
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := newTestModel(testItems(), testRegistry())
 	m.list.SetSize(80, 40)
 
 	m = drillDownToDirItem(t, m)
@@ -299,13 +291,12 @@ func TestEscapeFromDrillDown_PopsBack(t *testing.T) {
 }
 
 func TestDrillDownThenExecute_SetsSelectedAndQuits(t *testing.T) {
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := newTestModel(testItems(), testRegistry())
 	m.list.SetSize(80, 40)
 
 	m = drillDownToDirItem(t, m)
 
-	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
-	result, cmd := m.Update(enter)
+	result, cmd := m.Update(enterMsg)
 	m = result.(Model)
 
 	if m.Selected() == nil {
@@ -329,13 +320,12 @@ func TestNextListWithUnmappedType_StaysOnCurrentList(t *testing.T) {
 	items := []list.Item{
 		item.Item{Type: "unknown", Display: "unmapped item", Action: item.ActionNextList, Data: map[string]string{}},
 	}
-	m := NewModel(items, "%1", nil, reg, generator.Context{}, theme.Light())
+	m := newTestModel(items, reg)
 	m.list.SetSize(80, 40)
 
 	m = exitFilterMode(t, m)
 
-	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
-	result, cmd := m.Update(enter)
+	result, cmd := m.Update(enterMsg)
 	m = result.(Model)
 
 	if cmd != nil {
@@ -361,17 +351,15 @@ func TestEnterOnErrorItem_NoAction(t *testing.T) {
 	reg.Register("root", func(accumulated []item.Item, ctx generator.Context) []item.Item { return nil })
 	reg.MapType("", "root")
 
-	m := NewModel(items, "%1", nil, reg, generator.Context{}, theme.Light())
+	m := newTestModel(items, reg)
 	m.list.SetSize(80, 40)
 
 	m = exitFilterMode(t, m)
 
-	down := tea.KeyPressMsg{Code: tea.KeyDown}
-	result, _ := m.Update(down)
+	result, _ := m.Update(downMsg)
 	m = result.(Model)
 
-	enter := tea.KeyPressMsg{Code: tea.KeyEnter}
-	result, cmd := m.Update(enter)
+	result, cmd := m.Update(enterMsg)
 	m = result.(Model)
 
 	if cmd != nil {
@@ -386,7 +374,7 @@ func TestEnterOnErrorItem_NoAction(t *testing.T) {
 }
 
 func TestEscapeFromRoot_Quits(t *testing.T) {
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+	m := newTestModel(testItems(), testRegistry())
 	m.list.SetSize(80, 40)
 
 	// First Escape exits filter mode
@@ -400,5 +388,139 @@ func TestEscapeFromRoot_Quits(t *testing.T) {
 	_, cmd = m.Update(escMsg)
 	if cmd == nil {
 		t.Error("second Escape from root should quit")
+	}
+}
+
+func setWindowSize(t *testing.T, m Model, w, h int) Model {
+	t.Helper()
+	result, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+	return result.(Model)
+}
+
+func TestStackView_EmptyAtRoot(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+	if got := m.stackView(); got != "" {
+		t.Errorf("stackView() at root = %q, want empty", got)
+	}
+}
+
+func TestStackView_SingleEntry(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+	m = drillDownToDirItem(t, m)
+
+	got := m.stackView()
+	stripped := ansi.Strip(got)
+	if !strings.Contains(stripped, "~/projects/foo") {
+		t.Errorf("stackView() should contain dir display, got %q", stripped)
+	}
+	if !strings.HasSuffix(got, "\n\n") {
+		t.Error("stackView() should end with trailing blank line")
+	}
+}
+
+func TestStackView_MultipleEntries(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+	m.accumulated = []item.Item{
+		{Display: "entry-one"},
+		{Display: "entry-two"},
+	}
+	m = setWindowSize(t, m, 80, 40)
+
+	got := ansi.Strip(m.stackView())
+	lines := strings.Split(strings.TrimSuffix(got, "\n\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 stack lines, got %d: %q", len(lines), got)
+	}
+	if !strings.Contains(lines[0], "entry-one") {
+		t.Errorf("first line should contain entry-one, got %q", lines[0])
+	}
+	if !strings.Contains(lines[1], "entry-two") {
+		t.Errorf("second line should contain entry-two, got %q", lines[1])
+	}
+}
+
+func TestOverheadHeight_Root(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+	if got := m.overheadHeight(); got != 2 {
+		t.Errorf("overheadHeight() at root = %d, want 2", got)
+	}
+}
+
+func TestOverheadHeight_WithStack(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+	m.accumulated = []item.Item{{Display: "a"}, {Display: "b"}}
+	want := 2 + 2 + 1
+	if got := m.overheadHeight(); got != want {
+		t.Errorf("overheadHeight() with 2 entries = %d, want %d", got, want)
+	}
+}
+
+func TestListHeightReducedForStack(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+	winH := 40
+	m = setWindowSize(t, m, 80, winH)
+	m = drillDownToDirItem(t, m)
+
+	want := winH - m.overheadHeight()
+	if got := m.list.Height(); got != want {
+		t.Errorf("list height = %d, want %d (winH=%d overhead=%d)", got, want, winH, m.overheadHeight())
+	}
+}
+
+func TestWindowSizeMsg_RootListHeight(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+	winH := 30
+	m = setWindowSize(t, m, 80, winH)
+
+	want := winH - m.overheadHeight()
+	if got := m.list.Height(); got != want {
+		t.Errorf("list height at root = %d, want %d", got, want)
+	}
+}
+
+func TestWindowSizeMsg_TinyTerminalClampsToOne(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+	m = drillDownToDirItem(t, m)
+
+	m = setWindowSize(t, m, 80, 3)
+	if got := m.list.Height(); got != 1 {
+		t.Errorf("list height in tiny terminal = %d, want 1", got)
+	}
+}
+
+func TestView_StackAppearsAfterDrillDown(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+	m = drillDownToDirItem(t, m)
+
+	content := ansi.Strip(m.View().Content)
+	dirIdx := strings.Index(content, "~/projects/foo")
+	newWinIdx := strings.Index(content, "New window")
+	if dirIdx < 0 {
+		t.Fatal("View should contain stack entry ~/projects/foo")
+	}
+	if newWinIdx < 0 {
+		t.Fatal("View should contain list item New window")
+	}
+	if dirIdx >= newWinIdx {
+		t.Error("stack entry should appear before list items")
+	}
+}
+
+func TestView_StackDisappearsAfterBack(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+	m = drillDownToDirItem(t, m)
+
+	result, _ := m.Update(escMsg)
+	m = result.(Model)
+
+	if got := m.stackView(); got != "" {
+		t.Errorf("stackView() after back should be empty, got %q", got)
+	}
+	if len(m.Accumulated()) != 0 {
+		t.Errorf("Accumulated() should be empty after back, got %d", len(m.Accumulated()))
 	}
 }

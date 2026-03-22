@@ -3,12 +3,14 @@ package tui
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	log "charm.land/log/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/jmcampanini/cmdk/internal/generator"
 	"github.com/jmcampanini/cmdk/internal/item"
@@ -22,6 +24,9 @@ type Model struct {
 	selected    *item.Item
 	registry    *generator.Registry
 	ctx         generator.Context
+	stackStyle  lipgloss.Style
+	winWidth    int
+	winHeight   int
 }
 
 const horizontalPadding = 1
@@ -33,6 +38,8 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 	l.SetShowStatusBar(false)
 	l.SetShowPagination(false)
 	applyListStyles(&l, t)
+	l.SetShowTitle(false)
+	l.SetShowFilter(false)
 
 	// Start in filter mode so the user can begin typing immediately.
 	// tea.Cmd is intentionally discarded — it returns textinput.Blink which is
@@ -50,11 +57,12 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 		accumulated: accumulated,
 		registry:    registry,
 		ctx:         ctx,
+		stackStyle:  lipgloss.NewStyle().Foreground(t.Overlay0),
 	}
 }
 
 func applyListStyles(l *list.Model, t theme.Theme) {
-	l.Styles.TitleBar = lipgloss.NewStyle().Padding(0, horizontalPadding, 1, horizontalPadding)
+	l.Styles.TitleBar = lipgloss.NewStyle().Padding(0, horizontalPadding)
 
 	// Title horizontal padding (1+1=2) must equal TitleBar horizontal padding
 	// (left=1, right=1 → 2) because bubbles computes the filter text input
@@ -105,9 +113,9 @@ func applyListStyles(l *list.Model, t theme.Theme) {
 
 	l.Styles.NoItems = lipgloss.NewStyle().
 		Foreground(t.Overlay0).
-		Padding(0, horizontalPadding, 0, horizontalPadding)
+		Padding(0, horizontalPadding)
 
-	l.Styles.PaginationStyle = lipgloss.NewStyle().Padding(0, horizontalPadding, 0, horizontalPadding)
+	l.Styles.PaginationStyle = lipgloss.NewStyle().Padding(0, horizontalPadding)
 	l.Styles.HelpStyle = lipgloss.NewStyle().Padding(1, horizontalPadding, 0, horizontalPadding)
 	l.Styles.ArabicPagination = lipgloss.NewStyle().Foreground(t.Overlay0)
 
@@ -139,7 +147,9 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.list.SetSize(msg.Width, msg.Height)
+		m.winWidth = msg.Width
+		m.winHeight = msg.Height
+		m.list.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
 		return m, nil
 	case tea.KeyPressMsg:
 		if msg.String() == "enter" {
@@ -202,6 +212,9 @@ func (m Model) navigateTo(accumulated []item.Item) Model {
 		m.list.SetItems([]list.Item{errItem})
 		m.list.ResetSelected()
 		m.list.ResetFilter()
+		if m.winHeight > 0 {
+			m.list.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
+		}
 		return m
 	}
 
@@ -210,9 +223,48 @@ func (m Model) navigateTo(accumulated []item.Item) Model {
 	m.list.SetItems(listItems)
 	m.list.ResetSelected()
 	m.list.ResetFilter()
+	if m.winHeight > 0 {
+		m.list.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
+	}
 	return m
 }
 
+func (m Model) headerView() string {
+	var view string
+	if m.list.FilterState() == list.Filtering {
+		view = m.list.FilterInput.View()
+	} else {
+		view = m.list.Styles.Title.Render(m.list.Title)
+	}
+	return m.list.Styles.TitleBar.Render(view)
+}
+
+func (m Model) stackView() string {
+	if len(m.accumulated) == 0 {
+		return ""
+	}
+	pad := strings.Repeat(" ", horizontalPadding)
+	var b strings.Builder
+	for _, it := range m.accumulated {
+		display := ansi.Truncate(it.Display, max(m.winWidth-2*horizontalPadding, 0), "…")
+		b.WriteString(pad + m.stackStyle.Render(display))
+		b.WriteByte('\n')
+	}
+	b.WriteByte('\n')
+	return b.String()
+}
+
+func (m Model) overheadHeight() int {
+	h := lipgloss.Height(m.headerView()) + 1
+	if len(m.accumulated) > 0 {
+		h += len(m.accumulated) + 1
+	}
+	return h
+}
+
 func (m Model) View() tea.View {
-	return tea.NewView(m.list.View())
+	header := m.headerView()
+	stack := m.stackView()
+	body := m.list.View()
+	return tea.NewView(header + "\n\n" + stack + body)
 }
