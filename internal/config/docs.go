@@ -121,9 +121,15 @@ TEMPLATE VARIABLES
 EXECUTION
   Commands are passed to sh -c via syscall.Exec, replacing the
   cmdk process in the current pane. Shell features (pipes,
-  redirects) are supported. The working directory is inherited
-  from where cmdk was launched. For dir_commands, use {{.path}}
-  to reference the selected directory.
+  redirects) are supported.
+
+  The working directory is inherited from where cmdk was
+  launched, not the config file location. Relative paths in
+  cmd (e.g. "./scripts/deploy.sh") resolve from the launch
+  directory.
+
+  For dir_commands, use {{.path}} to reference the selected
+  directory.
 `)
 
 	return b.String()
