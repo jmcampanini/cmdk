@@ -13,6 +13,7 @@ import (
 const (
 	iconWindow = "\uf2d0"
 	iconDir    = "\uf07c"
+	iconCmd    = "\uf120"
 )
 
 var (
@@ -162,8 +163,8 @@ func navigateToDirItem(t *testing.T, sess string) {
 	t.Helper()
 	exitFilterModeE2E(t, sess)
 	content := capturePane(t, sess)
-	windowCount := strings.Count(content, iconWindow)
-	for range windowCount {
+	cmdCount := strings.Count(content, iconCmd)
+	for range cmdCount {
 		sendKeys(t, sess, "Down")
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -255,8 +256,7 @@ func TestE2E_EnterExecutesAndExits(t *testing.T) {
 
 	waitForReady(t, sess)
 
-	exitFilterModeE2E(t, sess)
-	sendKeys(t, sess, "Enter")
+	filterAndExecute(t, sess, sess[:20])
 	waitForExit(t, sess)
 }
 
