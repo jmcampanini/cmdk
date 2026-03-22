@@ -48,20 +48,19 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 }
 
 func applyListStyles(l *list.Model, t theme.Theme) {
-	l.Styles.TitleBar = lipgloss.NewStyle().Padding(0, 0, 1, 2)
+	l.Styles.TitleBar = lipgloss.NewStyle().Padding(0, 1, 1, 2)
 
+	// Title style padding is asymmetric (left=1, right=2) so that
+	// Title.Render(prompt) is exactly 3 chars wider than the prompt itself,
+	// compensating for TitleBar's horizontal padding (left=2 + right=1 = 3).
 	l.Styles.Title = lipgloss.NewStyle().
 		Background(t.Accent).
 		Foreground(t.Base).
-		Padding(0, 1)
+		Padding(0, 2, 0, 1)
 
-	// Filter prompt style: NO padding — the spaces in the Prompt string provide
-	// visual badge padding. Title style has Padding(0,1) which adds 2 extra chars
-	// to the width measurement in list.SetSize(), compensating for TitleBar's
-	// left padding of 2.
-	promptStyle := lipgloss.NewStyle().
-		Background(t.Accent).
-		Foreground(t.Base)
+	// Filter prompt is a pre-rendered badge + colorless gap space. The prompt
+	// style is a no-op so the ANSI passes through unchanged.
+	promptStyle := lipgloss.NewStyle()
 
 	textboxActive := lipgloss.NewStyle().
 		Foreground(t.Text).
@@ -80,7 +79,12 @@ func applyListStyles(l *list.Model, t theme.Theme) {
 	filterStyles.Focused.Placeholder = textboxDim
 	l.Styles.Filter = filterStyles
 	l.FilterInput.SetStyles(filterStyles)
-	l.FilterInput.Prompt = " cmdk "
+	badge := lipgloss.NewStyle().
+		Background(t.Accent).
+		Foreground(t.Base).
+		Padding(0, 1).
+		Render("cmdk")
+	l.FilterInput.Prompt = badge + " "
 
 	l.Styles.DefaultFilterCharacterMatch = lipgloss.NewStyle().Background(t.MatchHighlight)
 
