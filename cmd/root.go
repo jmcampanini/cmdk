@@ -53,6 +53,9 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 		cfg, cfgErr := config.Load(cfgPath)
+		if cfgErr != nil && configPath != "" {
+			return cfgErr
+		}
 		zoxideCfg := cfg.Sources["zoxide"]
 		shortenHome := *cfg.Display.ShortenHome
 		rules := pathfmt.CompileRules(cfg.Display.Rules)
@@ -117,11 +120,15 @@ var rootCmd = &cobra.Command{
 
 func resolveConfigPath() (string, error) {
 	if configPath != "" {
-		if _, err := os.Stat(configPath); err != nil {
+		fi, err := os.Stat(configPath)
+		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				return "", fmt.Errorf("config file not found: %s", configPath)
 			}
 			return "", fmt.Errorf("config file not accessible: %w", err)
+		}
+		if !fi.Mode().IsRegular() {
+			return "", fmt.Errorf("config path is not a regular file: %s", configPath)
 		}
 		return configPath, nil
 	}

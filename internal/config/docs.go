@@ -43,7 +43,7 @@ func ConfigDocs() []SectionDoc {
 			Name:        "timeout",
 			Description: "Timeouts for async operations.",
 			Fields: []FieldDoc{
-				{Name: "fetch", Type: "duration", Description: "Max wait for source data. Accepts Go duration strings: ms, s, m, h.", Validation: "must be >= 1ms if non-zero"},
+				{Name: "fetch", Type: "duration", Description: "Max wait for source data. Accepts Go duration strings: ms, s, m, h.", Validation: "cannot be negative; if non-zero, must be >= 1ms"},
 			},
 			Example: "[timeout]\nfetch = \"5s\"    # e.g. 500ms, 2s, 1m",
 		},
@@ -113,7 +113,7 @@ TEMPLATE VARIABLES
       {{.pane_id}}     tmux pane ID (when --pane-id is set)
 
   Available functions:
-      {{sq .value}}    shell-safe single-quoting
+      {{sq .path}}     shell-safe single-quoting
 
   Environment variables CMDK_PATH, CMDK_PANE_ID, etc. are also
   set when executing commands.

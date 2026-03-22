@@ -78,7 +78,7 @@ func TestRenderHelp_ContainsLiveDefaults(t *testing.T) {
 
 func TestRenderHelp_ContainsTemplateVars(t *testing.T) {
 	output := RenderHelp()
-	for _, v := range []string{"{{.path}}", "{{.pane_id}}", "{{sq .value}}"} {
+	for _, v := range []string{"{{.path}}", "{{.pane_id}}", "{{sq .path}}"} {
 		if !strings.Contains(output, v) {
 			t.Errorf("RenderHelp() should contain template variable %q", v)
 		}
