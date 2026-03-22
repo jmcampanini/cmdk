@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"os"
 	"syscall"
 
 	tea "charm.land/bubbletea/v2"
+	log "charm.land/log/v2"
 	"github.com/spf13/cobra"
 
 	"github.com/jmcampanini/cmdk/internal/config"
@@ -29,10 +29,9 @@ import (
 var Version = "n/a"
 
 var (
-	configPath    string
-	paneID        string
-	themeFlag     string
-	startFiltered bool
+	configPath string
+	paneID     string
+	themeFlag  string
 )
 
 var rootCmd = &cobra.Command{
@@ -59,7 +58,7 @@ var rootCmd = &cobra.Command{
 		rules := pathfmt.CompileRules(cfg.Display.Rules)
 		home, err := os.UserHomeDir()
 		if err != nil {
-			slog.Warn("could not determine home directory; path shortening disabled", "error", err)
+			log.Warn("could not determine home directory; path shortening disabled", "error", err)
 		}
 
 		sources := []generator.Source{
@@ -96,7 +95,7 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		model := tui.NewModel(listItems, paneID, nil, reg, ctx, t, startFiltered)
+		model := tui.NewModel(listItems, paneID, nil, reg, ctx, t)
 		p := tea.NewProgram(model)
 		finalModel, err := p.Run()
 		if err != nil {
@@ -111,9 +110,7 @@ var rootCmd = &cobra.Command{
 		if sel == nil {
 			return nil
 		}
-		if logger != nil {
-			logger.Info("executing", "item", sel.Display, "cmd", sel.Cmd, "data", sel.Data)
-		}
+		log.Info("executing", "item", sel.Display, "cmd", sel.Cmd, "data", sel.Data)
 		return execute.Run(m.Accumulated(), *sel, paneID, syscall.Exec)
 	},
 }
@@ -136,7 +133,6 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "path to config file (also validates; exits 1 on error)")
 	rootCmd.Flags().StringVar(&paneID, "pane-id", "", "tmux pane ID")
 	rootCmd.Flags().StringVar(&themeFlag, "theme", "", "color theme (light, dark)")
-	rootCmd.Flags().BoolVar(&startFiltered, "start-filtered", false, "start in filter mode")
 }
 
 func Execute() {

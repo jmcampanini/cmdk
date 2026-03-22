@@ -4,11 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
 
+	log "charm.land/log/v2"
 	"github.com/BurntSushi/toml"
 )
 
@@ -127,7 +127,7 @@ func DefaultPath() string {
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		slog.Warn("could not determine home directory for config path", "error", err)
+		log.Warn("could not determine home directory for config path", "error", err)
 	}
 	return filepath.Join(home, ".config", "cmdk", "config.toml")
 }
