@@ -331,7 +331,7 @@ func TestIntegration_OneSourceFailsOthersWork(t *testing.T) {
 
 func TestIntegration_DirActionsWithConfig(t *testing.T) {
 	cfg := &config.Config{
-		DirCommands: []config.Command{
+		DirActions: []config.Command{
 			{Name: "Yazi", Cmd: "tmux split-window -h -t {{sq .pane_id}} -c {{sq .path}} yazi"},
 			{Name: "New pane", Cmd: "tmux split-window -v -c {{sq .path}}"},
 		},
@@ -369,7 +369,7 @@ func TestIntegration_DirActionsWithConfig(t *testing.T) {
 
 func TestIntegration_DirActionConfigCmdRendersWithPathAndPaneID(t *testing.T) {
 	cfg := &config.Config{
-		DirCommands: []config.Command{
+		DirActions: []config.Command{
 			{Name: "Yazi", Cmd: "tmux split-window -h -t {{sq .pane_id}} -c {{sq .path}} yazi"},
 		},
 	}
@@ -404,7 +404,7 @@ func TestIntegration_DirActionConfigCmdRendersWithPathAndPaneID(t *testing.T) {
 }
 
 func TestIntegration_DirActionsEmptyConfig(t *testing.T) {
-	cfg := &config.Config{DirCommands: []config.Command{}}
+	cfg := &config.Config{DirActions: []config.Command{}}
 	reg := setupRegistry()
 	ctx := Context{PaneID: "%1", Config: cfg}
 

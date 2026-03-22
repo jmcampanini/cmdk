@@ -185,8 +185,6 @@ func filterAndExecute(t *testing.T, sess string, query string) {
 		return strings.Contains(s, "apply filter")
 	}, 5*time.Second)
 	sendKeys(t, sess, "Enter")
-	time.Sleep(300 * time.Millisecond)
-	sendKeys(t, sess, "Enter")
 }
 
 func TestE2E_ItemsVisible(t *testing.T) {
@@ -473,11 +471,11 @@ cmd = "echo gamma"
 	}
 }
 
-func TestE2E_DirCommandsVisible(t *testing.T) {
+func TestE2E_DirActionsVisible(t *testing.T) {
 	requireZoxideEntries(t)
 
 	xdg := writeConfig(t, `
-[[dir_commands]]
+[[dir_actions]]
 name = "xq-yazi-action"
 cmd = "echo yazi"
 `)
@@ -493,15 +491,15 @@ cmd = "echo yazi"
 	}, 5*time.Second)
 }
 
-func TestE2E_DirCommandsOrder(t *testing.T) {
+func TestE2E_DirActionsOrder(t *testing.T) {
 	requireZoxideEntries(t)
 
 	xdg := writeConfig(t, `
-[[dir_commands]]
+[[dir_actions]]
 name = "xq-alpha-dirc"
 cmd = "echo alpha"
 
-[[dir_commands]]
+[[dir_actions]]
 name = "xq-beta-dirc"
 cmd = "echo beta"
 `)
@@ -528,7 +526,7 @@ cmd = "echo beta"
 	}
 }
 
-func TestE2E_NoDirCommandsShowsDefault(t *testing.T) {
+func TestE2E_NoDirActionsShowsDefault(t *testing.T) {
 	requireZoxideEntries(t)
 
 	xdg := t.TempDir()

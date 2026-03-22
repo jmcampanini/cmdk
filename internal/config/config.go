@@ -33,7 +33,7 @@ type Display struct {
 
 type Config struct {
 	Commands    []Command               `toml:"commands"`
-	DirCommands []Command               `toml:"dir_commands"`
+	DirActions  []Command               `toml:"dir_actions"`
 	Timeout     Timeout                 `toml:"timeout"`
 	Sources     map[string]SourceConfig `toml:"sources"`
 	Display     Display                 `toml:"display"`
@@ -66,7 +66,7 @@ func (c Config) Validate() error {
 	if err := validateCommands("commands", c.Commands); err != nil {
 		return err
 	}
-	if err := validateCommands("dir_commands", c.DirCommands); err != nil {
+	if err := validateCommands("dir_actions", c.DirActions); err != nil {
 		return err
 	}
 	for match := range c.Display.Rules {

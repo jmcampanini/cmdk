@@ -31,13 +31,13 @@ func ConfigDocs() []SectionDoc {
 			Example: "[[commands]]\nname = \"htop\"\ncmd = \"htop\"\n\n[[commands]]\nname = \"lazygit\"\ncmd = \"lazygit\"",
 		},
 		{
-			Name:        "dir_commands",
+			Name:        "dir_actions",
 			Description: "Additional actions shown when a directory is selected.\n  The working directory is NOT changed to the selected path;\n  use {{.path}} to reference it.",
 			Fields: []FieldDoc{
 				{Name: "name", Type: "string", Description: "Display name in the action list.", Validation: "cannot be empty"},
 				{Name: "cmd", Type: "string", Description: "Shell command or Go template to execute.", Validation: "cannot be empty"},
 			},
-			Example: "# simple command (no template variables)\n[[dir_commands]]\nname = \"Git Status\"\ncmd = \"git status\"\n\n# using {{.path}} directly\n[[dir_commands]]\nname = \"List Files\"\ncmd = \"ls -la {{.path}}\"\n\n# using {{sq .path}} for shell-safe quoting\n[[dir_commands]]\nname = \"Yazi\"\ncmd = \"tmux split-window -h yazi {{sq .path}}\"\n\n# using CMDK_PANE_ID environment variable\n[[dir_commands]]\nname = \"Split Here\"\ncmd = \"tmux split-window -t \\\"$CMDK_PANE_ID\\\" -c {{sq .path}}\"",
+			Example: "# simple command (no template variables)\n[[dir_actions]]\nname = \"Git Status\"\ncmd = \"git status\"\n\n# using {{.path}} directly\n[[dir_actions]]\nname = \"List Files\"\ncmd = \"ls -la {{.path}}\"\n\n# using {{sq .path}} for shell-safe quoting\n[[dir_actions]]\nname = \"Yazi\"\ncmd = \"tmux split-window -h yazi {{sq .path}}\"\n\n# using CMDK_PANE_ID environment variable\n[[dir_actions]]\nname = \"Split Here\"\ncmd = \"tmux split-window -t \\\"$CMDK_PANE_ID\\\" -c {{sq .path}}\"",
 		},
 		{
 			Name:        "timeout",
@@ -109,7 +109,7 @@ TEMPLATE VARIABLES
   Commands support Go text/template syntax.
 
   Available variables:
-      {{.path}}        directory path (for dir_commands)
+      {{.path}}        directory path (for dir_actions)
       {{.pane_id}}     tmux pane ID (when --pane-id is set)
 
   Available functions:
@@ -128,7 +128,7 @@ EXECUTION
   cmd (e.g. "./scripts/deploy.sh") resolve from the launch
   directory.
 
-  For dir_commands, use {{.path}} to reference the selected
+  For dir_actions, use {{.path}} to reference the selected
   directory.
 `)
 

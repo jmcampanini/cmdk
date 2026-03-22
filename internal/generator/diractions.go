@@ -32,7 +32,7 @@ func NewDirActionsGenerator() GeneratorFunc {
 		}}
 
 		if ctx.Config != nil {
-			for _, cmd := range ctx.Config.DirCommands {
+			for _, cmd := range ctx.Config.DirActions {
 				items = append(items, item.Item{
 					Type:    "cmd",
 					Source:  "config",

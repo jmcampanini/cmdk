@@ -370,9 +370,9 @@ func TestValidate_EmptyDisplayRuleKey(t *testing.T) {
 	}
 }
 
-func TestValidate_ValidDirCommands(t *testing.T) {
+func TestValidate_ValidDirActions(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.DirCommands = []Command{
+	cfg.DirActions = []Command{
 		{Name: "Yazi", Cmd: "tmux split-window -h yazi"},
 	}
 	if err := cfg.Validate(); err != nil {
@@ -380,31 +380,31 @@ func TestValidate_ValidDirCommands(t *testing.T) {
 	}
 }
 
-func TestValidate_EmptyDirCommandName(t *testing.T) {
+func TestValidate_EmptyDirActionName(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.DirCommands = []Command{{Name: "", Cmd: "yazi"}}
+	cfg.DirActions = []Command{{Name: "", Cmd: "yazi"}}
 	if err := cfg.Validate(); err == nil {
-		t.Error("expected error for empty dir_command name")
+		t.Error("expected error for empty dir_action name")
 	}
 }
 
-func TestValidate_EmptyDirCommandCmd(t *testing.T) {
+func TestValidate_EmptyDirActionCmd(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.DirCommands = []Command{{Name: "Yazi", Cmd: ""}}
+	cfg.DirActions = []Command{{Name: "Yazi", Cmd: ""}}
 	if err := cfg.Validate(); err == nil {
-		t.Error("expected error for empty dir_command cmd")
+		t.Error("expected error for empty dir_action cmd")
 	}
 }
 
-func TestLoad_DirCommands(t *testing.T) {
+func TestLoad_DirActions(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(path, []byte(`
-[[dir_commands]]
+[[dir_actions]]
 name = "Yazi"
 cmd = "tmux split-window -h yazi"
 
-[[dir_commands]]
+[[dir_actions]]
 name = "New pane"
 cmd = "tmux split-window -v"
 `), 0o644); err != nil {
@@ -415,30 +415,30 @@ cmd = "tmux split-window -v"
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(cfg.DirCommands) != 2 {
-		t.Fatalf("got %d dir_commands, want 2", len(cfg.DirCommands))
+	if len(cfg.DirActions) != 2 {
+		t.Fatalf("got %d dir_actions, want 2", len(cfg.DirActions))
 	}
-	if cfg.DirCommands[0].Name != "Yazi" {
-		t.Errorf("dir_commands[0].Name = %q, want %q", cfg.DirCommands[0].Name, "Yazi")
+	if cfg.DirActions[0].Name != "Yazi" {
+		t.Errorf("dir_actions[0].Name = %q, want %q", cfg.DirActions[0].Name, "Yazi")
 	}
-	if cfg.DirCommands[1].Cmd != "tmux split-window -v" {
-		t.Errorf("dir_commands[1].Cmd = %q", cfg.DirCommands[1].Cmd)
+	if cfg.DirActions[1].Cmd != "tmux split-window -v" {
+		t.Errorf("dir_actions[1].Cmd = %q", cfg.DirActions[1].Cmd)
 	}
 }
 
-func TestLoad_DirCommandsPreservesOrder(t *testing.T) {
+func TestLoad_DirActionsPreservesOrder(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(path, []byte(`
-[[dir_commands]]
+[[dir_actions]]
 name = "alpha"
 cmd = "echo alpha"
 
-[[dir_commands]]
+[[dir_actions]]
 name = "beta"
 cmd = "echo beta"
 
-[[dir_commands]]
+[[dir_actions]]
 name = "gamma"
 cmd = "echo gamma"
 `), 0o644); err != nil {
@@ -449,18 +449,18 @@ cmd = "echo gamma"
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(cfg.DirCommands) != 3 {
-		t.Fatalf("got %d dir_commands, want 3", len(cfg.DirCommands))
+	if len(cfg.DirActions) != 3 {
+		t.Fatalf("got %d dir_actions, want 3", len(cfg.DirActions))
 	}
 	want := []string{"alpha", "beta", "gamma"}
 	for i, w := range want {
-		if cfg.DirCommands[i].Name != w {
-			t.Errorf("dir_commands[%d].Name = %q, want %q", i, cfg.DirCommands[i].Name, w)
+		if cfg.DirActions[i].Name != w {
+			t.Errorf("dir_actions[%d].Name = %q, want %q", i, cfg.DirActions[i].Name, w)
 		}
 	}
 }
 
-func TestLoad_NoDirCommands(t *testing.T) {
+func TestLoad_NoDirActions(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(path, []byte(`
@@ -475,14 +475,14 @@ cmd = "htop"
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(cfg.DirCommands) != 0 {
-		t.Errorf("got %d dir_commands, want 0", len(cfg.DirCommands))
+	if len(cfg.DirActions) != 0 {
+		t.Errorf("got %d dir_actions, want 0", len(cfg.DirActions))
 	}
 }
 
-func TestDefaultConfig_NoDirCommands(t *testing.T) {
+func TestDefaultConfig_NoDirActions(t *testing.T) {
 	cfg := DefaultConfig()
-	if len(cfg.DirCommands) != 0 {
-		t.Errorf("DirCommands = %d, want 0", len(cfg.DirCommands))
+	if len(cfg.DirActions) != 0 {
+		t.Errorf("DirActions = %d, want 0", len(cfg.DirActions))
 	}
 }
