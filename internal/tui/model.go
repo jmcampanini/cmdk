@@ -52,16 +52,15 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 }
 
 func applyListStyles(l *list.Model, t theme.Theme) {
-	l.Styles.TitleBar = lipgloss.NewStyle().Padding(0, 1, 1, 2)
+	l.Styles.TitleBar = lipgloss.NewStyle().Padding(0, 0, 1, 2)
 
-	// Title style padding is asymmetric (left=1, right=2) because the bubbles
-	// list uses Title.Render(FilterInput.Prompt) to compute the prompt width
-	// reserved in the filter text input. This 3-char total matches TitleBar's
-	// horizontal padding (left=2 + right=1 = 3) so the badge aligns visually.
+	// Title horizontal padding (1+1=2) must equal TitleBar horizontal padding
+	// (left=2, right=0 → 2) because bubbles computes the filter text input
+	// width via Title.Render(FilterInput.Prompt).
 	l.Styles.Title = lipgloss.NewStyle().
 		Background(t.Accent).
 		Foreground(t.Base).
-		Padding(0, 2, 0, 1)
+		Padding(0, 1)
 
 	// Filter prompt is a pre-rendered ANSI badge followed by a plain space
 	// separator. The prompt style is a no-op so the badge's existing ANSI
