@@ -24,6 +24,8 @@ type Model struct {
 	ctx         generator.Context
 }
 
+const horizontalPadding = 1
+
 func NewModel(items []list.Item, paneID string, accumulated []item.Item, registry *generator.Registry, ctx generator.Context, t theme.Theme) Model {
 	l := list.New(items, newItemDelegate(t), 0, 0)
 	l.Title = "cmdk"
@@ -52,10 +54,10 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 }
 
 func applyListStyles(l *list.Model, t theme.Theme) {
-	l.Styles.TitleBar = lipgloss.NewStyle().Padding(0, 0, 1, 2)
+	l.Styles.TitleBar = lipgloss.NewStyle().Padding(0, horizontalPadding, 1, horizontalPadding)
 
 	// Title horizontal padding (1+1=2) must equal TitleBar horizontal padding
-	// (left=2, right=0 → 2) because bubbles computes the filter text input
+	// (left=1, right=1 → 2) because bubbles computes the filter text input
 	// width via Title.Render(FilterInput.Prompt).
 	l.Styles.Title = lipgloss.NewStyle().
 		Background(t.Accent).
@@ -95,16 +97,18 @@ func applyListStyles(l *list.Model, t theme.Theme) {
 
 	l.Styles.StatusBar = lipgloss.NewStyle().
 		Foreground(t.Overlay0).
-		Padding(0, 0, 1, 2)
+		Padding(0, horizontalPadding, 1, horizontalPadding)
 
 	l.Styles.StatusEmpty = lipgloss.NewStyle().Foreground(t.Overlay0)
 	l.Styles.StatusBarActiveFilter = lipgloss.NewStyle().Foreground(t.Text)
 	l.Styles.StatusBarFilterCount = lipgloss.NewStyle().Foreground(t.Surface2)
 
-	l.Styles.NoItems = lipgloss.NewStyle().Foreground(t.Overlay0)
+	l.Styles.NoItems = lipgloss.NewStyle().
+		Foreground(t.Overlay0).
+		Padding(0, horizontalPadding, 0, horizontalPadding)
 
-	l.Styles.PaginationStyle = lipgloss.NewStyle().PaddingLeft(2)
-	l.Styles.HelpStyle = lipgloss.NewStyle().Padding(1, 0, 0, 2)
+	l.Styles.PaginationStyle = lipgloss.NewStyle().Padding(0, horizontalPadding, 0, horizontalPadding)
+	l.Styles.HelpStyle = lipgloss.NewStyle().Padding(1, horizontalPadding, 0, horizontalPadding)
 	l.Styles.ArabicPagination = lipgloss.NewStyle().Foreground(t.Overlay0)
 
 	dot := lipgloss.NewStyle().SetString("\u2022")

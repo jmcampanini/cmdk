@@ -75,6 +75,41 @@ func TestNewModel_StartsInFilterMode(t *testing.T) {
 	}
 }
 
+func TestNewModel_UsesSingleColumnFramePadding(t *testing.T) {
+	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
+
+	if got := m.list.Styles.TitleBar.GetPaddingLeft(); got != horizontalPadding {
+		t.Errorf("TitleBar left padding = %d, want %d", got, horizontalPadding)
+	}
+	if got := m.list.Styles.TitleBar.GetPaddingRight(); got != horizontalPadding {
+		t.Errorf("TitleBar right padding = %d, want %d", got, horizontalPadding)
+	}
+	if got := m.list.Styles.StatusBar.GetPaddingLeft(); got != horizontalPadding {
+		t.Errorf("StatusBar left padding = %d, want %d", got, horizontalPadding)
+	}
+	if got := m.list.Styles.StatusBar.GetPaddingRight(); got != horizontalPadding {
+		t.Errorf("StatusBar right padding = %d, want %d", got, horizontalPadding)
+	}
+	if got := m.list.Styles.NoItems.GetPaddingLeft(); got != horizontalPadding {
+		t.Errorf("NoItems left padding = %d, want %d", got, horizontalPadding)
+	}
+	if got := m.list.Styles.NoItems.GetPaddingRight(); got != horizontalPadding {
+		t.Errorf("NoItems right padding = %d, want %d", got, horizontalPadding)
+	}
+	if got := m.list.Styles.PaginationStyle.GetPaddingLeft(); got != horizontalPadding {
+		t.Errorf("PaginationStyle left padding = %d, want %d", got, horizontalPadding)
+	}
+	if got := m.list.Styles.PaginationStyle.GetPaddingRight(); got != horizontalPadding {
+		t.Errorf("PaginationStyle right padding = %d, want %d", got, horizontalPadding)
+	}
+	if got := m.list.Styles.HelpStyle.GetPaddingLeft(); got != horizontalPadding {
+		t.Errorf("HelpStyle left padding = %d, want %d", got, horizontalPadding)
+	}
+	if got := m.list.Styles.HelpStyle.GetPaddingRight(); got != horizontalPadding {
+		t.Errorf("HelpStyle right padding = %d, want %d", got, horizontalPadding)
+	}
+}
+
 func TestSelectedReturnsNilByDefault(t *testing.T) {
 	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{}, theme.Light())
 	if m.Selected() != nil {
