@@ -12,8 +12,8 @@ import (
 
 var configCmd = &cobra.Command{
 	Use:   "config",
-	Short: "Show resolved configuration",
-	Long:  "Show resolved configuration.\n\n" + config.RenderHelp(),
+	Short: "Show resolved configuration and validate a config file",
+	Long:  "Show resolved configuration. Exits non-zero if the config is invalid.\n\n" + config.RenderHelp(),
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path, err := resolveConfigPath()

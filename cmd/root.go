@@ -133,7 +133,7 @@ func resolveConfigPath() (string, error) {
 
 func init() {
 	rootCmd.Version = Version
-	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "path to config file")
+	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "path to config file (also validates; exits 1 on error)")
 	rootCmd.Flags().StringVar(&paneID, "pane-id", "", "tmux pane ID")
 	rootCmd.Flags().StringVar(&themeFlag, "theme", "", "color theme (light, dark)")
 	rootCmd.Flags().BoolVar(&startFiltered, "start-filtered", false, "start in filter mode")

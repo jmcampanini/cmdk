@@ -28,27 +28,28 @@ func ConfigDocs() []SectionDoc {
 				{Name: "name", Type: "string", Description: "Display name in the launcher.", Validation: "cannot be empty"},
 				{Name: "cmd", Type: "string", Description: "Shell command or Go template to execute.", Validation: "cannot be empty"},
 			},
-			Example: "[[commands]]\nname = \"htop\"\ncmd = \"htop\"",
+			Example: "[[commands]]\nname = \"htop\"\ncmd = \"htop\"\n\n[[commands]]\nname = \"lazygit\"\ncmd = \"lazygit\"",
 		},
 		{
 			Name:        "dir_commands",
-			Description: "Additional actions shown when a directory is selected.",
+			Description: "Additional actions shown when a directory is selected.\n  The working directory is NOT changed to the selected path;\n  use {{.path}} to reference it.",
 			Fields: []FieldDoc{
 				{Name: "name", Type: "string", Description: "Display name in the action list.", Validation: "cannot be empty"},
 				{Name: "cmd", Type: "string", Description: "Shell command or Go template to execute.", Validation: "cannot be empty"},
 			},
-			Example: "[[dir_commands]]\nname = \"Yazi\"\ncmd = \"tmux split-window -h yazi {{sq .path}}\"",
+			Example: "[[dir_commands]]\nname = \"Yazi\"\ncmd = \"tmux split-window -h yazi {{sq .path}}\"\n\n[[dir_commands]]\nname = \"Git Status\"\ncmd = \"git status\"",
 		},
 		{
 			Name:        "timeout",
 			Description: "Timeouts for async operations.",
 			Fields: []FieldDoc{
-				{Name: "fetch", Type: "duration", Description: "Max wait for source data.", Validation: "must be >= 1ms if non-zero"},
+				{Name: "fetch", Type: "duration", Description: "Max wait for source data. Accepts Go duration strings: ms, s, m, h.", Validation: "must be >= 1ms if non-zero"},
 			},
+			Example: "[timeout]\nfetch = \"5s\"    # e.g. 500ms, 2s, 1m",
 		},
 		{
 			Name:        "sources",
-			Description: "Per-source tuning. Key is the source name (e.g. \"zoxide\").",
+			Description: "Per-source tuning. Available sources: zoxide.",
 			Fields: []FieldDoc{
 				{Name: "limit", Type: "int", Description: "Max results; 0 = unlimited.", Validation: "cannot be negative"},
 				{Name: "min_score", Type: "float64", Description: "Minimum score filter; 0 = disabled.", Validation: "cannot be negative"},
@@ -60,7 +61,7 @@ func ConfigDocs() []SectionDoc {
 			Description: "Path display formatting.",
 			Fields: []FieldDoc{
 				{Name: "shorten_home", Type: "string", Description: "Replace $HOME prefix in display paths; empty string disables."},
-				{Name: "rules", Type: "map[string]string", Description: "Substring replacements applied to display paths. Keys are match patterns, values are replacements.", Validation: "match key cannot be empty"},
+				{Name: "rules", Type: "map[string]string", Description: "Literal substring replacements applied to display paths. Keys are substrings to match, values are replacements.", Validation: "match key cannot be empty"},
 			},
 			Example: "[display]\nshorten_home = \"~\"\n\n[display.rules]\n\"github.com\" = \"gh\"",
 		},
@@ -116,6 +117,13 @@ TEMPLATE VARIABLES
 
   Environment variables CMDK_PATH, CMDK_PANE_ID, etc. are also
   set when executing commands.
+
+EXECUTION
+  Commands are passed to sh -c via syscall.Exec, replacing the
+  cmdk process in the current pane. Shell features (pipes,
+  redirects) are supported. The working directory is inherited
+  from where cmdk was launched. For dir_commands, use {{.path}}
+  to reference the selected directory.
 `)
 
 	return b.String()
