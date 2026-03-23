@@ -67,6 +67,9 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, li list.Item)
 		log.Warn("no icon for item type, using fallback", "type", it.Type)
 		info = d.icons["cmd"]
 	}
+	if it.Icon != "" {
+		info = iconInfo{icon: it.Icon, color: info.color}
+	}
 
 	filterState := m.FilterState()
 	filtering := filterState == list.Filtering

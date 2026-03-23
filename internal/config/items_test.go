@@ -73,3 +73,35 @@ func TestCommandItems_PreservesOrder(t *testing.T) {
 		}
 	}
 }
+
+func TestCommandItems_IconPassedThrough(t *testing.T) {
+	cfg := &Config{
+		Commands: []Command{
+			{Name: "GitHub", Cmd: "open gh", Icon: "\ue709"},
+		},
+	}
+	fn := CommandItems(cfg)
+	items, err := fn(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if items[0].Icon != "\ue709" {
+		t.Errorf("Icon = %q, want \\ue709", items[0].Icon)
+	}
+}
+
+func TestCommandItems_NoIcon(t *testing.T) {
+	cfg := &Config{
+		Commands: []Command{
+			{Name: "htop", Cmd: "htop"},
+		},
+	}
+	fn := CommandItems(cfg)
+	items, err := fn(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if items[0].Icon != "" {
+		t.Errorf("Icon = %q, want empty", items[0].Icon)
+	}
+}

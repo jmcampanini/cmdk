@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -484,5 +485,115 @@ func TestDefaultConfig_NoDirActions(t *testing.T) {
 	cfg := DefaultConfig()
 	if len(cfg.DirActions) != 0 {
 		t.Errorf("DirActions = %d, want 0", len(cfg.DirActions))
+	}
+}
+
+func TestValidate_ValidIconAlias(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Commands = []Command{{Name: "GitHub", Cmd: "open gh", Icon: ":nf-dev-github:"}}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_InvalidIconAlias(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Commands = []Command{{Name: "test", Cmd: "test", Icon: ":nf-fake-thing:"}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for invalid icon alias")
+	}
+	if !strings.Contains(err.Error(), "commands[0].icon") {
+		t.Errorf("error = %q, want prefix commands[0].icon", err.Error())
+	}
+}
+
+func TestValidate_ValidIconRawUnicode(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Commands = []Command{{Name: "test", Cmd: "test", Icon: "\ue709"}}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_InvalidIconMultiChar(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Commands = []Command{{Name: "test", Cmd: "test", Icon: "ab"}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for multi-character icon")
+	}
+}
+
+func TestValidate_EmptyIconOK(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Commands = []Command{{Name: "test", Cmd: "test", Icon: ""}}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_DirActionIconAlias(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.DirActions = []Command{{Name: "Yazi", Cmd: "yazi", Icon: ":nf-md-folder:"}}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestLoad_CommandWithIconAlias(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[[commands]]
+name = "GitHub"
+cmd = "open https://github.com"
+icon = ":nf-dev-github:"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Commands[0].Icon != "\ue709" {
+		t.Errorf("Icon = %q, want resolved unicode \\ue709", cfg.Commands[0].Icon)
+	}
+}
+
+func TestLoad_CommandWithUnicodeIcon(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte("[[commands]]\nname = \"test\"\ncmd = \"test\"\nicon = \"\ue709\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Commands[0].Icon != "\ue709" {
+		t.Errorf("Icon = %q, want \\ue709", cfg.Commands[0].Icon)
+	}
+}
+
+func TestLoad_DirActionWithIcon(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[[dir_actions]]
+name = "Browse"
+cmd = "yazi"
+icon = ":nf-md-folder_open:"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.DirActions[0].Icon != "\U000f0770" {
+		t.Errorf("Icon = %q, want resolved unicode \\U000f0770", cfg.DirActions[0].Icon)
 	}
 }

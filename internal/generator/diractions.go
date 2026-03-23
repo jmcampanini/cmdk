@@ -29,6 +29,7 @@ func NewDirActionsGenerator() GeneratorFunc {
 			Action:  item.ActionExecute,
 			Cmd:     "tmux new-window -c {{sq .path}}",
 			Data:    maps.Clone(data),
+			Icon:    "\uf2d0",
 		}}
 
 		if ctx.Config != nil {
@@ -40,6 +41,7 @@ func NewDirActionsGenerator() GeneratorFunc {
 					Action:  item.ActionExecute,
 					Cmd:     cmd.Cmd,
 					Data:    maps.Clone(data),
+					Icon:    cmd.Icon,
 				})
 			}
 		}

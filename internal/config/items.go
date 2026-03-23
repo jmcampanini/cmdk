@@ -16,6 +16,7 @@ func CommandItems(cfg *Config) func(context.Context) ([]item.Item, error) {
 			it.Action = item.ActionExecute
 			it.Cmd = cmd.Cmd
 			it.Display = cmd.Name
+			it.Icon = cmd.Icon
 			items[i] = it
 		}
 		return items, nil

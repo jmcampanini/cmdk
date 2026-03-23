@@ -10,11 +10,14 @@ import (
 
 	log "charm.land/log/v2"
 	"github.com/BurntSushi/toml"
+
+	"github.com/jmcampanini/cmdk/internal/icon"
 )
 
 type Command struct {
 	Name string `toml:"name"`
 	Cmd  string `toml:"cmd"`
+	Icon string `toml:"icon"`
 }
 
 type Timeout struct {
@@ -85,8 +88,27 @@ func validateCommands(section string, cmds []Command) error {
 		if cmd.Cmd == "" {
 			return fmt.Errorf("%s[%d].cmd cannot be empty", section, i)
 		}
+		if cmd.Icon != "" {
+			if _, err := icon.Resolve(cmd.Icon); err != nil {
+				return fmt.Errorf("%s[%d].icon: %w", section, i, err)
+			}
+		}
 	}
 	return nil
+}
+
+func (c *Config) resolveIcons() {
+	resolveCommandIcons(c.Commands)
+	resolveCommandIcons(c.DirActions)
+}
+
+func resolveCommandIcons(cmds []Command) {
+	for i := range cmds {
+		if cmds[i].Icon != "" {
+			resolved, _ := icon.Resolve(cmds[i].Icon)
+			cmds[i].Icon = resolved
+		}
+	}
 }
 
 // Load always returns a valid *Config, even when err is non-nil (defaults are used as fallback).
@@ -113,6 +135,7 @@ func Load(path string) (*Config, error) {
 	if err := cfg.Validate(); err != nil {
 		return newDefaultConfig(), err
 	}
+	cfg.resolveIcons()
 	return &cfg, nil
 }
 
