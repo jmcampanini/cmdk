@@ -1,11 +1,14 @@
 package tui
 
 import (
+	"image/color"
+	"reflect"
 	"strings"
 	"testing"
 
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/jmcampanini/cmdk/internal/generator"
@@ -47,7 +50,11 @@ var (
 )
 
 func newTestModel(items []list.Item, reg *generator.Registry) Model {
-	return NewModel(items, "%1", nil, reg, generator.Context{}, theme.Light())
+	return newTestModelWithTheme(items, reg, theme.Light())
+}
+
+func newTestModelWithTheme(items []list.Item, reg *generator.Registry, t theme.Theme) Model {
+	return NewModel(items, "%1", nil, reg, generator.Context{}, t)
 }
 
 func exitFilterMode(t *testing.T, m Model) Model {
@@ -106,6 +113,40 @@ func TestNewModel_UsesSingleColumnFramePadding(t *testing.T) {
 		if c.right != horizontalPadding {
 			t.Errorf("%s right padding = %d, want %d", c.name, c.right, horizontalPadding)
 		}
+	}
+}
+
+func TestNewModel_UsesTextboxThemeColorForFilterInput(t *testing.T) {
+	dark := theme.Dark()
+	m := newTestModelWithTheme(testItems(), testRegistry(), dark)
+
+	checks := []struct {
+		name string
+		got  color.Color
+	}{
+		{"Focused.Text background", m.list.Styles.Filter.Focused.Text.GetBackground()},
+		{"Blurred.Text background", m.list.Styles.Filter.Blurred.Text.GetBackground()},
+		{"Focused.Placeholder background", m.list.Styles.Filter.Focused.Placeholder.GetBackground()},
+		{"Blurred.Placeholder background", m.list.Styles.Filter.Blurred.Placeholder.GetBackground()},
+		{"Focused.Suggestion background", m.list.Styles.Filter.Focused.Suggestion.GetBackground()},
+		{"Blurred.Suggestion background", m.list.Styles.Filter.Blurred.Suggestion.GetBackground()},
+		{"header filter background", m.filterStyle.GetBackground()},
+	}
+	for _, c := range checks {
+		if !reflect.DeepEqual(c.got, dark.TextboxBg) {
+			t.Errorf("%s = %v, want %v", c.name, c.got, dark.TextboxBg)
+		}
+	}
+
+	wantSeparator := lipgloss.NewStyle().
+		Inline(true).
+		Background(dark.TextboxBg).
+		Render(" ")
+	if strings.Contains(m.list.FilterInput.Prompt, wantSeparator) {
+		t.Fatalf("FilterInput.Prompt should leave the separator unstyled, got %q", m.list.FilterInput.Prompt)
+	}
+	if !strings.HasSuffix(m.list.FilterInput.Prompt, " ") {
+		t.Fatalf("FilterInput.Prompt should still end with a plain separator space, got %q", m.list.FilterInput.Prompt)
 	}
 }
 

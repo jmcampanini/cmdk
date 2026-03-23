@@ -25,6 +25,7 @@ type Model struct {
 	registry    *generator.Registry
 	ctx         generator.Context
 	stackStyle  lipgloss.Style
+	filterStyle lipgloss.Style
 	winWidth    int
 	winHeight   int
 }
@@ -58,6 +59,7 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 		registry:    registry,
 		ctx:         ctx,
 		stackStyle:  lipgloss.NewStyle().Foreground(t.Overlay0),
+		filterStyle: lipgloss.NewStyle().Inline(true).Background(t.TextboxBg),
 	}
 }
 
@@ -66,15 +68,16 @@ func applyListStyles(l *list.Model, t theme.Theme) {
 
 	// Title horizontal padding (1+1=2) must equal TitleBar horizontal padding
 	// (left=1, right=1 → 2) because bubbles computes the filter text input
-	// width via Title.Render(FilterInput.Prompt).
+	// width via Title.Render(FilterInput.Prompt). A mismatch causes the filter
+	// text input to overflow or truncate.
 	l.Styles.Title = lipgloss.NewStyle().
 		Background(t.Accent).
 		Foreground(t.Base).
 		Padding(0, 1)
 
 	// Filter prompt is a pre-rendered ANSI badge followed by a plain space
-	// separator. The prompt style is a no-op so the badge's existing ANSI
-	// sequences pass through unchanged.
+	// separator. The prompt style overrides DefaultStyles with an unstyled
+	// default so the badge's existing ANSI sequences pass through unchanged.
 	promptStyle := lipgloss.NewStyle()
 
 	textboxActive := lipgloss.NewStyle().
@@ -92,6 +95,9 @@ func applyListStyles(l *list.Model, t theme.Theme) {
 	filterStyles.Focused.Text = textboxActive
 	filterStyles.Blurred.Text = textboxDim
 	filterStyles.Focused.Placeholder = textboxDim
+	filterStyles.Blurred.Placeholder = textboxDim
+	filterStyles.Focused.Suggestion = textboxDim
+	filterStyles.Blurred.Suggestion = textboxDim
 	l.Styles.Filter = filterStyles
 	l.FilterInput.SetStyles(filterStyles)
 	badge := lipgloss.NewStyle().
@@ -227,7 +233,13 @@ func (m Model) navigateTo(accumulated []item.Item) Model {
 func (m Model) headerView() string {
 	content := m.list.Styles.Title.Render(m.list.Title)
 	if m.list.FilterState() == list.Filtering {
-		content = m.list.FilterInput.View()
+		filterView := m.list.FilterInput.View()
+		body, hadPrompt := strings.CutPrefix(filterView, m.list.FilterInput.Prompt)
+		if hadPrompt {
+			content = m.list.FilterInput.Prompt + m.filterStyle.Render(body)
+		} else {
+			content = m.filterStyle.Render(filterView)
+		}
 	}
 	return m.list.Styles.TitleBar.Render(content)
 }

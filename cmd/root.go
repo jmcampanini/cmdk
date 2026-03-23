@@ -98,6 +98,9 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if themeFlag == "" {
+			log.Debug("theme auto-detected", "theme", t.Name)
+		}
 		model := tui.NewModel(listItems, paneID, nil, reg, ctx, t)
 		p := tea.NewProgram(model)
 		finalModel, err := p.Run()
