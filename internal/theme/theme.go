@@ -37,6 +37,8 @@ type Theme struct {
 
 func c(hex string) color.Color { return lipgloss.Color(hex) }
 
+// TODO(#26): replace with async tea.RequestBackgroundColor to avoid
+// blocking startup and silent dark fallback on detection failure.
 var hasDarkBackground = func() bool {
 	return lipgloss.HasDarkBackground(os.Stdin, os.Stdout)
 }

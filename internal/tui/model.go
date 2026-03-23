@@ -68,15 +68,16 @@ func applyListStyles(l *list.Model, t theme.Theme) {
 
 	// Title horizontal padding (1+1=2) must equal TitleBar horizontal padding
 	// (left=1, right=1 → 2) because bubbles computes the filter text input
-	// width via Title.Render(FilterInput.Prompt).
+	// width via Title.Render(FilterInput.Prompt). A mismatch causes the filter
+	// text input to overflow or truncate.
 	l.Styles.Title = lipgloss.NewStyle().
 		Background(t.Accent).
 		Foreground(t.Base).
 		Padding(0, 1)
 
 	// Filter prompt is a pre-rendered ANSI badge followed by a plain space
-	// separator. The prompt style is a no-op so the badge's existing ANSI
-	// sequences pass through unchanged.
+	// separator. The prompt style overrides DefaultStyles with an unstyled
+	// default so the badge's existing ANSI sequences pass through unchanged.
 	promptStyle := lipgloss.NewStyle()
 
 	textboxActive := lipgloss.NewStyle().

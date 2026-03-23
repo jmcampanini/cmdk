@@ -19,6 +19,7 @@ func TestResolve(t *testing.T) {
 		{"auto-detect dark background", true, "", "dark"},
 		{"auto-detect light background", false, "", "light"},
 		{"explicit theme overrides auto-detect", false, "dark", "dark"},
+		{"explicit light overrides dark background", true, "light", "light"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -32,5 +33,12 @@ func TestResolve(t *testing.T) {
 				t.Fatalf("Resolve(%q) = %q, want %q", tt.input, got.Name, tt.wantTheme)
 			}
 		})
+	}
+}
+
+func TestResolve_UnknownThemeReturnsError(t *testing.T) {
+	_, err := Resolve("bogus")
+	if err == nil {
+		t.Fatal("Resolve(\"bogus\") should return an error")
 	}
 }
