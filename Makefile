@@ -27,8 +27,9 @@ lint: ## Run golangci-lint
 test: ## Run tests
 	go test ./...
 
-clean: ## Remove build artifacts
+clean: ## Remove build artifacts and test cache
 	go clean
+	go clean -testcache
 	rm -rf $(BUILD_DIR)
 
 install-completions: build ## Install shell completions
