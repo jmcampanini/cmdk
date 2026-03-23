@@ -2,6 +2,7 @@ package theme
 
 import "testing"
 
+// stubDarkBackground must not be used with t.Parallel — it mutates a package-level var.
 func stubDarkBackground(t *testing.T, dark bool) {
 	t.Helper()
 	prev := hasDarkBackground
