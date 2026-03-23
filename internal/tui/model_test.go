@@ -47,6 +47,7 @@ var (
 	escMsg   = tea.KeyPressMsg{Code: tea.KeyEscape}
 	enterMsg = tea.KeyPressMsg{Code: tea.KeyEnter}
 	downMsg  = tea.KeyPressMsg{Code: tea.KeyDown}
+	upMsg    = tea.KeyPressMsg{Code: tea.KeyUp}
 )
 
 func newTestModel(items []list.Item, reg *generator.Registry) Model {
@@ -563,5 +564,63 @@ func TestView_StackDisappearsAfterBack(t *testing.T) {
 	}
 	if len(m.Accumulated()) != 0 {
 		t.Errorf("Accumulated() should be empty after back, got %d", len(m.Accumulated()))
+	}
+}
+
+func TestDownDuringEmptyFilter_ExitsFilterAndNavigates(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	if m.list.FilterState() != list.Filtering {
+		t.Skip("could not enter filtering state")
+	}
+
+	result, _ := m.Update(downMsg)
+	m = result.(Model)
+
+	if m.list.FilterState() != list.Unfiltered {
+		t.Errorf("FilterState() = %v, want %v", m.list.FilterState(), list.Unfiltered)
+	}
+	if m.list.Index() != 1 {
+		t.Errorf("Index() = %d, want 1", m.list.Index())
+	}
+}
+
+func TestUpDuringEmptyFilter_ExitsFilter(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	if m.list.FilterState() != list.Filtering {
+		t.Skip("could not enter filtering state")
+	}
+
+	result, _ := m.Update(upMsg)
+	m = result.(Model)
+
+	if m.list.FilterState() != list.Unfiltered {
+		t.Errorf("FilterState() = %v, want %v", m.list.FilterState(), list.Unfiltered)
+	}
+}
+
+func TestDownDuringNonEmptyFilter_StaysInFilterMode(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	if m.list.FilterState() != list.Filtering {
+		t.Skip("could not enter filtering state")
+	}
+
+	result, _ := m.Update(tea.KeyPressMsg{Code: rune('m'), Text: "m"})
+	m = result.(Model)
+
+	if m.list.FilterInput.Value() == "" {
+		t.Fatal("expected non-empty filter input after typing")
+	}
+
+	result, _ = m.Update(downMsg)
+	m = result.(Model)
+
+	if m.list.FilterState() == list.Unfiltered {
+		t.Error("FilterState() should not be Unfiltered when filter has text")
 	}
 }

@@ -170,6 +170,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
+		if (msg.String() == "up" || msg.String() == "down") &&
+			m.list.FilterState() == list.Filtering &&
+			m.list.FilterInput.Value() == "" {
+			m.list.ResetFilter()
+			var cmd tea.Cmd
+			m.list, cmd = m.list.Update(msg)
+			return m, cmd
+		}
 		if msg.String() == "esc" && m.list.FilterState() == list.Unfiltered {
 			if len(m.accumulated) > 0 {
 				return m.handleBack(), nil
