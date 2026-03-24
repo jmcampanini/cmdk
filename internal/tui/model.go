@@ -188,6 +188,7 @@ func (m Model) enterTextInputMode(sel item.Item) Model {
 	ti.Focus()
 
 	m.textInput = ti
+	m.list.ResetFilter()
 	return m
 }
 
