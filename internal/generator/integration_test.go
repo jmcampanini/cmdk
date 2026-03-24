@@ -153,7 +153,7 @@ func TestIntegration_DataFlattening(t *testing.T) {
 	}
 }
 
-func TestIntegration_FourSourceTypes(t *testing.T) {
+func TestIntegration_ThreeSourceTypes(t *testing.T) {
 	windows := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "window", Display: "main:1 zsh"},
@@ -164,24 +164,19 @@ func TestIntegration_FourSourceTypes(t *testing.T) {
 			{Type: "dir", Source: "zoxide", Display: "/projects"},
 		}, nil
 	}}
-	cwdDir := Source{Name: "cwd", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
-		return []item.Item{
-			{Type: "dir", Source: "cwd", Display: "/home/user"},
-		}, nil
-	}}
 	cfg := &config.Config{
 		Commands: []config.Command{
 			{Name: "htop", Cmd: "htop"},
 		},
 	}
 
-	gen := newIntegrationRootGenerator(windows, dirs, cwdDir, Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(cfg)})
+	gen := newIntegrationRootGenerator(windows, dirs, Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(cfg)})
 	items := gen(nil, Context{})
 
-	if len(items) != 4 {
-		t.Fatalf("got %d items, want 4", len(items))
+	if len(items) != 3 {
+		t.Fatalf("got %d items, want 3", len(items))
 	}
-	wantTypes := []string{"window", "dir", "dir", "cmd"}
+	wantTypes := []string{"window", "dir", "cmd"}
 	for i, wt := range wantTypes {
 		if items[i].Type != wt {
 			t.Errorf("items[%d].Type = %q, want %q", i, items[i].Type, wt)
