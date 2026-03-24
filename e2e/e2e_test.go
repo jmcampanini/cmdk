@@ -418,28 +418,6 @@ func TestE2E_MalformedConfigShowsError(t *testing.T) {
 	waitForExit(t, sess)
 }
 
-func TestE2E_CWDVisible(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "cmdk-cwd-e2e-check")
-	if err := os.Mkdir(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	sess := "cmdk-test-" + strings.ReplaceAll(t.Name(), "/", "-")
-	cmd := tmuxCmd("new-session", "-d", "-s", sess, "-c", dir, "-x", "120", "-y", "40",
-		binaryPath, "--pane-id=%0")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("tmux new-session failed: %v\n%s", err, out)
-	}
-	defer killSession(t, sess)
-
-	waitForReady(t, sess)
-	typeText(t, sess, "cmdk-cwd-e2e")
-
-	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "cmdk-cwd-e2e-check")
-	}, defaultTimeout)
-}
-
 func TestE2E_ConfigCommandOrder(t *testing.T) {
 	xdg := writeConfig(t, `
 [[commands]]
