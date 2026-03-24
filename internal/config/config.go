@@ -107,8 +107,8 @@ func validateCommands(section string, cmds []Command) error {
 				return fmt.Errorf("%s[%d].icon: %w", section, i, err)
 			}
 		}
-		if cmd.HasPrompt() && !strings.Contains(cmd.Cmd, ".prompt") {
-			return fmt.Errorf("%s[%d]: prompt is set but cmd does not reference {{.prompt}}", section, i)
+		if cmd.HasPrompt() && !strings.Contains(cmd.Cmd, ".prompt") && !strings.Contains(cmd.Cmd, "CMDK_PROMPT") {
+			return fmt.Errorf("%s[%d]: prompt is set but cmd does not reference {{.prompt}} or CMDK_PROMPT", section, i)
 		}
 	}
 	return nil

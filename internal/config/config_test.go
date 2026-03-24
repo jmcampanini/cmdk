@@ -399,6 +399,14 @@ func TestValidate_PromptWithSqTemplateReference(t *testing.T) {
 	}
 }
 
+func TestValidate_PromptWithEnvVarReference(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Commands = []Command{{Name: "test", Cmd: "env | grep CMDK_PROMPT", Prompt: "Enter value"}}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestValidate_ValidDirActions(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.DirActions = []Command{
