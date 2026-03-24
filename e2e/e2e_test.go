@@ -11,8 +11,10 @@ import (
 )
 
 const (
-	iconWindow = "\uf2d0"
-	iconDir    = "\uf07c"
+	iconWindow     = "\uf2d0"
+	iconDir        = "\uf07c"
+	iconCmd        = "\uf120"
+	defaultTimeout = 5 * time.Second
 )
 
 var (
@@ -116,11 +118,11 @@ func sessionExists(sess string) bool {
 	return tmuxCmd("has-session", "-t", sess).Run() == nil
 }
 
-func waitForReady(t *testing.T, sess string) string {
+func waitForReady(t *testing.T, sess string) {
 	t.Helper()
-	return waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, sess)
-	}, 5*time.Second)
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "cmdk")
+	}, defaultTimeout)
 }
 
 func waitForExit(t *testing.T, sess string) {
@@ -162,8 +164,8 @@ func navigateToDirItem(t *testing.T, sess string) {
 	t.Helper()
 	exitFilterModeE2E(t, sess)
 	content := capturePane(t, sess)
-	windowCount := strings.Count(content, iconWindow)
-	for range windowCount {
+	cmdCount := strings.Count(content, iconCmd)
+	for range cmdCount {
 		sendKeys(t, sess, "Down")
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -178,12 +180,21 @@ func exitFilterModeE2E(t *testing.T, sess string) {
 	time.Sleep(200 * time.Millisecond)
 }
 
+func scrollToWindowItems(t *testing.T, sess string) string {
+	t.Helper()
+	exitFilterModeE2E(t, sess)
+	sendKeys(t, sess, "End")
+	return waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, iconWindow)
+	}, defaultTimeout)
+}
+
 func filterAndExecute(t *testing.T, sess string, query string) {
 	t.Helper()
 	typeText(t, sess, query)
 	waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, "apply filter")
-	}, 5*time.Second)
+	}, defaultTimeout)
 	sendKeys(t, sess, "Enter")
 }
 
@@ -191,14 +202,12 @@ func TestE2E_ItemsVisible(t *testing.T) {
 	sess := startSession(t)
 	defer killSession(t, sess)
 
-	content := waitForReady(t, sess)
+	waitForReady(t, sess)
+
+	content := scrollToWindowItems(t, sess)
 
 	if !strings.Contains(content, sess+":") {
 		t.Errorf("expected test session window %q in output\nCapture:\n%s", sess, content)
-	}
-
-	if !strings.Contains(content, iconWindow) {
-		t.Errorf("expected window icon in output\nCapture:\n%s", content)
 	}
 }
 
@@ -212,7 +221,7 @@ func TestE2E_FilterItems(t *testing.T) {
 
 	waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, sess) && strings.Contains(s, "apply filter")
-	}, 5*time.Second)
+	}, defaultTimeout)
 }
 
 func TestE2E_EscapeDuringFilterDoesNotQuit(t *testing.T) {
@@ -225,13 +234,13 @@ func TestE2E_EscapeDuringFilterDoesNotQuit(t *testing.T) {
 
 	waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, "apply filter")
-	}, 5*time.Second)
+	}, defaultTimeout)
 
 	sendKeys(t, sess, "Escape")
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, sess) && !strings.Contains(s, "apply filter")
-	}, 5*time.Second)
+		return strings.Contains(s, "/ filter") && !strings.Contains(s, "apply filter")
+	}, defaultTimeout)
 
 	if !sessionExists(sess) {
 		t.Fatal("session should still exist after Escape during filter")
@@ -255,8 +264,7 @@ func TestE2E_EnterExecutesAndExits(t *testing.T) {
 
 	waitForReady(t, sess)
 
-	exitFilterModeE2E(t, sess)
-	sendKeys(t, sess, "Enter")
+	filterAndExecute(t, sess, sess[:20])
 	waitForExit(t, sess)
 }
 
@@ -265,11 +273,12 @@ func TestE2E_ZoxideDirsVisible(t *testing.T) {
 	sess := startSession(t)
 	defer killSession(t, sess)
 
-	content := waitForReady(t, sess)
+	waitForReady(t, sess)
+	exitFilterModeE2E(t, sess)
 
-	if !strings.Contains(content, iconDir) {
-		t.Errorf("expected dir icon in output when zoxide available\nCapture:\n%s", content)
-	}
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, iconDir)
+	}, defaultTimeout)
 }
 
 func TestE2E_SelectDirShowsDirActions(t *testing.T) {
@@ -285,7 +294,7 @@ func TestE2E_SelectDirShowsDirActions(t *testing.T) {
 
 	waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, "New window")
-	}, 5*time.Second)
+	}, defaultTimeout)
 }
 
 func TestE2E_EscapeFromDirActionsReturnsToRoot(t *testing.T) {
@@ -301,13 +310,13 @@ func TestE2E_EscapeFromDirActionsReturnsToRoot(t *testing.T) {
 
 	waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, "New window")
-	}, 5*time.Second)
+	}, defaultTimeout)
 
 	sendKeys(t, sess, "Escape")
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, iconWindow)
-	}, 5*time.Second)
+		return strings.Contains(s, iconDir)
+	}, defaultTimeout)
 
 	if !sessionExists(sess) {
 		t.Fatal("session should still exist after Escape from dir-actions")
@@ -318,11 +327,8 @@ func TestE2E_WithoutZoxide_StillLaunches(t *testing.T) {
 	sess := startSession(t)
 	defer killSession(t, sess)
 
-	content := waitForReady(t, sess)
-
-	if !strings.Contains(content, iconWindow) {
-		t.Errorf("expected window items even without zoxide\nCapture:\n%s", content)
-	}
+	waitForReady(t, sess)
+	scrollToWindowItems(t, sess)
 }
 
 func writeConfig(t *testing.T, content string) string {
@@ -352,7 +358,7 @@ cmd = "echo hello"
 
 	waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, "my-custom-cmd")
-	}, 5*time.Second)
+	}, defaultTimeout)
 }
 
 func TestE2E_ExecuteCustomCommand(t *testing.T) {
@@ -380,14 +386,19 @@ func TestE2E_NoConfigFile(t *testing.T) {
 	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
 	defer killSession(t, sess)
 
-	content := waitForReady(t, sess)
+	waitForReady(t, sess)
+	exitFilterModeE2E(t, sess)
 
-	if !strings.Contains(content, iconWindow) {
-		t.Errorf("expected window items\nCapture:\n%s", content)
+	topContent := capturePane(t, sess)
+	if strings.Contains(topContent, "config error") {
+		t.Errorf("unexpected config error\nCapture:\n%s", topContent)
 	}
-	if strings.Contains(content, "config error") {
-		t.Errorf("unexpected config error\nCapture:\n%s", content)
-	}
+
+	sendKeys(t, sess, "End")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, iconWindow)
+	}, defaultTimeout)
 }
 
 func TestE2E_MalformedConfigShowsError(t *testing.T) {
@@ -400,7 +411,7 @@ func TestE2E_MalformedConfigShowsError(t *testing.T) {
 
 	waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, "config error")
-	}, 5*time.Second)
+	}, defaultTimeout)
 
 	exitFilterModeE2E(t, sess)
 	sendKeys(t, sess, "Escape")
@@ -422,11 +433,11 @@ func TestE2E_CWDVisible(t *testing.T) {
 	defer killSession(t, sess)
 
 	waitForReady(t, sess)
-	sendKeys(t, sess, "End")
+	typeText(t, sess, "cmdk-cwd-e2e")
 
 	waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, "cmdk-cwd-e2e-check")
-	}, 5*time.Second)
+	}, defaultTimeout)
 }
 
 func TestE2E_ConfigCommandOrder(t *testing.T) {
@@ -456,7 +467,7 @@ cmd = "echo gamma"
 
 	content := waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, "alpha-cmd") && strings.Contains(s, "gamma-cmd")
-	}, 5*time.Second)
+	}, defaultTimeout)
 
 	alphaIdx := strings.Index(content, "alpha-cmd")
 	betaIdx := strings.Index(content, "beta-cmd")
@@ -488,7 +499,7 @@ cmd = "echo yazi"
 
 	waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, "New window") && strings.Contains(s, "xq-yazi-action")
-	}, 5*time.Second)
+	}, defaultTimeout)
 }
 
 func TestE2E_DirActionsOrder(t *testing.T) {
@@ -514,7 +525,7 @@ cmd = "echo beta"
 		return strings.Contains(s, "New window") &&
 			strings.Contains(s, "xq-alpha-dirc") &&
 			strings.Contains(s, "xq-beta-dirc")
-	}, 5*time.Second)
+	}, defaultTimeout)
 
 	newWindowIdx := strings.Index(content, "New window")
 	alphaIdx := strings.Index(content, "xq-alpha-dirc")
@@ -539,7 +550,7 @@ func TestE2E_NoDirActionsShowsDefault(t *testing.T) {
 
 	waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, "New window")
-	}, 5*time.Second)
+	}, defaultTimeout)
 }
 
 func restrictedPATH(t *testing.T) string {
@@ -613,16 +624,19 @@ func TestE2E_ZoxideUnavailable_ErrorItem(t *testing.T) {
 	sess := startSessionWithEnv(t, map[string]string{"PATH": path})
 	defer killSession(t, sess)
 
-	content := waitForReady(t, sess)
+	waitForReady(t, sess)
 
-	if !strings.Contains(content, iconWindow) {
-		t.Errorf("expected window items\nCapture:\n%s", content)
-	}
+	exitFilterModeE2E(t, sess)
 
-	sendKeys(t, sess, "End")
 	waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, "zoxide error")
-	}, 5*time.Second)
+	}, defaultTimeout)
+
+	sendKeys(t, sess, "End")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, iconWindow)
+	}, defaultTimeout)
 }
 
 func TestE2E_ErrorItemNotSelectable(t *testing.T) {
@@ -636,9 +650,10 @@ func TestE2E_ErrorItemNotSelectable(t *testing.T) {
 
 	waitForReady(t, sess)
 
+	exitFilterModeE2E(t, sess)
 	content := capturePane(t, sess)
-	windowCount := strings.Count(content, iconWindow)
-	for range windowCount {
+	cmdCount := strings.Count(content, iconCmd)
+	for range cmdCount {
 		sendKeys(t, sess, "Down")
 		time.Sleep(50 * time.Millisecond)
 	}

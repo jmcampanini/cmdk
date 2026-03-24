@@ -33,7 +33,7 @@ func TestGroupAndOrder_MixedTypes(t *testing.T) {
 	}
 
 	got := types(GroupAndOrder(items))
-	want := []string{"window", "window", "dir", "dir", "cmd"}
+	want := []string{"cmd", "dir", "dir", "window", "window"}
 
 	if !slices.Equal(got, want) {
 		t.Errorf("types = %v, want %v", got, want)

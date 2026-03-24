@@ -48,7 +48,7 @@ func ParseWindows(output string) []item.Item {
 		it := item.NewItem()
 		it.Type = "window"
 		it.Source = "tmux"
-		it.Display = line
+		it.Display = "tmux: " + line
 		it.Action = item.ActionExecute
 		it.Cmd = "tmux switch-client -t '{{.session}}:{{.window_index}}'"
 		it.Data["session"] = session

@@ -169,14 +169,14 @@ func TestRootGenerator_ErrorItemInDirGroup(t *testing.T) {
 	got1 := ordered[1].(item.Item)
 	got2 := ordered[2].(item.Item)
 
-	if got0.Type != "window" {
-		t.Errorf("ordered[0].Type = %q, want window", got0.Type)
+	if got0.Type != "cmd" {
+		t.Errorf("ordered[0].Type = %q, want cmd", got0.Type)
 	}
 	if got1.Type != "dir" {
 		t.Errorf("ordered[1].Type = %q, want dir (error item)", got1.Type)
 	}
-	if got2.Type != "cmd" {
-		t.Errorf("ordered[2].Type = %q, want cmd", got2.Type)
+	if got2.Type != "window" {
+		t.Errorf("ordered[2].Type = %q, want window", got2.Type)
 	}
 }
 
