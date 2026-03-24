@@ -600,6 +600,9 @@ func TestUpDuringEmptyFilter_ExitsFilter(t *testing.T) {
 	if m.list.FilterState() != list.Unfiltered {
 		t.Errorf("FilterState() = %v, want %v", m.list.FilterState(), list.Unfiltered)
 	}
+	if m.list.Index() != 0 {
+		t.Errorf("Index() = %d, want 0 (Up should only exit filter, not move cursor)", m.list.Index())
+	}
 }
 
 func TestDownDuringNonEmptyFilter_StaysInFilterMode(t *testing.T) {
