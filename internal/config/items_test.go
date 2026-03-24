@@ -105,3 +105,41 @@ func TestCommandItems_NoIcon(t *testing.T) {
 		t.Errorf("Icon = %q, want empty", items[0].Icon)
 	}
 }
+
+func TestCommandItems_WithPrompt_SetsActionTextInput(t *testing.T) {
+	cfg := &Config{
+		Commands: []Command{
+			{Name: "Search", Cmd: "grep -r {{sq .prompt}} .", Prompt: "Search term"},
+		},
+	}
+	fn := CommandItems(cfg)
+	items, err := fn(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if items[0].Action != item.ActionTextInput {
+		t.Errorf("Action = %q, want %q", items[0].Action, item.ActionTextInput)
+	}
+	if items[0].Prompt != "Search term" {
+		t.Errorf("Prompt = %q, want %q", items[0].Prompt, "Search term")
+	}
+}
+
+func TestCommandItems_WithoutPrompt_SetsActionExecute(t *testing.T) {
+	cfg := &Config{
+		Commands: []Command{
+			{Name: "htop", Cmd: "htop"},
+		},
+	}
+	fn := CommandItems(cfg)
+	items, err := fn(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if items[0].Action != item.ActionExecute {
+		t.Errorf("Action = %q, want %q", items[0].Action, item.ActionExecute)
+	}
+	if items[0].Prompt != "" {
+		t.Errorf("Prompt = %q, want empty", items[0].Prompt)
+	}
+}

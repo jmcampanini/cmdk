@@ -33,6 +33,7 @@ type Theme struct {
 
 	MatchHighlight color.Color
 	TextboxBg      color.Color
+	Error          color.Color
 }
 
 func c(hex string) color.Color { return lipgloss.Color(hex) }
@@ -67,6 +68,7 @@ func Light() Theme {
 
 		MatchHighlight: c("#e0c8f8"),
 		TextboxBg:      c("#dce0e8"),
+		Error:          c("#d20f39"),
 	}
 }
 
@@ -94,6 +96,7 @@ func Dark() Theme {
 
 		MatchHighlight: c("#5b3d8f"),
 		TextboxBg:      c("#313244"),
+		Error:          c("#f38ba8"),
 	}
 }
 

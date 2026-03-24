@@ -13,10 +13,11 @@ func CommandItems(cfg *Config) func(context.Context) ([]item.Item, error) {
 			it := item.NewItem()
 			it.Type = "cmd"
 			it.Source = "config"
-			it.Action = item.ActionExecute
 			it.Cmd = cmd.Cmd
 			it.Display = cmd.Name
 			it.Icon = cmd.Icon
+			it.Prompt = cmd.Prompt
+			it.Action = cmd.Action()
 			items[i] = it
 		}
 		return items, nil

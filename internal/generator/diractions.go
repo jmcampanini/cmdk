@@ -38,10 +38,11 @@ func NewDirActionsGenerator() GeneratorFunc {
 					Type:    "cmd",
 					Source:  "config",
 					Display: cmd.Name,
-					Action:  item.ActionExecute,
+					Action:  cmd.Action(),
 					Cmd:     cmd.Cmd,
 					Data:    maps.Clone(data),
 					Icon:    cmd.Icon,
+					Prompt:  cmd.Prompt,
 				})
 			}
 		}

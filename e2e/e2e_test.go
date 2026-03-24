@@ -705,6 +705,148 @@ cmd = "exit 42"
 	}
 }
 
+func TestE2E_PromptCommandShowsTextInput(t *testing.T) {
+	xdg := writeConfig(t, `
+[[commands]]
+name = "xq-prompt-cmd"
+cmd = "echo {{sq .prompt}}"
+prompt = "Enter search term"
+`)
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	filterAndExecute(t, sess, "xq-prompt")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "enter submit") && strings.Contains(s, "esc back")
+	}, defaultTimeout)
+}
+
+func TestE2E_PromptSubmitExecutes(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "prompt-result")
+	xdg := writeConfig(t, fmt.Sprintf(`
+[[commands]]
+name = "xq-prompt-exec"
+cmd = "echo {{.prompt}} > '%s'"
+prompt = "Type something"
+`, marker))
+
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	filterAndExecute(t, sess, "xq-prompt-exec")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "enter submit")
+	}, defaultTimeout)
+
+	typeText(t, sess, "hello-world")
+	sendKeys(t, sess, "Enter")
+	waitForExit(t, sess)
+
+	got, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatalf("failed to read marker: %v", err)
+	}
+	if !strings.Contains(string(got), "hello-world") {
+		t.Errorf("marker = %q, want to contain hello-world", string(got))
+	}
+}
+
+func TestE2E_PromptEmptySubmitShowsError(t *testing.T) {
+	xdg := writeConfig(t, `
+[[commands]]
+name = "xq-prompt-empty"
+cmd = "echo {{.prompt}}"
+prompt = "Type something"
+`)
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	filterAndExecute(t, sess, "xq-prompt-empty")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "enter submit")
+	}, defaultTimeout)
+
+	sendKeys(t, sess, "Enter")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "input required")
+	}, defaultTimeout)
+
+	if !sessionExists(sess) {
+		t.Fatal("session should still exist after empty submit")
+	}
+}
+
+func TestE2E_PromptEscapeReturnsToList(t *testing.T) {
+	xdg := writeConfig(t, `
+[[commands]]
+name = "xq-prompt-esc"
+cmd = "echo {{.prompt}}"
+prompt = "Type something"
+
+[[commands]]
+name = "xq-other-cmd"
+cmd = "echo other"
+`)
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	filterAndExecute(t, sess, "xq-prompt-esc")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "enter submit")
+	}, defaultTimeout)
+
+	sendKeys(t, sess, "Escape")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "xq-other-cmd")
+	}, defaultTimeout)
+
+	if !sessionExists(sess) {
+		t.Fatal("session should still exist after Escape from text input")
+	}
+}
+
+func TestE2E_PromptEnvVar(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "prompt-env")
+	xdg := writeConfig(t, fmt.Sprintf(`
+[[commands]]
+name = "xq-prompt-env"
+cmd = "env | grep CMDK_PROMPT > '%s'"
+prompt = "Enter value"
+`, marker))
+
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	filterAndExecute(t, sess, "xq-prompt-env")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "enter submit")
+	}, defaultTimeout)
+
+	typeText(t, sess, "test-value")
+	sendKeys(t, sess, "Enter")
+	waitForExit(t, sess)
+
+	got, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatalf("failed to read env dump: %v", err)
+	}
+	if !strings.Contains(string(got), "CMDK_PROMPT=test-value") {
+		t.Errorf("expected CMDK_PROMPT=test-value in env dump\nGot:\n%s", got)
+	}
+}
+
 func TestE2E_DisplayPopup(t *testing.T) {
 	sess := "cmdk-test-" + strings.ReplaceAll(t.Name(), "/", "-")
 	shellCmd := fmt.Sprintf("%s --pane-id=$(tmux -L %s display-message -p '#{pane_id}')", binaryPath, tmuxSocket)

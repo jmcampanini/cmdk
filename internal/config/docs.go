@@ -28,8 +28,9 @@ func ConfigDocs() []SectionDoc {
 				{Name: "name", Type: "string", Description: "Display name in the launcher.", Validation: "cannot be empty"},
 				{Name: "cmd", Type: "string", Description: "Shell command or Go template to execute.", Validation: "cannot be empty"},
 				{Name: "icon", Type: "string", Description: "Nerdfont icon: alias like :nf-dev-github:, raw glyph, or \\uXXXX escape. Run \"cmdk docs icons\" to list aliases.", Validation: "if :nf-*: alias, must be in supported set; otherwise must be a single grapheme cluster"},
+				{Name: "prompt", Type: "string", Description: "Text input prompt shown before executing. When set, the user must enter text that becomes available as {{.prompt}} in the cmd template and CMDK_PROMPT env var."},
 			},
-			Example: "[[commands]]\nname = \"htop\"\ncmd = \"htop\"\n\n[[commands]]\nname = \"GitHub\"\ncmd = \"open https://github.com\"\nicon = \":nf-dev-github:\"",
+			Example: "[[commands]]\nname = \"htop\"\ncmd = \"htop\"\n\n[[commands]]\nname = \"GitHub\"\ncmd = \"open https://github.com\"\nicon = \":nf-dev-github:\"\n\n[[commands]]\nname = \"Search\"\ncmd = \"grep -r {{sq .prompt}} .\"\nprompt = \"Search term\"",
 		},
 		{
 			Name:        "dir_actions",
@@ -38,8 +39,9 @@ func ConfigDocs() []SectionDoc {
 				{Name: "name", Type: "string", Description: "Display name in the action list.", Validation: "cannot be empty"},
 				{Name: "cmd", Type: "string", Description: "Shell command or Go template to execute.", Validation: "cannot be empty"},
 				{Name: "icon", Type: "string", Description: "Nerdfont icon: alias like :nf-dev-github:, raw glyph, or \\uXXXX escape. Run \"cmdk docs icons\" to list aliases.", Validation: "if :nf-*: alias, must be in supported set; otherwise must be a single grapheme cluster"},
+				{Name: "prompt", Type: "string", Description: "Text input prompt shown before executing. When set, the user must enter text that becomes available as {{.prompt}} in the cmd template and CMDK_PROMPT env var."},
 			},
-			Example: "# simple command (no template variables)\n[[dir_actions]]\nname = \"Git Status\"\ncmd = \"git status\"\n\n# using {{.path}} directly\n[[dir_actions]]\nname = \"List Files\"\ncmd = \"ls -la {{.path}}\"\n\n# using {{sq .path}} for shell-safe quoting\n[[dir_actions]]\nname = \"Yazi\"\ncmd = \"tmux split-window -h yazi {{sq .path}}\"\n\n# using CMDK_PANE_ID environment variable\n[[dir_actions]]\nname = \"Split Here\"\ncmd = \"tmux split-window -t \\\"$CMDK_PANE_ID\\\" -c {{sq .path}}\"",
+			Example: "# simple command (no template variables)\n[[dir_actions]]\nname = \"Git Status\"\ncmd = \"git status\"\n\n# using {{.path}} directly\n[[dir_actions]]\nname = \"List Files\"\ncmd = \"ls -la {{.path}}\"\n\n# using {{sq .path}} for shell-safe quoting\n[[dir_actions]]\nname = \"Yazi\"\ncmd = \"tmux split-window -h yazi {{sq .path}}\"\n\n# using CMDK_PANE_ID environment variable\n[[dir_actions]]\nname = \"Split Here\"\ncmd = \"tmux split-window -t \\\"$CMDK_PANE_ID\\\" -c {{sq .path}}\"\n\n# text input prompt — user types a value before execution\n[[dir_actions]]\nname = \"Claude\"\ncmd = \"claude --worktree {{sq .prompt}}\"\nprompt = \"Enter worktree name\"",
 		},
 		{
 			Name:        "timeout",
@@ -113,6 +115,7 @@ TEMPLATE VARIABLES
   Available variables:
       {{.path}}        directory path (for dir_actions)
       {{.pane_id}}     tmux pane ID (when --pane-id is set)
+      {{.prompt}}      user-entered text (when prompt is set)
 
   Available functions:
       {{sq .path}}     shell-safe single-quoting

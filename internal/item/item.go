@@ -3,8 +3,9 @@ package item
 type ActionType string
 
 const (
-	ActionNextList ActionType = "next-list"
-	ActionExecute  ActionType = "execute"
+	ActionNextList  ActionType = "next-list"
+	ActionExecute   ActionType = "execute"
+	ActionTextInput ActionType = "text-input"
 )
 
 type Item struct {
@@ -15,6 +16,7 @@ type Item struct {
 	Action  ActionType
 	Cmd     string
 	Icon    string
+	Prompt  string
 }
 
 func NewItem() Item {

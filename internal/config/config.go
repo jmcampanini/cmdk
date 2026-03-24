@@ -12,12 +12,25 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/jmcampanini/cmdk/internal/icon"
+	"github.com/jmcampanini/cmdk/internal/item"
 )
 
 type Command struct {
-	Name string `toml:"name"`
-	Cmd  string `toml:"cmd"`
-	Icon string `toml:"icon"`
+	Name   string `toml:"name"`
+	Cmd    string `toml:"cmd"`
+	Icon   string `toml:"icon"`
+	Prompt string `toml:"prompt"`
+}
+
+func (c Command) HasPrompt() bool {
+	return c.Prompt != ""
+}
+
+func (c Command) Action() item.ActionType {
+	if c.HasPrompt() {
+		return item.ActionTextInput
+	}
+	return item.ActionExecute
 }
 
 type Timeout struct {

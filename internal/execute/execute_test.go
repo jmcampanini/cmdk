@@ -418,6 +418,39 @@ func TestRun_EmptyPaneIDNotInTemplateData(t *testing.T) {
 	}
 }
 
+func TestRenderCmd_PromptVariable(t *testing.T) {
+	tmpl := "claude --worktree {{.prompt}}"
+	data := map[string]string{"prompt": "my-feature"}
+
+	got, err := RenderCmd(tmpl, data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "claude --worktree my-feature" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestRenderCmd_PromptWithSq(t *testing.T) {
+	tmpl := "claude --worktree {{sq .prompt}}"
+	data := map[string]string{"prompt": "my feature"}
+
+	got, err := RenderCmd(tmpl, data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "claude --worktree 'my feature'" {
+		t.Errorf("got %q", got)
+	}
+}
+
+func TestNormalizeKey_Prompt(t *testing.T) {
+	got := NormalizeKey("prompt")
+	if got != "CMDK_PROMPT" {
+		t.Errorf("NormalizeKey(prompt) = %q, want CMDK_PROMPT", got)
+	}
+}
+
 func envSliceToMap(envs []string) map[string]string {
 	m := make(map[string]string)
 	for _, e := range envs {

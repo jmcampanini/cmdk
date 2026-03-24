@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -28,6 +29,14 @@ type Model struct {
 	filterStyle lipgloss.Style
 	winWidth    int
 	winHeight   int
+
+	textInputItem *item.Item
+	textInput     textinput.Model
+	showInputErr  bool
+	errorStyle    lipgloss.Style
+	promptStyle   lipgloss.Style
+	hintStyle     lipgloss.Style
+	theme         theme.Theme
 }
 
 const horizontalPadding = 1
@@ -60,6 +69,10 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 		ctx:         ctx,
 		stackStyle:  lipgloss.NewStyle().Foreground(t.Overlay0),
 		filterStyle: lipgloss.NewStyle().Inline(true).Background(t.TextboxBg),
+		errorStyle:  lipgloss.NewStyle().Foreground(t.Error).Padding(0, horizontalPadding),
+		promptStyle: lipgloss.NewStyle().Foreground(t.Text).Padding(0, horizontalPadding),
+		hintStyle:   lipgloss.NewStyle().Foreground(t.Overlay0).Padding(0, horizontalPadding),
+		theme:       t,
 	}
 }
 
@@ -150,14 +163,73 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
+func textInputStyles(t theme.Theme) textinput.Styles {
+	s := textinput.DefaultStyles(t.IsDark)
+	s.Cursor.Color = t.AccentDim
+	s.Cursor.Blink = false
+	s.Focused.Text = lipgloss.NewStyle().Foreground(t.Text)
+	s.Blurred.Text = lipgloss.NewStyle().Foreground(t.Overlay0)
+	s.Focused.Placeholder = lipgloss.NewStyle().Foreground(t.Overlay0)
+	s.Blurred.Placeholder = lipgloss.NewStyle().Foreground(t.Overlay0)
+	return s
+}
+
+func (m Model) enterTextInputMode(sel item.Item) Model {
+	sel.Data = maps.Clone(sel.Data)
+	m.textInputItem = &sel
+	m.showInputErr = false
+
+	ti := textinput.New()
+	ti.Placeholder = sel.Prompt
+	ti.SetStyles(textInputStyles(m.theme))
+	ti.Focus()
+
+	m.textInput = ti
+	return m
+}
+
+func (m Model) updateTextInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		trimmed := strings.TrimSpace(m.textInput.Value())
+		if trimmed == "" {
+			m.showInputErr = true
+			return m, nil
+		}
+		m.textInputItem.Data["prompt"] = trimmed
+		m.selected = m.textInputItem
+		return m, tea.Quit
+	case "esc":
+		m.textInputItem = nil
+		m.showInputErr = false
+		m.list.ResetFilter()
+		if m.winHeight > 0 {
+			m.list.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
+		}
+		return m, nil
+	case "ctrl+c":
+		return m, tea.Quit
+	default:
+		m.showInputErr = false
+		var cmd tea.Cmd
+		m.textInput, cmd = m.textInput.Update(msg)
+		return m, cmd
+	}
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.winWidth = msg.Width
 		m.winHeight = msg.Height
-		m.list.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
+		if m.textInputItem == nil {
+			m.list.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
+		}
 		return m, nil
 	case tea.KeyPressMsg:
+		if m.textInputItem != nil {
+			return m.updateTextInput(msg)
+		}
 		if msg.String() == "enter" {
 			sel, ok := m.resolveEnterTarget()
 			if ok {
@@ -167,6 +239,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, tea.Quit
 				case item.ActionNextList:
 					return m.handleNextList(sel), nil
+				case item.ActionTextInput:
+					return m.enterTextInputMode(sel), nil
 				}
 			}
 		}
@@ -278,9 +352,23 @@ func (m Model) overheadHeight() int {
 	return h
 }
 
+func (m Model) textInputView() string {
+	var b strings.Builder
+	b.WriteString(m.promptStyle.Render(m.textInput.View()))
+	b.WriteByte('\n')
+	if m.showInputErr {
+		b.WriteString(m.errorStyle.Render("input required"))
+		b.WriteByte('\n')
+	}
+	b.WriteByte('\n')
+	b.WriteString(m.hintStyle.Render("enter submit • esc back"))
+	return b.String()
+}
+
 func (m Model) View() tea.View {
-	header := m.headerView()
-	stack := m.stackView()
-	body := m.list.View()
-	return tea.NewView(header + "\n\n" + stack + body)
+	prefix := m.headerView() + "\n\n" + m.stackView()
+	if m.textInputItem != nil {
+		return tea.NewView(prefix + m.textInputView())
+	}
+	return tea.NewView(prefix + m.list.View())
 }

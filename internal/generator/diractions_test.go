@@ -238,3 +238,54 @@ func TestDirActionsGenerator_DataMapsAreIndependent(t *testing.T) {
 		t.Error("mutating one item's Data should not affect another")
 	}
 }
+
+func TestDirActionsGenerator_ConfigWithPrompt_SetsActionTextInput(t *testing.T) {
+	cfg := &config.Config{
+		DirActions: []config.Command{
+			{Name: "Claude", Cmd: "claude --worktree {{sq .prompt}}", Prompt: "Enter worktree name"},
+		},
+	}
+
+	items := runDirActions(dirAccumulated("/tmp"), Context{Config: cfg})
+	if len(items) != 2 {
+		t.Fatalf("got %d items, want 2", len(items))
+	}
+	if items[1].Action != item.ActionTextInput {
+		t.Errorf("Action = %q, want %q", items[1].Action, item.ActionTextInput)
+	}
+	if items[1].Prompt != "Enter worktree name" {
+		t.Errorf("Prompt = %q, want %q", items[1].Prompt, "Enter worktree name")
+	}
+}
+
+func TestDirActionsGenerator_ConfigWithoutPrompt_SetsActionExecute(t *testing.T) {
+	cfg := &config.Config{
+		DirActions: []config.Command{
+			{Name: "Yazi", Cmd: "yazi"},
+		},
+	}
+
+	items := runDirActions(dirAccumulated("/tmp"), Context{Config: cfg})
+	if items[1].Action != item.ActionExecute {
+		t.Errorf("Action = %q, want %q", items[1].Action, item.ActionExecute)
+	}
+	if items[1].Prompt != "" {
+		t.Errorf("Prompt = %q, want empty", items[1].Prompt)
+	}
+}
+
+func TestDirActionsGenerator_BuiltInNewWindow_AlwaysExecute(t *testing.T) {
+	cfg := &config.Config{
+		DirActions: []config.Command{
+			{Name: "Claude", Cmd: "claude", Prompt: "Enter name"},
+		},
+	}
+
+	items := runDirActions(dirAccumulated("/tmp"), Context{Config: cfg})
+	if items[0].Action != item.ActionExecute {
+		t.Errorf("New window Action = %q, want %q", items[0].Action, item.ActionExecute)
+	}
+	if items[0].Prompt != "" {
+		t.Errorf("New window Prompt = %q, want empty", items[0].Prompt)
+	}
+}

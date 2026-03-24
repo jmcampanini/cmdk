@@ -624,3 +624,317 @@ func TestDownDuringNonEmptyFilter_StaysInFilterMode(t *testing.T) {
 		t.Error("FilterState() should not be Unfiltered when filter has text")
 	}
 }
+
+// --- Text input mode tests ---
+
+func textInputItems() []list.Item {
+	return []list.Item{
+		item.Item{Type: "cmd", Display: "Claude", Action: item.ActionTextInput, Prompt: "Enter worktree name", Cmd: "claude --worktree {{sq .prompt}}", Data: map[string]string{"path": "/tmp"}},
+	}
+}
+
+func textInputRegistry() *generator.Registry {
+	reg := generator.NewRegistry()
+	reg.Register("root", func(accumulated []item.Item, ctx generator.Context) []item.Item {
+		return nil
+	})
+	reg.MapType("", "root")
+	return reg
+}
+
+func enterTextInput(t *testing.T, m Model) Model {
+	t.Helper()
+	m = exitFilterMode(t, m)
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+	if cmd != nil {
+		t.Fatal("entering text input mode should not quit")
+	}
+	if m.textInputItem == nil {
+		t.Fatal("textInputItem should be set")
+	}
+	return m
+}
+
+func TestEnterOnTextInputItem_EntersTextInputMode(t *testing.T) {
+	m := newTestModel(textInputItems(), textInputRegistry())
+	m.list.SetSize(80, 40)
+
+	m = enterTextInput(t, m)
+
+	if m.Selected() != nil {
+		t.Error("Selected() should be nil in text input mode")
+	}
+}
+
+func TestEnterOnTextInputItem_DuringFiltering_SingleMatch(t *testing.T) {
+	m := newTestModel(textInputItems(), textInputRegistry())
+	m.list.SetSize(80, 40)
+
+	if m.list.FilterState() != list.Filtering {
+		t.Skip("could not enter filtering state")
+	}
+	if got := len(m.list.VisibleItems()); got != 1 {
+		t.Fatalf("VisibleItems() = %d, want 1", got)
+	}
+
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if cmd != nil {
+		t.Error("should not quit when entering text input mode")
+	}
+	if m.textInputItem == nil {
+		t.Fatal("textInputItem should be set for single filtered ActionTextInput item")
+	}
+	if m.Selected() != nil {
+		t.Error("Selected() should be nil in text input mode")
+	}
+}
+
+func TestTextInput_SubmitNonEmpty_SetsSelectedAndQuits(t *testing.T) {
+	m := newTestModel(textInputItems(), textInputRegistry())
+	m.list.SetSize(80, 40)
+	m = enterTextInput(t, m)
+
+	result, _ := m.Update(tea.KeyPressMsg{Code: rune('h'), Text: "h"})
+	m = result.(Model)
+	result, _ = m.Update(tea.KeyPressMsg{Code: rune('i'), Text: "i"})
+	m = result.(Model)
+
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.Selected() == nil {
+		t.Fatal("Selected() should be set after non-empty submit")
+	}
+	if m.Selected().Data["prompt"] != "hi" {
+		t.Errorf("Data[prompt] = %q, want %q", m.Selected().Data["prompt"], "hi")
+	}
+	if cmd == nil {
+		t.Error("expected Quit command")
+	}
+}
+
+func TestTextInput_SubmitPreservesExistingData(t *testing.T) {
+	m := newTestModel(textInputItems(), textInputRegistry())
+	m.list.SetSize(80, 40)
+	m = enterTextInput(t, m)
+
+	result, _ := m.Update(tea.KeyPressMsg{Code: rune('x'), Text: "x"})
+	m = result.(Model)
+	result, _ = m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.Selected() == nil {
+		t.Fatal("Selected() should be set")
+	}
+	if m.Selected().Data["path"] != "/tmp" {
+		t.Errorf("Data[path] = %q, want /tmp", m.Selected().Data["path"])
+	}
+	if m.Selected().Data["prompt"] != "x" {
+		t.Errorf("Data[prompt] = %q, want x", m.Selected().Data["prompt"])
+	}
+}
+
+func TestTextInput_SubmitEmpty_ShowsError(t *testing.T) {
+	m := newTestModel(textInputItems(), textInputRegistry())
+	m.list.SetSize(80, 40)
+	m = enterTextInput(t, m)
+
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if !m.showInputErr {
+		t.Error("showInputErr should be true after empty submit")
+	}
+	if m.Selected() != nil {
+		t.Error("Selected() should be nil after empty submit")
+	}
+	if cmd != nil {
+		t.Error("should not quit after empty submit")
+	}
+}
+
+func TestTextInput_SubmitWhitespace_ShowsError(t *testing.T) {
+	m := newTestModel(textInputItems(), textInputRegistry())
+	m.list.SetSize(80, 40)
+	m = enterTextInput(t, m)
+
+	result, _ := m.Update(tea.KeyPressMsg{Code: rune(' '), Text: " "})
+	m = result.(Model)
+	result, _ = m.Update(tea.KeyPressMsg{Code: rune(' '), Text: " "})
+	m = result.(Model)
+
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if !m.showInputErr {
+		t.Error("showInputErr should be true for whitespace-only submit")
+	}
+	if cmd != nil {
+		t.Error("should not quit for whitespace-only submit")
+	}
+}
+
+func TestTextInput_ErrorClearsOnKeystroke(t *testing.T) {
+	m := newTestModel(textInputItems(), textInputRegistry())
+	m.list.SetSize(80, 40)
+	m = enterTextInput(t, m)
+
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+	if !m.showInputErr {
+		t.Fatal("showInputErr should be true after empty submit")
+	}
+
+	result, _ = m.Update(tea.KeyPressMsg{Code: rune('a'), Text: "a"})
+	m = result.(Model)
+
+	if m.showInputErr {
+		t.Error("showInputErr should be cleared after keystroke")
+	}
+}
+
+func TestTextInput_Escape_ReturnsToList(t *testing.T) {
+	m := newTestModel(textInputItems(), textInputRegistry())
+	m.list.SetSize(80, 40)
+	m = enterTextInput(t, m)
+
+	result, cmd := m.Update(escMsg)
+	m = result.(Model)
+
+	if m.textInputItem != nil {
+		t.Error("textInputItem should be nil after Escape")
+	}
+	if cmd != nil {
+		t.Error("should not quit on Escape from text input")
+	}
+	if len(m.list.Items()) != 1 {
+		t.Errorf("list should still have items, got %d", len(m.list.Items()))
+	}
+}
+
+func TestTextInput_Escape_PreservesAccumulated(t *testing.T) {
+	reg := generator.NewRegistry()
+	reg.Register("root", func(accumulated []item.Item, ctx generator.Context) []item.Item {
+		return []item.Item{
+			{Type: "dir", Display: "~/projects/foo", Action: item.ActionNextList, Data: map[string]string{"path": "~/projects/foo"}},
+		}
+	})
+	reg.Register("dir-actions", func(accumulated []item.Item, ctx generator.Context) []item.Item {
+		return []item.Item{
+			{Type: "cmd", Display: "Claude", Action: item.ActionTextInput, Prompt: "Enter name", Cmd: "claude", Data: map[string]string{"path": "~/projects/foo"}},
+		}
+	})
+	reg.MapType("", "root")
+	reg.MapType("dir", "dir-actions")
+
+	items := []list.Item{
+		item.Item{Type: "dir", Display: "~/projects/foo", Action: item.ActionNextList, Data: map[string]string{"path": "~/projects/foo"}},
+	}
+	m := newTestModel(items, reg)
+	m.list.SetSize(80, 40)
+
+	m = exitFilterMode(t, m)
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+	if len(m.Accumulated()) != 1 {
+		t.Fatalf("should have 1 accumulated item, got %d", len(m.Accumulated()))
+	}
+
+	// After drill-down, navigateTo resets the filter to Unfiltered.
+	// Press Enter directly to select the single text input item.
+	result, _ = m.Update(enterMsg)
+	m = result.(Model)
+	if m.textInputItem == nil {
+		t.Fatal("should be in text input mode")
+	}
+
+	result, _ = m.Update(escMsg)
+	m = result.(Model)
+
+	if len(m.Accumulated()) != 1 {
+		t.Errorf("accumulated should still have 1 item after Escape, got %d", len(m.Accumulated()))
+	}
+}
+
+func TestTextInput_SubmitTrimsInput(t *testing.T) {
+	m := newTestModel(textInputItems(), textInputRegistry())
+	m.list.SetSize(80, 40)
+	m = enterTextInput(t, m)
+
+	for _, ch := range " hello " {
+		result, _ := m.Update(tea.KeyPressMsg{Code: rune(ch), Text: string(ch)})
+		m = result.(Model)
+	}
+
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.Selected() == nil {
+		t.Fatal("Selected() should be set")
+	}
+	if m.Selected().Data["prompt"] != "hello" {
+		t.Errorf("Data[prompt] = %q, want %q", m.Selected().Data["prompt"], "hello")
+	}
+}
+
+func TestTextInput_WindowSizeMsg_DoesNotCrash(t *testing.T) {
+	m := newTestModel(textInputItems(), textInputRegistry())
+	m.list.SetSize(80, 40)
+	m = enterTextInput(t, m)
+
+	result, cmd := m.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
+	m = result.(Model)
+
+	if cmd != nil {
+		t.Error("WindowSizeMsg should not quit")
+	}
+	if m.winWidth != 60 || m.winHeight != 20 {
+		t.Errorf("dimensions = %dx%d, want 60x20", m.winWidth, m.winHeight)
+	}
+}
+
+func TestTextInput_ViewContainsPromptAndHints(t *testing.T) {
+	m := newTestModel(textInputItems(), textInputRegistry())
+	m = setWindowSize(t, m, 80, 40)
+	m = enterTextInput(t, m)
+
+	content := m.View().Content
+	if !strings.Contains(content, "enter submit") {
+		t.Error("View should contain hint text")
+	}
+	if !strings.Contains(content, "esc back") {
+		t.Error("View should contain esc hint")
+	}
+}
+
+func TestTextInput_ViewContainsErrorWhenShown(t *testing.T) {
+	m := newTestModel(textInputItems(), textInputRegistry())
+	m = setWindowSize(t, m, 80, 40)
+	m = enterTextInput(t, m)
+
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+
+	content := m.View().Content
+	if !strings.Contains(content, "input required") {
+		t.Error("View should contain error text when showInputErr is true")
+	}
+}
+
+func TestTextInput_ViewDoesNotContainListItems(t *testing.T) {
+	items := []list.Item{
+		item.Item{Type: "cmd", Display: "Claude", Action: item.ActionTextInput, Prompt: "Enter name", Cmd: "claude", Data: map[string]string{}},
+		item.Item{Type: "cmd", Display: "htop-visible-marker", Action: item.ActionExecute, Cmd: "htop"},
+	}
+	m := newTestModel(items, textInputRegistry())
+	m = setWindowSize(t, m, 80, 40)
+	m = enterTextInput(t, m)
+
+	content := m.View().Content
+	if strings.Contains(content, "htop-visible-marker") {
+		t.Error("View should not contain list items during text input mode")
+	}
+}
