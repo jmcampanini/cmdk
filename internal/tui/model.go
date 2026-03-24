@@ -229,6 +229,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.list.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
 		}
 		return m, nil
+	case tea.PasteMsg:
+		if m.textInputItem != nil {
+			m.showInputErr = false
+			var cmd tea.Cmd
+			m.textInput, cmd = m.textInput.Update(msg)
+			return m, cmd
+		}
 	case tea.KeyPressMsg:
 		if m.textInputItem != nil {
 			return m.updateTextInput(msg)
