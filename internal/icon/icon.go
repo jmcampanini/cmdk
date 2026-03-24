@@ -2,6 +2,7 @@ package icon
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/rivo/uniseg"
@@ -74,6 +75,9 @@ var registry map[string]string
 func init() {
 	registry = make(map[string]string, len(entries))
 	for _, e := range entries {
+		if _, dup := registry[e.Alias]; dup {
+			panic(fmt.Sprintf("icon: duplicate alias %q", e.Alias))
+		}
 		registry[e.Alias] = e.Icon
 	}
 }
@@ -101,7 +105,7 @@ func Resolve(raw string) (string, error) {
 }
 
 func All() []Entry {
-	return entries
+	return slices.Clone(entries)
 }
 
 func parseAlias(raw string) (string, bool) {
@@ -114,11 +118,11 @@ func parseAlias(raw string) (string, bool) {
 func suggestAlias(invalid string) string {
 	best := ""
 	bestLen := 0
-	for alias := range registry {
-		prefix := commonPrefix(invalid, alias)
+	for _, e := range entries {
+		prefix := commonPrefix(invalid, e.Alias)
 		if prefix > bestLen {
 			bestLen = prefix
-			best = alias
+			best = e.Alias
 		}
 	}
 	if bestLen >= 4 {

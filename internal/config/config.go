@@ -97,18 +97,27 @@ func validateCommands(section string, cmds []Command) error {
 	return nil
 }
 
-func (c *Config) resolveIcons() {
-	resolveCommandIcons(c.Commands)
-	resolveCommandIcons(c.DirActions)
+func (c *Config) resolveIcons() error {
+	if err := resolveCommandIcons(c.Commands); err != nil {
+		return fmt.Errorf("resolving command icons: %w", err)
+	}
+	if err := resolveCommandIcons(c.DirActions); err != nil {
+		return fmt.Errorf("resolving dir_action icons: %w", err)
+	}
+	return nil
 }
 
-func resolveCommandIcons(cmds []Command) {
+func resolveCommandIcons(cmds []Command) error {
 	for i := range cmds {
 		if cmds[i].Icon != "" {
-			resolved, _ := icon.Resolve(cmds[i].Icon)
+			resolved, err := icon.Resolve(cmds[i].Icon)
+			if err != nil {
+				return fmt.Errorf("command %q icon: %w", cmds[i].Name, err)
+			}
 			cmds[i].Icon = resolved
 		}
 	}
+	return nil
 }
 
 // Load always returns a valid *Config, even when err is non-nil (defaults are used as fallback).
@@ -135,7 +144,9 @@ func Load(path string) (*Config, error) {
 	if err := cfg.Validate(); err != nil {
 		return newDefaultConfig(), err
 	}
-	cfg.resolveIcons()
+	if err := cfg.resolveIcons(); err != nil {
+		return newDefaultConfig(), err
+	}
 	return &cfg, nil
 }
 
