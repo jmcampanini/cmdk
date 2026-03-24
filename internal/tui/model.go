@@ -174,9 +174,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.list.FilterState() == list.Filtering &&
 			m.list.FilterInput.Value() == "" {
 			m.list.ResetFilter()
-			var cmd tea.Cmd
-			m.list, cmd = m.list.Update(msg)
-			return m, cmd
+			return m, nil
 		}
 		if msg.String() == "esc" && m.list.FilterState() == list.Unfiltered {
 			if len(m.accumulated) > 0 {
