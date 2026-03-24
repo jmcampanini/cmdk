@@ -188,6 +188,43 @@ func TestDirActionsGenerator_NoPaneID_NoKeyInData(t *testing.T) {
 	}
 }
 
+func TestDirActionsGenerator_NewWindowHasIcon(t *testing.T) {
+	items := runDirActions(dirAccumulated("/tmp"), Context{})
+	if items[0].Icon == "" {
+		t.Error("New window item should have a non-empty Icon")
+	}
+	if items[0].Icon != "\uf2d0" {
+		t.Errorf("New window Icon = %q, want \\uf2d0", items[0].Icon)
+	}
+}
+
+func TestDirActionsGenerator_ConfigIconPassedThrough(t *testing.T) {
+	cfg := &config.Config{
+		DirActions: []config.Command{
+			{Name: "Browse", Cmd: "yazi", Icon: "\ue709"},
+		},
+	}
+	items := runDirActions(dirAccumulated("/tmp"), Context{Config: cfg})
+	if len(items) != 2 {
+		t.Fatalf("got %d items, want 2", len(items))
+	}
+	if items[1].Icon != "\ue709" {
+		t.Errorf("config item Icon = %q, want \\ue709", items[1].Icon)
+	}
+}
+
+func TestDirActionsGenerator_ConfigNoIcon(t *testing.T) {
+	cfg := &config.Config{
+		DirActions: []config.Command{
+			{Name: "Yazi", Cmd: "yazi"},
+		},
+	}
+	items := runDirActions(dirAccumulated("/tmp"), Context{Config: cfg})
+	if items[1].Icon != "" {
+		t.Errorf("config item Icon = %q, want empty", items[1].Icon)
+	}
+}
+
 func TestDirActionsGenerator_DataMapsAreIndependent(t *testing.T) {
 	cfg := &config.Config{
 		DirActions: []config.Command{

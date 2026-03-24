@@ -10,11 +10,14 @@ import (
 
 	log "charm.land/log/v2"
 	"github.com/BurntSushi/toml"
+
+	"github.com/jmcampanini/cmdk/internal/icon"
 )
 
 type Command struct {
 	Name string `toml:"name"`
 	Cmd  string `toml:"cmd"`
+	Icon string `toml:"icon"`
 }
 
 type Timeout struct {
@@ -85,6 +88,34 @@ func validateCommands(section string, cmds []Command) error {
 		if cmd.Cmd == "" {
 			return fmt.Errorf("%s[%d].cmd cannot be empty", section, i)
 		}
+		if cmd.Icon != "" {
+			if _, err := icon.Resolve(cmd.Icon); err != nil {
+				return fmt.Errorf("%s[%d].icon: %w", section, i, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (c *Config) resolveIcons() error {
+	if err := resolveCommandIcons(c.Commands); err != nil {
+		return fmt.Errorf("resolving command icons: %w", err)
+	}
+	if err := resolveCommandIcons(c.DirActions); err != nil {
+		return fmt.Errorf("resolving dir_action icons: %w", err)
+	}
+	return nil
+}
+
+func resolveCommandIcons(cmds []Command) error {
+	for i := range cmds {
+		if cmds[i].Icon != "" {
+			resolved, err := icon.Resolve(cmds[i].Icon)
+			if err != nil {
+				return fmt.Errorf("command %q icon: %w", cmds[i].Name, err)
+			}
+			cmds[i].Icon = resolved
+		}
 	}
 	return nil
 }
@@ -111,6 +142,9 @@ func Load(path string) (*Config, error) {
 	}
 
 	if err := cfg.Validate(); err != nil {
+		return newDefaultConfig(), err
+	}
+	if err := cfg.resolveIcons(); err != nil {
 		return newDefaultConfig(), err
 	}
 	return &cfg, nil

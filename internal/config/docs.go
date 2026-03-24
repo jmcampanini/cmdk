@@ -27,8 +27,9 @@ func ConfigDocs() []SectionDoc {
 			Fields: []FieldDoc{
 				{Name: "name", Type: "string", Description: "Display name in the launcher.", Validation: "cannot be empty"},
 				{Name: "cmd", Type: "string", Description: "Shell command or Go template to execute.", Validation: "cannot be empty"},
+				{Name: "icon", Type: "string", Description: "Nerdfont icon: alias like :nf-dev-github:, raw glyph, or \\uXXXX escape. Run \"cmdk docs icons\" to list aliases.", Validation: "if :nf-*: alias, must be in supported set; otherwise must be a single grapheme cluster"},
 			},
-			Example: "[[commands]]\nname = \"htop\"\ncmd = \"htop\"\n\n[[commands]]\nname = \"lazygit\"\ncmd = \"lazygit\"",
+			Example: "[[commands]]\nname = \"htop\"\ncmd = \"htop\"\n\n[[commands]]\nname = \"GitHub\"\ncmd = \"open https://github.com\"\nicon = \":nf-dev-github:\"",
 		},
 		{
 			Name:        "dir_actions",
@@ -36,6 +37,7 @@ func ConfigDocs() []SectionDoc {
 			Fields: []FieldDoc{
 				{Name: "name", Type: "string", Description: "Display name in the action list.", Validation: "cannot be empty"},
 				{Name: "cmd", Type: "string", Description: "Shell command or Go template to execute.", Validation: "cannot be empty"},
+				{Name: "icon", Type: "string", Description: "Nerdfont icon: alias like :nf-dev-github:, raw glyph, or \\uXXXX escape. Run \"cmdk docs icons\" to list aliases.", Validation: "if :nf-*: alias, must be in supported set; otherwise must be a single grapheme cluster"},
 			},
 			Example: "# simple command (no template variables)\n[[dir_actions]]\nname = \"Git Status\"\ncmd = \"git status\"\n\n# using {{.path}} directly\n[[dir_actions]]\nname = \"List Files\"\ncmd = \"ls -la {{.path}}\"\n\n# using {{sq .path}} for shell-safe quoting\n[[dir_actions]]\nname = \"Yazi\"\ncmd = \"tmux split-window -h yazi {{sq .path}}\"\n\n# using CMDK_PANE_ID environment variable\n[[dir_actions]]\nname = \"Split Here\"\ncmd = \"tmux split-window -t \\\"$CMDK_PANE_ID\\\" -c {{sq .path}}\"",
 		},

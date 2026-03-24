@@ -219,17 +219,20 @@ func (m Model) handleBack() Model {
 }
 
 func (m Model) navigateTo(accumulated []item.Item) Model {
+	var listItems []list.Item
+
 	gen, err := m.registry.Resolve(accumulated)
 	if err != nil {
 		log.Error("failed to resolve generator", "error", err)
 		errItem := item.NewItem()
 		errItem.Display = fmt.Sprintf("navigation error: %s", err)
-		m.list.SetItems([]list.Item{errItem})
+		listItems = []list.Item{errItem}
 	} else {
 		m.accumulated = accumulated
-		m.list.SetItems(item.GroupAndOrder(gen(m.accumulated, m.ctx)))
+		listItems = item.GroupAndOrder(gen(m.accumulated, m.ctx))
 	}
 
+	m.list.SetItems(listItems)
 	m.list.ResetSelected()
 	m.list.ResetFilter()
 	if m.winHeight > 0 {

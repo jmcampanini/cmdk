@@ -14,6 +14,7 @@ type Item struct {
 	Data    map[string]string
 	Action  ActionType
 	Cmd     string
+	Icon    string
 }
 
 func NewItem() Item {

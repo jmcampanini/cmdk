@@ -148,6 +148,34 @@ func TestDelegate_TruncatesLongText(t *testing.T) {
 	}
 }
 
+func TestDelegate_RenderCustomIconOverridesType(t *testing.T) {
+	d := testDelegate()
+	customIcon := "\ue709"
+	items := []list.Item{
+		item.Item{Type: "cmd", Display: "GitHub", Icon: customIcon},
+	}
+	out := renderItem(d, items, 80, 0)
+
+	if !strings.Contains(out, customIcon) {
+		t.Errorf("expected custom icon %q in output, got %q", customIcon, out)
+	}
+	if strings.Contains(out, iconCmd) {
+		t.Errorf("custom icon should replace default cmd icon, got %q", out)
+	}
+}
+
+func TestDelegate_EmptyIconUsesDefault(t *testing.T) {
+	d := testDelegate()
+	items := []list.Item{
+		item.Item{Type: "cmd", Display: "test", Icon: ""},
+	}
+	out := renderItem(d, items, 80, 0)
+
+	if !strings.Contains(out, iconCmd) {
+		t.Errorf("expected default cmd icon when Icon is empty, got %q", out)
+	}
+}
+
 func TestDelegate_ConstructorWiresAllTypes(t *testing.T) {
 	d := testDelegate()
 	for _, typ := range []string{"window", "dir", "cmd"} {
