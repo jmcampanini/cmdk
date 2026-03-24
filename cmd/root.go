@@ -13,7 +13,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/jmcampanini/cmdk/internal/config"
-	"github.com/jmcampanini/cmdk/internal/cwd"
 	"github.com/jmcampanini/cmdk/internal/execute"
 	"github.com/jmcampanini/cmdk/internal/generator"
 	"github.com/jmcampanini/cmdk/internal/item"
@@ -68,9 +67,6 @@ var rootCmd = &cobra.Command{
 			{Name: "windows", Type: "window", Fetch: tmux.ListWindows},
 			{Name: "zoxide", Type: "dir", Limit: zoxideCfg.Limit, Fetch: func(ctx context.Context) ([]item.Item, error) {
 				return zoxide.ListDirs(ctx, zoxideCfg.MinScore, home, shortenHome, rules)
-			}},
-			{Name: "cwd", Type: "dir", Fetch: func(ctx context.Context) ([]item.Item, error) {
-				return cwd.ListCWD(ctx, home, shortenHome, rules)
 			}},
 		}
 		if cfgErr != nil {
