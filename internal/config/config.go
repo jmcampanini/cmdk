@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	log "charm.land/log/v2"
@@ -105,6 +106,9 @@ func validateCommands(section string, cmds []Command) error {
 			if _, err := icon.Resolve(cmd.Icon); err != nil {
 				return fmt.Errorf("%s[%d].icon: %w", section, i, err)
 			}
+		}
+		if cmd.HasPrompt() && !strings.Contains(cmd.Cmd, ".prompt") {
+			return fmt.Errorf("%s[%d]: prompt is set but cmd does not reference {{.prompt}}", section, i)
 		}
 	}
 	return nil

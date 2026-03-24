@@ -371,6 +371,34 @@ func TestValidate_EmptyDisplayRuleKey(t *testing.T) {
 	}
 }
 
+func TestValidate_PromptWithoutTemplateReference(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Commands = []Command{{Name: "test", Cmd: "echo hello", Prompt: "Enter value"}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error when prompt is set but cmd does not reference .prompt")
+	}
+	if !strings.Contains(err.Error(), "does not reference") {
+		t.Errorf("error = %q, want mention of missing .prompt reference", err.Error())
+	}
+}
+
+func TestValidate_PromptWithTemplateReference(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Commands = []Command{{Name: "test", Cmd: "echo {{.prompt}}", Prompt: "Enter value"}}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_PromptWithSqTemplateReference(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Commands = []Command{{Name: "test", Cmd: "echo {{sq .prompt}}", Prompt: "Enter value"}}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestValidate_ValidDirActions(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.DirActions = []Command{

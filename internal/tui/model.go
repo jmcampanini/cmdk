@@ -176,6 +176,9 @@ func textInputStyles(t theme.Theme) textinput.Styles {
 
 func (m Model) enterTextInputMode(sel item.Item) Model {
 	sel.Data = maps.Clone(sel.Data)
+	if sel.Data == nil {
+		sel.Data = make(map[string]string)
+	}
 	m.textInputItem = &sel
 	m.showInputErr = false
 
@@ -241,6 +244,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m.handleNextList(sel), nil
 				case item.ActionTextInput:
 					return m.enterTextInputMode(sel), nil
+				default:
+					log.Warn("unhandled action type", "action", sel.Action, "display", sel.Display)
 				}
 			}
 		}

@@ -896,6 +896,38 @@ func TestTextInput_WindowSizeMsg_DoesNotCrash(t *testing.T) {
 	}
 }
 
+func TestTextInput_CtrlC_Quits(t *testing.T) {
+	m := newTestModel(textInputItems(), textInputRegistry())
+	m.list.SetSize(80, 40)
+	m = enterTextInput(t, m)
+
+	_, cmd := m.Update(tea.KeyPressMsg{Code: rune('c'), Mod: tea.ModCtrl})
+	if cmd == nil {
+		t.Error("Ctrl+C should produce Quit command")
+	}
+}
+
+func TestTextInput_NilDataMap_DoesNotPanic(t *testing.T) {
+	items := []list.Item{
+		item.Item{Type: "cmd", Display: "Claude", Action: item.ActionTextInput, Prompt: "Name", Cmd: "echo {{.prompt}}"},
+	}
+	m := newTestModel(items, textInputRegistry())
+	m.list.SetSize(80, 40)
+	m = enterTextInput(t, m)
+
+	result, _ := m.Update(tea.KeyPressMsg{Code: rune('x'), Text: "x"})
+	m = result.(Model)
+	result, _ = m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.Selected() == nil {
+		t.Fatal("Selected() should be set")
+	}
+	if m.Selected().Data["prompt"] != "x" {
+		t.Errorf("Data[prompt] = %q, want x", m.Selected().Data["prompt"])
+	}
+}
+
 func TestTextInput_ViewContainsPromptAndHints(t *testing.T) {
 	m := newTestModel(textInputItems(), textInputRegistry())
 	m = setWindowSize(t, m, 80, 40)
