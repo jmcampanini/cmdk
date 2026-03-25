@@ -209,7 +209,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if msg.String() == "enter" {
-		sel, ok := m.resolveEnterTarget()
+		sel, ok := resolveListTarget(m.list)
 		if ok && sel.Type != "error" {
 			switch sel.Action {
 			case item.ActionExecute:
@@ -334,8 +334,7 @@ func (m Model) stageEsc() (tea.Model, tea.Cmd) {
 	}
 	stageIdx := len(m.accumulated) - actionIdx - 1
 	if stageIdx == 0 {
-		m.accumulated = slices.Clone(m.accumulated[:len(m.accumulated)-1])
-		return m.navigateTo(m.accumulated), nil
+		return m.handleBack(), nil
 	}
 	popped := m.accumulated[len(m.accumulated)-1]
 	m.accumulated = slices.Clone(m.accumulated[:len(m.accumulated)-1])
@@ -527,16 +526,6 @@ func (m Model) completeStages() Model {
 	m.selected = &action
 	m.accumulated = slices.Delete(slices.Clone(m.accumulated), actionIdx, actionIdx+1)
 	return m
-}
-
-// resolveEnterTarget returns the item that Enter should act on.
-// When filtering with exactly one visible match, that match is returned
-// directly so the user doesn't have to explicitly accept the filter first.
-// When filtering with multiple matches, no item is returned (false),
-// allowing Enter to fall through to the list's built-in filter acceptance.
-// Outside filter mode, the normal list selection is returned.
-func (m Model) resolveEnterTarget() (item.Item, bool) {
-	return resolveListTarget(m.list)
 }
 
 func (m Model) handleNextList(sel item.Item) (Model, tea.Cmd) {
