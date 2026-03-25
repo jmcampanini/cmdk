@@ -223,9 +223,7 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.list.FilterState() == list.Filtering &&
 		m.list.FilterInput.Value() == "" {
 		m.list.ResetFilter()
-		var cmd tea.Cmd
-		m.list, cmd = m.list.Update(msg)
-		return m, cmd
+		return m, nil
 	}
 	if msg.String() == "esc" && m.list.FilterState() == list.Unfiltered {
 		if len(m.accumulated) > 0 {
@@ -318,9 +316,7 @@ func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pickerList.FilterState() == list.Filtering &&
 		m.pickerList.FilterInput.Value() == "" {
 		m.pickerList.ResetFilter()
-		var cmd tea.Cmd
-		m.pickerList, cmd = m.pickerList.Update(msg)
-		return m, cmd
+		return m, nil
 	}
 
 	var cmd tea.Cmd

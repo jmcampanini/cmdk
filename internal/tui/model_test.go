@@ -568,7 +568,7 @@ func TestView_StackDisappearsAfterBack(t *testing.T) {
 	}
 }
 
-func TestDownDuringEmptyFilter_ExitsFilterAndNavigates(t *testing.T) {
+func TestDownDuringEmptyFilter_ExitsFilterWithoutMoving(t *testing.T) {
 	m := newTestModel(testItems(), testRegistry())
 	m.list.SetSize(80, 40)
 
@@ -582,8 +582,8 @@ func TestDownDuringEmptyFilter_ExitsFilterAndNavigates(t *testing.T) {
 	if m.list.FilterState() != list.Unfiltered {
 		t.Errorf("FilterState() = %v, want %v", m.list.FilterState(), list.Unfiltered)
 	}
-	if m.list.Index() != 1 {
-		t.Errorf("Index() = %d, want 1", m.list.Index())
+	if m.list.Index() != 0 {
+		t.Errorf("Index() = %d, want 0 (Down should only exit filter, not move cursor)", m.list.Index())
 	}
 }
 
@@ -600,6 +600,9 @@ func TestUpDuringEmptyFilter_ExitsFilter(t *testing.T) {
 
 	if m.list.FilterState() != list.Unfiltered {
 		t.Errorf("FilterState() = %v, want %v", m.list.FilterState(), list.Unfiltered)
+	}
+	if m.list.Index() != 0 {
+		t.Errorf("Index() = %d, want 0 (Up should only exit filter, not move cursor)", m.list.Index())
 	}
 }
 
