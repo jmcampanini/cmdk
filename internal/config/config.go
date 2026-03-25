@@ -37,10 +37,7 @@ type Behavior struct {
 }
 
 func (b Behavior) ShouldAutoSelectSingle() bool {
-	if b.AutoSelectSingle == nil {
-		return true
-	}
-	return *b.AutoSelectSingle
+	return b.AutoSelectSingle == nil || *b.AutoSelectSingle
 }
 
 type Timeout struct {
@@ -83,17 +80,11 @@ func DefaultConfig() Config {
 }
 
 func (c Config) Validate() error {
-	if c.Timeout.Fetch < 0 {
-		return errors.New("timeout.fetch cannot be negative")
+	if err := validateTimeout("fetch", c.Timeout.Fetch); err != nil {
+		return err
 	}
-	if c.Timeout.Fetch > 0 && c.Timeout.Fetch < time.Millisecond {
-		return fmt.Errorf("timeout.fetch value %s is suspiciously small; use a duration string like \"2s\"", c.Timeout.Fetch)
-	}
-	if c.Timeout.Picker < 0 {
-		return errors.New("timeout.picker cannot be negative")
-	}
-	if c.Timeout.Picker > 0 && c.Timeout.Picker < time.Millisecond {
-		return fmt.Errorf("timeout.picker value %s is suspiciously small; use a duration string like \"2s\"", c.Timeout.Picker)
+	if err := validateTimeout("picker", c.Timeout.Picker); err != nil {
+		return err
 	}
 	for name, sc := range c.Sources {
 		if sc.Limit < 0 {
@@ -110,6 +101,16 @@ func (c Config) Validate() error {
 		if match == "" {
 			return errors.New("display.rules: match key cannot be empty")
 		}
+	}
+	return nil
+}
+
+func validateTimeout(name string, d time.Duration) error {
+	if d < 0 {
+		return fmt.Errorf("timeout.%s cannot be negative", name)
+	}
+	if d > 0 && d < time.Millisecond {
+		return fmt.Errorf("timeout.%s value %s is suspiciously small; use a duration string like \"2s\"", name, d)
 	}
 	return nil
 }

@@ -53,32 +53,13 @@ type Model struct {
 const horizontalPadding = 1
 
 func NewModel(items []list.Item, paneID string, accumulated []item.Item, registry *generator.Registry, ctx generator.Context, t theme.Theme) Model {
-	l := list.New(items, newItemDelegate(t), 0, 0)
-	l.Title = "cmdk"
-	l.Filter = list.DefaultFilter
-	l.SetShowStatusBar(false)
-	l.SetShowPagination(false)
-	applyListStyles(&l, t)
-	l.SetShowTitle(false)
-	l.SetShowFilter(false)
-
-	// Start in filter mode so the user can begin typing immediately.
-	// tea.Cmd is intentionally discarded — it returns textinput.Blink which is
-	// unused because Cursor.Blink is set to false in applyListStyles. Moving
-	// this to Init() would be cleaner but requires a larger refactor.
-	l.SetSize(1, 1)
-	l, _ = l.Update(tea.KeyPressMsg{Code: rune('/')})
-	if l.FilterState() != list.Filtering {
-		log.Warn("failed to enter filter mode during init; falling back to browse mode")
-	}
-
 	autoSelect := true
 	if ctx.Config != nil {
 		autoSelect = ctx.Config.Behavior.ShouldAutoSelectSingle()
 	}
 
 	return Model{
-		list:             l,
+		list:             newFilterList(items, t),
 		paneID:           paneID,
 		accumulated:      accumulated,
 		registry:         registry,
@@ -88,6 +69,28 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 		theme:            t,
 		autoSelectSingle: autoSelect,
 	}
+}
+
+// newFilterList creates a styled list that starts in filter mode.
+// tea.Cmd from the '/' key is intentionally discarded -- it returns
+// textinput.Blink which is unused because Cursor.Blink is set to false
+// in applyListStyles.
+func newFilterList(items []list.Item, t theme.Theme) list.Model {
+	l := list.New(items, newItemDelegate(t), 0, 0)
+	l.Title = "cmdk"
+	l.Filter = list.DefaultFilter
+	l.SetShowStatusBar(false)
+	l.SetShowPagination(false)
+	l.SetShowTitle(false)
+	l.SetShowFilter(false)
+	applyListStyles(&l, t)
+
+	l.SetSize(1, 1)
+	l, _ = l.Update(tea.KeyPressMsg{Code: rune('/')})
+	if l.FilterState() != list.Filtering {
+		log.Warn("failed to enter filter mode during list init; falling back to browse mode")
+	}
+	return l
 }
 
 func applyListStyles(l *list.Model, t theme.Theme) {
@@ -426,8 +429,7 @@ func (m Model) advanceStage() Model {
 		rendered, err := execute.RenderCmd(stage.Source, data)
 		if err != nil {
 			log.Error("failed to render picker source template", "key", stage.Key, "error", err)
-			m = m.initPickerWithError(stage.Key, fmt.Sprintf("template error: %s", err))
-			return m
+			return m.initPickerWithError(stage.Key, fmt.Sprintf("template error: %s", err))
 		}
 		var pickerTimeout time.Duration
 		if m.ctx.Config != nil {
@@ -436,13 +438,11 @@ func (m Model) advanceStage() Model {
 		items, runErr := runPickerSource(rendered, pickerTimeout)
 		if runErr != nil {
 			log.Error("picker source command failed", "key", stage.Key, "command", rendered, "error", runErr)
-			m = m.initPickerWithError(stage.Key, fmt.Sprintf("command error: %s", runErr))
-			return m
+			return m.initPickerWithError(stage.Key, fmt.Sprintf("command error: %s", runErr))
 		}
 		if len(items) == 0 {
 			log.Warn("picker source returned no items", "key", stage.Key, "command", rendered)
-			m = m.initPickerWithError(stage.Key, "no items returned")
-			return m
+			return m.initPickerWithError(stage.Key, "no items returned")
 		}
 		m = m.initPicker(stage.Key, items)
 
@@ -501,21 +501,7 @@ func (m Model) initPicker(key string, items []item.Item) Model {
 		listItems[i] = it
 	}
 
-	pl := list.New(listItems, newItemDelegate(m.theme), 0, 0)
-	pl.Title = "cmdk"
-	pl.Filter = list.DefaultFilter
-	pl.SetShowStatusBar(false)
-	pl.SetShowPagination(false)
-	pl.SetShowTitle(false)
-	pl.SetShowFilter(false)
-	applyListStyles(&pl, m.theme)
-
-	pl.SetSize(max(m.winWidth, 1), 1)
-	pl, _ = pl.Update(tea.KeyPressMsg{Code: rune('/')})
-	if pl.FilterState() != list.Filtering {
-		log.Warn("failed to enter filter mode during picker init; falling back to browse mode")
-	}
-
+	pl := newFilterList(listItems, m.theme)
 	if m.winHeight > 0 {
 		pl.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
 	}
@@ -527,10 +513,7 @@ func (m Model) initPicker(key string, items []item.Item) Model {
 }
 
 func (m Model) initPickerWithError(key string, errMsg string) Model {
-	errItem := item.NewItem()
-	errItem.Type = "error"
-	errItem.Display = errMsg
-	return m.initPicker(key, []item.Item{errItem})
+	return m.initPicker(key, []item.Item{{Type: "error", Display: errMsg}})
 }
 
 // completeStages extracts the action item as selected and removes it from accumulated,
@@ -587,10 +570,7 @@ func (m Model) navigateTo(accumulated []item.Item) Model {
 	gen, err := m.registry.Resolve(accumulated)
 	if err != nil {
 		log.Error("failed to resolve generator", "error", err)
-		errItem := item.NewItem()
-		errItem.Type = "error"
-		errItem.Display = fmt.Sprintf("navigation error: %s", err)
-		listItems = []list.Item{errItem}
+		listItems = []list.Item{item.Item{Type: "error", Display: fmt.Sprintf("navigation error: %s", err)}}
 	} else {
 		m.accumulated = accumulated
 		listItems = item.GroupAndOrder(gen(m.accumulated, m.ctx))

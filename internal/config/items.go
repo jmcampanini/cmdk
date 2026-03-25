@@ -8,8 +8,8 @@ import (
 
 func (a Action) ToItem() item.Item {
 	stages := make([]item.Stage, len(a.Stages))
-	for j, s := range a.Stages {
-		stages[j] = item.Stage{
+	for i, s := range a.Stages {
+		stages[i] = item.Stage{
 			Type:    item.StageType(s.Type),
 			Key:     s.Key,
 			Text:    s.Text,
@@ -23,15 +23,15 @@ func (a Action) ToItem() item.Item {
 		action = item.ActionStaged
 	}
 
-	it := item.NewItem()
-	it.Type = "action"
-	it.Source = "config"
-	it.Display = a.Name
-	it.Action = action
-	it.Cmd = a.Cmd
-	it.Icon = a.Icon
-	it.Stages = stages
-	return it
+	return item.Item{
+		Type:    "action",
+		Source:  "config",
+		Display: a.Name,
+		Action:  action,
+		Cmd:     a.Cmd,
+		Icon:    a.Icon,
+		Stages:  stages,
+	}
 }
 
 func MatchingActions(cfg *Config, matchType string) func(context.Context) ([]item.Item, error) {
