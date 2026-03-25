@@ -42,6 +42,8 @@ func newItemDelegate(t theme.Theme) itemDelegate {
 			"dir":    {iconDir, t.TypeDir},
 			"cmd":    {iconCmd, t.TypeCmd},
 			"action": {iconCmd, t.TypeCmd},
+			"pick":   {iconCmd, t.TypeCmd},
+			"error":  {iconCmd, t.TypeCmd},
 		},
 		textFg:      t.Text,
 		selBg:       t.Surface1,

@@ -207,7 +207,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if msg.String() == "enter" {
 		sel, ok := m.resolveEnterTarget()
-		if ok {
+		if ok && sel.Type != "error" {
 			switch sel.Action {
 			case item.ActionExecute:
 				m.selected = &sel
@@ -394,6 +394,7 @@ func (m Model) advanceStage() Model {
 	case item.StagePrompt:
 		label, err := execute.RenderCmd(stage.Text, data)
 		if err != nil {
+			log.Error("failed to render prompt text template", "key", stage.Key, "error", err)
 			m.stageLabel = fmt.Sprintf("template error: %s", err)
 		} else {
 			m.stageLabel = label
@@ -415,15 +416,18 @@ func (m Model) advanceStage() Model {
 	case item.StagePicker:
 		rendered, err := execute.RenderCmd(stage.Source, data)
 		if err != nil {
+			log.Error("failed to render picker source template", "key", stage.Key, "error", err)
 			m = m.initPickerWithError(stage.Key, fmt.Sprintf("template error: %s", err))
 			return m
 		}
 		items, runErr := runPickerSource(rendered)
 		if runErr != nil {
+			log.Error("picker source command failed", "key", stage.Key, "command", rendered, "error", runErr)
 			m = m.initPickerWithError(stage.Key, fmt.Sprintf("command error: %s", runErr))
 			return m
 		}
 		if len(items) == 0 {
+			log.Warn("picker source returned no items", "key", stage.Key, "command", rendered)
 			m = m.initPickerWithError(stage.Key, "no items returned")
 			return m
 		}
@@ -563,6 +567,7 @@ func (m Model) navigateTo(accumulated []item.Item) Model {
 	if err != nil {
 		log.Error("failed to resolve generator", "error", err)
 		errItem := item.NewItem()
+		errItem.Type = "error"
 		errItem.Display = fmt.Sprintf("navigation error: %s", err)
 		listItems = []list.Item{errItem}
 	} else {

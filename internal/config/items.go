@@ -23,15 +23,15 @@ func (a Action) ToItem() item.Item {
 		action = item.ActionStaged
 	}
 
-	return item.Item{
-		Type:    "action",
-		Source:  "config",
-		Display: a.Name,
-		Action:  action,
-		Cmd:     a.Cmd,
-		Icon:    a.Icon,
-		Stages:  stages,
-	}
+	it := item.NewItem()
+	it.Type = "action"
+	it.Source = "config"
+	it.Display = a.Name
+	it.Action = action
+	it.Cmd = a.Cmd
+	it.Icon = a.Icon
+	it.Stages = stages
+	return it
 }
 
 func MatchingActions(cfg *Config, matchType string) func(context.Context) ([]item.Item, error) {

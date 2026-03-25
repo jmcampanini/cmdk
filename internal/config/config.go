@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 	"time"
 
 	log "charm.land/log/v2"
@@ -191,12 +192,19 @@ func (c *Config) resolveIcons() error {
 func Load(path string) (*Config, error) {
 	cfg := DefaultConfig()
 
-	_, err := toml.DecodeFile(path, &cfg)
+	meta, err := toml.DecodeFile(path, &cfg)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return newDefaultConfig(), nil
 		}
 		return newDefaultConfig(), err
+	}
+
+	for _, key := range meta.Undecoded() {
+		k := key.String()
+		if k == "commands" || k == "dir_actions" || strings.HasPrefix(k, "commands.") || strings.HasPrefix(k, "dir_actions.") {
+			return newDefaultConfig(), fmt.Errorf("config key %q is no longer supported; migrate to [[actions]] (see cmdk docs)", k)
+		}
 	}
 
 	defaults := DefaultConfig()
