@@ -540,6 +540,38 @@ func TestValidate_SuspiciouslySmallTimeout(t *testing.T) {
 	}
 }
 
+func TestValidate_NegativePickerTimeout(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Timeout.Picker = -1 * time.Second
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for negative picker timeout")
+	}
+	if !strings.Contains(err.Error(), "timeout.picker") {
+		t.Errorf("error = %q, want to contain 'timeout.picker'", err.Error())
+	}
+}
+
+func TestValidate_SuspiciouslySmallPickerTimeout(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Timeout.Picker = 500 * time.Nanosecond
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for sub-millisecond picker timeout")
+	}
+	if !strings.Contains(err.Error(), "timeout.picker") {
+		t.Errorf("error = %q, want to contain 'timeout.picker'", err.Error())
+	}
+}
+
+func TestValidate_ZeroPickerTimeout(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Timeout.Picker = 0
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("zero picker timeout should be valid: %v", err)
+	}
+}
+
 func TestLoad_OtherSourcePreservesZoxideDefault(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")

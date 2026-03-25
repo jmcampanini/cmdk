@@ -57,7 +57,7 @@ func ConfigDocs() []SectionDoc {
 			Description: "Timeouts for async operations.",
 			Fields: []FieldDoc{
 				{Name: "fetch", Type: "duration", Description: "Max wait for source data. Accepts Go duration strings: ms, s, m, h.", Validation: "cannot be negative; if non-zero, must be >= 1ms"},
-				{Name: "picker", Type: "duration", Description: "Max wait for picker stage source commands.", Validation: "cannot be negative; if non-zero, must be >= 1ms"},
+				{Name: "picker", Type: "duration", Description: "Max wait for picker stage source commands. Zero means no timeout.", Validation: "cannot be negative; if non-zero, must be >= 1ms"},
 			},
 			Example: "[timeout]\nfetch = \"5s\"    # e.g. 500ms, 2s, 1m\npicker = \"2s\"",
 		},
@@ -123,9 +123,11 @@ TEMPLATE VARIABLES
   Action commands and stage config fields support Go text/template syntax.
 
   Available variables (from stack):
-      {{.path}}        directory path (for dir-matching actions)
-      {{.pane_id}}     tmux pane ID (when --pane-id is set)
-      {{.<key>}}       stage output keyed by the stage's key field
+      {{.path}}           directory path (for dir-matching actions)
+      {{.pane_id}}        tmux pane ID (when --pane-id is set)
+      {{.session}}        tmux session name (for window-matching actions)
+      {{.window_index}}   tmux window index (for window-matching actions)
+      {{.<key>}}          stage output keyed by the stage's key field
 
   Available functions:
       {{sq .path}}     shell-safe single-quoting

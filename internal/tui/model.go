@@ -219,6 +219,7 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m.handleNextList(sel)
 			default:
 				log.Error("bug: unknown action type", "action", sel.Action)
+				return m, nil
 			}
 		}
 	}
@@ -253,7 +254,8 @@ func (m Model) updatePrompt(msg tea.Msg) (tea.Model, tea.Cmd) {
 		actionIdx := m.findActionIndex()
 		if actionIdx < 0 {
 			log.Error("bug: no ActionStaged item in accumulated stack")
-			return m, nil
+			m.accumulated = nil
+			return m.navigateTo(nil), nil
 		}
 		stage := m.accumulated[actionIdx].Stages[len(m.accumulated)-actionIdx-1]
 		value := m.stageInput.Value()
@@ -304,7 +306,8 @@ func (m Model) pushStageResult(key string, value string) (tea.Model, tea.Cmd) {
 	actionIdx := m.findActionIndex()
 	if actionIdx < 0 {
 		log.Error("bug: no ActionStaged item in accumulated stack")
-		return m, nil
+		m.accumulated = nil
+		return m.navigateTo(nil), nil
 	}
 	action := m.accumulated[actionIdx]
 	stageIdx := len(m.accumulated) - actionIdx - 1
@@ -326,12 +329,12 @@ func (m Model) stageEsc() (tea.Model, tea.Cmd) {
 	actionIdx := m.findActionIndex()
 	if actionIdx < 0 {
 		log.Error("bug: no ActionStaged item in accumulated stack")
-		return m, nil
+		m.accumulated = nil
+		return m.navigateTo(nil), nil
 	}
 	stageIdx := len(m.accumulated) - actionIdx - 1
 	if stageIdx == 0 {
 		m.accumulated = slices.Clone(m.accumulated[:len(m.accumulated)-1])
-		m.mode = viewList
 		return m.navigateTo(m.accumulated), nil
 	}
 	popped := m.accumulated[len(m.accumulated)-1]
@@ -339,9 +342,12 @@ func (m Model) stageEsc() (tea.Model, tea.Cmd) {
 	m = m.advanceStage()
 	// Restore prior input if going back to a prompt stage.
 	if m.mode == viewPrompt {
-		prevStage := m.accumulated[actionIdx].Stages[len(m.accumulated)-actionIdx-1]
-		if prev, ok := popped.Data[prevStage.Key]; ok {
-			m.stageInput.SetValue(prev)
+		prevIdx := len(m.accumulated) - actionIdx - 1
+		if prevIdx >= 0 && prevIdx < len(m.accumulated[actionIdx].Stages) {
+			prevStage := m.accumulated[actionIdx].Stages[prevIdx]
+			if prev, ok := popped.Data[prevStage.Key]; ok {
+				m.stageInput.SetValue(prev)
+			}
 		}
 	}
 	return m, nil
@@ -375,7 +381,8 @@ func (m Model) advanceStage() Model {
 	actionIdx := m.findActionIndex()
 	if actionIdx < 0 {
 		log.Error("bug: no ActionStaged item in accumulated stack")
-		return m
+		m.accumulated = nil
+		return m.navigateTo(nil)
 	}
 	action := m.accumulated[actionIdx]
 	stageIdx := len(m.accumulated) - actionIdx - 1
@@ -435,16 +442,23 @@ func (m Model) advanceStage() Model {
 
 	default:
 		log.Error("bug: unknown stage type", "type", stage.Type)
+		m.accumulated = slices.Clone(m.accumulated[:actionIdx])
+		return m.navigateTo(m.accumulated)
 	}
 
 	return m
 }
 
 // runPickerSource executes a shell command and returns one item per output line.
+// A zero timeout means no deadline is applied.
 // Structured as a standalone function for future conversion to async tea.Cmd.
 func runPickerSource(rendered string, timeout time.Duration) ([]item.Item, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
+	ctx := context.Background()
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
 
 	var stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, "sh", "-c", rendered)
@@ -518,7 +532,8 @@ func (m Model) completeStages() Model {
 	actionIdx := m.findActionIndex()
 	if actionIdx < 0 {
 		log.Error("bug: no ActionStaged item in accumulated stack")
-		return m
+		m.accumulated = nil
+		return m.navigateTo(nil)
 	}
 	action := m.accumulated[actionIdx]
 	m.selected = &action
@@ -561,6 +576,7 @@ func (m Model) handleBack() Model {
 }
 
 func (m Model) navigateTo(accumulated []item.Item) Model {
+	m.mode = viewList
 	var listItems []list.Item
 
 	gen, err := m.registry.Resolve(accumulated)
