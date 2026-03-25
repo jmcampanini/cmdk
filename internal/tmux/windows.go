@@ -65,6 +65,7 @@ func ParseWindows(output string) []item.Item {
 		entries = append(entries, entry{session: session, index: idx, bell: bell, item: it})
 	}
 
+	// Bell windows sort first: true sorts before false.
 	sort.Slice(entries, func(i, j int) bool {
 		if entries[i].bell != entries[j].bell {
 			return entries[i].bell

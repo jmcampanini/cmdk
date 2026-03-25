@@ -50,7 +50,7 @@ func ConfigDocs() []SectionDoc {
 			Description: "Global behavior settings.",
 			Fields: []FieldDoc{
 				{Name: "auto_select_single", Type: "bool", Description: "Skip the action list when only one action matches. Default: true."},
-				{Name: "bell_to_top", Type: "bool", Description: "Sort tmux windows with bell activity to the top of the list, above all other items."},
+				{Name: "bell_to_top", Type: "bool", Description: "Sort tmux windows with bell activity to the top of the list, above all other items. Default: true."},
 			},
 			Example: "[behavior]\nauto_select_single = false\nbell_to_top = true",
 		},
