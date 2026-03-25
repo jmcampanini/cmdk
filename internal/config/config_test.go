@@ -19,20 +19,20 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Sources["zoxide"].MinScore != 0 {
 		t.Errorf("Sources[zoxide].MinScore = %f, want 0", cfg.Sources["zoxide"].MinScore)
 	}
-	if len(cfg.Commands) != 0 {
-		t.Errorf("Commands = %d, want 0", len(cfg.Commands))
+	if len(cfg.Actions) != 0 {
+		t.Errorf("Actions = %d, want 0", len(cfg.Actions))
 	}
 	if cfg.Display.ShortenHome == nil || *cfg.Display.ShortenHome != "~" {
 		t.Errorf("Display.ShortenHome = %v, want pointer to \"~\"", cfg.Display.ShortenHome)
 	}
-	if !cfg.Behaviors.BellToTop {
-		t.Error("Behaviors.BellToTop = false, want true")
+	if !cfg.Behavior.BellToTop {
+		t.Error("Behavior.BellToTop = false, want true")
 	}
 }
 
 func TestValidate_Valid(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Commands = []Command{{Name: "htop", Cmd: "htop"}}
+	cfg.Actions = []Action{{Name: "htop", Cmd: "htop", Matches: "root"}}
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -70,19 +70,313 @@ func TestValidate_NegativeMinScore(t *testing.T) {
 	}
 }
 
-func TestValidate_EmptyCommandName(t *testing.T) {
+func TestValidate_EmptyActionName(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Commands = []Command{{Name: "", Cmd: "htop"}}
+	cfg.Actions = []Action{{Name: "", Cmd: "htop", Matches: "root"}}
 	if err := cfg.Validate(); err == nil {
-		t.Error("expected error for empty command name")
+		t.Error("expected error for empty action name")
 	}
 }
 
-func TestValidate_EmptyCommandCmd(t *testing.T) {
+func TestValidate_EmptyActionCmd(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Commands = []Command{{Name: "htop", Cmd: ""}}
+	cfg.Actions = []Action{{Name: "htop", Cmd: "", Matches: "root"}}
 	if err := cfg.Validate(); err == nil {
-		t.Error("expected error for empty command cmd")
+		t.Error("expected error for empty action cmd")
+	}
+}
+
+func TestValidate_EmptyActionMatches(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{Name: "htop", Cmd: "htop", Matches: ""}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for empty action matches")
+	}
+}
+
+func TestValidate_InvalidActionMatches(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{Name: "htop", Cmd: "htop", Matches: "invalid"}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for invalid action matches")
+	}
+}
+
+func TestValidate_ActionMatchesRoot(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{Name: "htop", Cmd: "htop", Matches: "root"}}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_ActionMatchesDir(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{Name: "Yazi", Cmd: "yazi", Matches: "dir"}}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_StagePromptValid(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "name", Text: "Enter name"}},
+	}}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_StagePromptWithDefault(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "name", Text: "Enter name", Default: "world"}},
+	}}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_StagePromptMissingText(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "name"}},
+	}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for prompt stage without text")
+	}
+}
+
+func TestValidate_StagePromptForbidsSource(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "name", Text: "Enter", Source: "zoxide"}},
+	}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for prompt stage with source")
+	}
+}
+
+func TestValidate_StagePickerValid(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "picker", Key: "dir", Source: "zoxide"}},
+	}}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_StagePickerMissingSource(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "picker", Key: "dir"}},
+	}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for picker stage without source")
+	}
+}
+
+func TestValidate_StagePickerForbidsText(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "picker", Key: "dir", Source: "zoxide", Text: "nope"}},
+	}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for picker stage with text")
+	}
+}
+
+func TestValidate_StagePickerForbidsDefault(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "picker", Key: "dir", Source: "zoxide", Default: "nope"}},
+	}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for picker stage with default")
+	}
+}
+
+func TestValidate_StageInvalidType(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "invalid", Key: "x"}},
+	}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for invalid stage type")
+	}
+}
+
+func TestValidate_StageDuplicateKeys(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{
+			{Type: "prompt", Key: "name", Text: "Enter name"},
+			{Type: "prompt", Key: "name", Text: "Enter name again"},
+		},
+	}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for duplicate stage keys")
+	}
+	if !strings.Contains(err.Error(), "duplicate") {
+		t.Errorf("error = %q, want to contain 'duplicate'", err.Error())
+	}
+}
+
+func TestValidate_StageReservedKey_Path(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "path", Text: "Enter"}},
+	}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for reserved key 'path'")
+	}
+	if !strings.Contains(err.Error(), "reserved") {
+		t.Errorf("error = %q, want to contain 'reserved'", err.Error())
+	}
+}
+
+func TestValidate_StageReservedKey_PaneID(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "pane_id", Text: "Enter"}},
+	}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for reserved key 'pane_id'")
+	}
+}
+
+func TestValidate_StageReservedKey_Session(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "session", Text: "Enter"}},
+	}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for reserved key 'session'")
+	}
+}
+
+func TestValidate_StageReservedKey_WindowIndex(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "window_index", Text: "Enter"}},
+	}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for reserved key 'window_index'")
+	}
+}
+
+func TestValidate_StageDuplicateKeys_CaseInsensitive(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{
+			{Type: "prompt", Key: "name", Text: "Enter name"},
+			{Type: "prompt", Key: "Name", Text: "Enter Name"},
+		},
+	}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for case-insensitive duplicate stage keys")
+	}
+	if !strings.Contains(err.Error(), "duplicate") {
+		t.Errorf("error = %q, want to contain 'duplicate'", err.Error())
+	}
+}
+
+func TestValidate_StageReservedKey_CaseInsensitive(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "Path", Text: "Enter"}},
+	}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for reserved key 'Path' (case-insensitive)")
+	}
+	if !strings.Contains(err.Error(), "reserved") {
+		t.Errorf("error = %q, want to contain 'reserved'", err.Error())
+	}
+}
+
+func TestValidate_StageEmptyKey(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "", Text: "Enter"}},
+	}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for empty stage key")
+	}
+}
+
+func TestValidate_StageKeyWithHyphen(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "branch-name", Text: "Enter"}},
+	}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for key with hyphen")
+	}
+	if !strings.Contains(err.Error(), "valid identifier") {
+		t.Errorf("error = %q, want to contain 'valid identifier'", err.Error())
+	}
+}
+
+func TestValidate_StageKeyStartsWithDigit(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "1name", Text: "Enter"}},
+	}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for key starting with digit")
+	}
+	if !strings.Contains(err.Error(), "valid identifier") {
+		t.Errorf("error = %q, want to contain 'valid identifier'", err.Error())
+	}
+}
+
+func TestBehavior_ShouldAutoSelectSingle_DefaultTrue(t *testing.T) {
+	b := Behavior{}
+	if !b.ShouldAutoSelectSingle() {
+		t.Error("ShouldAutoSelectSingle() = false, want true when nil")
+	}
+}
+
+func TestBehavior_ShouldAutoSelectSingle_ExplicitTrue(t *testing.T) {
+	v := true
+	b := Behavior{AutoSelectSingle: &v}
+	if !b.ShouldAutoSelectSingle() {
+		t.Error("ShouldAutoSelectSingle() = false, want true")
+	}
+}
+
+func TestBehavior_ShouldAutoSelectSingle_ExplicitFalse(t *testing.T) {
+	v := false
+	b := Behavior{AutoSelectSingle: &v}
+	if b.ShouldAutoSelectSingle() {
+		t.Error("ShouldAutoSelectSingle() = true, want false")
 	}
 }
 
@@ -93,13 +387,15 @@ func TestLoad_ValidTOML(t *testing.T) {
 [timeout]
 fetch = "1500ms"
 
-[[commands]]
+[[actions]]
 name = "htop"
 cmd = "htop"
+matches = "root"
 
-[[commands]]
+[[actions]]
 name = "logs"
 cmd = "tail -f /var/log/syslog"
+matches = "root"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -111,14 +407,14 @@ cmd = "tail -f /var/log/syslog"
 	if cfg == nil {
 		t.Fatal("expected non-nil config")
 	}
-	if len(cfg.Commands) != 2 {
-		t.Fatalf("got %d commands, want 2", len(cfg.Commands))
+	if len(cfg.Actions) != 2 {
+		t.Fatalf("got %d actions, want 2", len(cfg.Actions))
 	}
-	if cfg.Commands[0].Name != "htop" {
-		t.Errorf("commands[0].Name = %q, want %q", cfg.Commands[0].Name, "htop")
+	if cfg.Actions[0].Name != "htop" {
+		t.Errorf("actions[0].Name = %q, want %q", cfg.Actions[0].Name, "htop")
 	}
-	if cfg.Commands[1].Cmd != "tail -f /var/log/syslog" {
-		t.Errorf("commands[1].Cmd = %q", cfg.Commands[1].Cmd)
+	if cfg.Actions[1].Cmd != "tail -f /var/log/syslog" {
+		t.Errorf("actions[1].Cmd = %q", cfg.Actions[1].Cmd)
 	}
 	if cfg.Timeout.Fetch != 1500*time.Millisecond {
 		t.Errorf("timeout.fetch = %s, want 1500ms", cfg.Timeout.Fetch)
@@ -181,17 +477,20 @@ func TestLoad_PreservesOrder(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(path, []byte(`
-[[commands]]
+[[actions]]
 name = "alpha"
 cmd = "echo alpha"
+matches = "root"
 
-[[commands]]
+[[actions]]
 name = "beta"
 cmd = "echo beta"
+matches = "root"
 
-[[commands]]
+[[actions]]
 name = "gamma"
 cmd = "echo gamma"
+matches = "root"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -200,13 +499,13 @@ cmd = "echo gamma"
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(cfg.Commands) != 3 {
-		t.Fatalf("got %d commands, want 3", len(cfg.Commands))
+	if len(cfg.Actions) != 3 {
+		t.Fatalf("got %d actions, want 3", len(cfg.Actions))
 	}
 	want := []string{"alpha", "beta", "gamma"}
 	for i, w := range want {
-		if cfg.Commands[i].Name != w {
-			t.Errorf("commands[%d].Name = %q, want %q", i, cfg.Commands[i].Name, w)
+		if cfg.Actions[i].Name != w {
+			t.Errorf("actions[%d].Name = %q, want %q", i, cfg.Actions[i].Name, w)
 		}
 	}
 }
@@ -274,6 +573,38 @@ func TestValidate_SuspiciouslySmallTimeout(t *testing.T) {
 	cfg.Timeout.Fetch = 500 * time.Nanosecond
 	if err := cfg.Validate(); err == nil {
 		t.Error("expected error for sub-millisecond timeout")
+	}
+}
+
+func TestValidate_NegativePickerTimeout(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Timeout.Picker = -1 * time.Second
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for negative picker timeout")
+	}
+	if !strings.Contains(err.Error(), "timeout.picker") {
+		t.Errorf("error = %q, want to contain 'timeout.picker'", err.Error())
+	}
+}
+
+func TestValidate_SuspiciouslySmallPickerTimeout(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Timeout.Picker = 500 * time.Nanosecond
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for sub-millisecond picker timeout")
+	}
+	if !strings.Contains(err.Error(), "timeout.picker") {
+		t.Errorf("error = %q, want to contain 'timeout.picker'", err.Error())
+	}
+}
+
+func TestValidate_ZeroPickerTimeout(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Timeout.Picker = 0
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("zero picker timeout should be valid: %v", err)
 	}
 }
 
@@ -374,126 +705,9 @@ func TestValidate_EmptyDisplayRuleKey(t *testing.T) {
 	}
 }
 
-func TestValidate_ValidDirActions(t *testing.T) {
-	cfg := DefaultConfig()
-	cfg.DirActions = []Command{
-		{Name: "Yazi", Cmd: "tmux split-window -h yazi"},
-	}
-	if err := cfg.Validate(); err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestValidate_EmptyDirActionName(t *testing.T) {
-	cfg := DefaultConfig()
-	cfg.DirActions = []Command{{Name: "", Cmd: "yazi"}}
-	if err := cfg.Validate(); err == nil {
-		t.Error("expected error for empty dir_action name")
-	}
-}
-
-func TestValidate_EmptyDirActionCmd(t *testing.T) {
-	cfg := DefaultConfig()
-	cfg.DirActions = []Command{{Name: "Yazi", Cmd: ""}}
-	if err := cfg.Validate(); err == nil {
-		t.Error("expected error for empty dir_action cmd")
-	}
-}
-
-func TestLoad_DirActions(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.toml")
-	if err := os.WriteFile(path, []byte(`
-[[dir_actions]]
-name = "Yazi"
-cmd = "tmux split-window -h yazi"
-
-[[dir_actions]]
-name = "New pane"
-cmd = "tmux split-window -v"
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(cfg.DirActions) != 2 {
-		t.Fatalf("got %d dir_actions, want 2", len(cfg.DirActions))
-	}
-	if cfg.DirActions[0].Name != "Yazi" {
-		t.Errorf("dir_actions[0].Name = %q, want %q", cfg.DirActions[0].Name, "Yazi")
-	}
-	if cfg.DirActions[1].Cmd != "tmux split-window -v" {
-		t.Errorf("dir_actions[1].Cmd = %q", cfg.DirActions[1].Cmd)
-	}
-}
-
-func TestLoad_DirActionsPreservesOrder(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.toml")
-	if err := os.WriteFile(path, []byte(`
-[[dir_actions]]
-name = "alpha"
-cmd = "echo alpha"
-
-[[dir_actions]]
-name = "beta"
-cmd = "echo beta"
-
-[[dir_actions]]
-name = "gamma"
-cmd = "echo gamma"
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(cfg.DirActions) != 3 {
-		t.Fatalf("got %d dir_actions, want 3", len(cfg.DirActions))
-	}
-	want := []string{"alpha", "beta", "gamma"}
-	for i, w := range want {
-		if cfg.DirActions[i].Name != w {
-			t.Errorf("dir_actions[%d].Name = %q, want %q", i, cfg.DirActions[i].Name, w)
-		}
-	}
-}
-
-func TestLoad_NoDirActions(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.toml")
-	if err := os.WriteFile(path, []byte(`
-[[commands]]
-name = "htop"
-cmd = "htop"
-`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(cfg.DirActions) != 0 {
-		t.Errorf("got %d dir_actions, want 0", len(cfg.DirActions))
-	}
-}
-
-func TestDefaultConfig_NoDirActions(t *testing.T) {
-	cfg := DefaultConfig()
-	if len(cfg.DirActions) != 0 {
-		t.Errorf("DirActions = %d, want 0", len(cfg.DirActions))
-	}
-}
-
 func TestValidate_ValidIconAlias(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Commands = []Command{{Name: "GitHub", Cmd: "open gh", Icon: ":nf-dev-github:"}}
+	cfg.Actions = []Action{{Name: "GitHub", Cmd: "open gh", Matches: "root", Icon: ":nf-dev-github:"}}
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -501,19 +715,19 @@ func TestValidate_ValidIconAlias(t *testing.T) {
 
 func TestValidate_InvalidIconAlias(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Commands = []Command{{Name: "test", Cmd: "test", Icon: ":nf-fake-thing:"}}
+	cfg.Actions = []Action{{Name: "test", Cmd: "test", Matches: "root", Icon: ":nf-fake-thing:"}}
 	err := cfg.Validate()
 	if err == nil {
 		t.Fatal("expected error for invalid icon alias")
 	}
-	if !strings.Contains(err.Error(), "commands[0].icon") {
-		t.Errorf("error = %q, want prefix commands[0].icon", err.Error())
+	if !strings.Contains(err.Error(), "actions[0].icon") {
+		t.Errorf("error = %q, want prefix actions[0].icon", err.Error())
 	}
 }
 
 func TestValidate_ValidIconRawUnicode(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Commands = []Command{{Name: "test", Cmd: "test", Icon: "\ue709"}}
+	cfg.Actions = []Action{{Name: "test", Cmd: "test", Matches: "root", Icon: "\ue709"}}
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -521,7 +735,7 @@ func TestValidate_ValidIconRawUnicode(t *testing.T) {
 
 func TestValidate_InvalidIconMultiChar(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Commands = []Command{{Name: "test", Cmd: "test", Icon: "ab"}}
+	cfg.Actions = []Action{{Name: "test", Cmd: "test", Matches: "root", Icon: "ab"}}
 	if err := cfg.Validate(); err == nil {
 		t.Error("expected error for multi-character icon")
 	}
@@ -529,7 +743,7 @@ func TestValidate_InvalidIconMultiChar(t *testing.T) {
 
 func TestValidate_EmptyIconOK(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Commands = []Command{{Name: "test", Cmd: "test", Icon: ""}}
+	cfg.Actions = []Action{{Name: "test", Cmd: "test", Matches: "root", Icon: ""}}
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -537,19 +751,20 @@ func TestValidate_EmptyIconOK(t *testing.T) {
 
 func TestValidate_DirActionIconAlias(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.DirActions = []Command{{Name: "Yazi", Cmd: "yazi", Icon: ":nf-md-folder:"}}
+	cfg.Actions = []Action{{Name: "Yazi", Cmd: "yazi", Matches: "dir", Icon: ":nf-md-folder:"}}
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
 
-func TestLoad_CommandWithIconAlias(t *testing.T) {
+func TestLoad_ActionWithIconAlias(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(path, []byte(`
-[[commands]]
+[[actions]]
 name = "GitHub"
 cmd = "open https://github.com"
+matches = "root"
 icon = ":nf-dev-github:"
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -559,15 +774,15 @@ icon = ":nf-dev-github:"
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.Commands[0].Icon != "\ue709" {
-		t.Errorf("Icon = %q, want resolved unicode \\ue709", cfg.Commands[0].Icon)
+	if cfg.Actions[0].Icon != "\ue709" {
+		t.Errorf("Icon = %q, want resolved unicode \\ue709", cfg.Actions[0].Icon)
 	}
 }
 
-func TestLoad_CommandWithUnicodeIcon(t *testing.T) {
+func TestLoad_ActionWithUnicodeIcon(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
-	if err := os.WriteFile(path, []byte("[[commands]]\nname = \"test\"\ncmd = \"test\"\nicon = \"\ue709\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("[[actions]]\nname = \"test\"\ncmd = \"test\"\nmatches = \"root\"\nicon = \"\ue709\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -575,18 +790,19 @@ func TestLoad_CommandWithUnicodeIcon(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.Commands[0].Icon != "\ue709" {
-		t.Errorf("Icon = %q, want \\ue709", cfg.Commands[0].Icon)
+	if cfg.Actions[0].Icon != "\ue709" {
+		t.Errorf("Icon = %q, want \\ue709", cfg.Actions[0].Icon)
 	}
 }
 
-func TestLoad_BehaviorsBellToTopDefault(t *testing.T) {
+func TestLoad_BehaviorBellToTopDefault(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(path, []byte(`
-[[commands]]
+[[actions]]
 name = "htop"
 cmd = "htop"
+matches = "root"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -595,16 +811,16 @@ cmd = "htop"
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !cfg.Behaviors.BellToTop {
-		t.Error("Behaviors.BellToTop = false, want true (default)")
+	if !cfg.Behavior.BellToTop {
+		t.Error("Behavior.BellToTop = false, want true (default)")
 	}
 }
 
-func TestLoad_BehaviorsBellToTopDisabled(t *testing.T) {
+func TestLoad_BehaviorBellToTopDisabled(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(path, []byte(`
-[behaviors]
+[behavior]
 bell_to_top = false
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -614,8 +830,8 @@ bell_to_top = false
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.Behaviors.BellToTop {
-		t.Error("Behaviors.BellToTop = true, want false")
+	if cfg.Behavior.BellToTop {
+		t.Error("Behavior.BellToTop = true, want false")
 	}
 }
 
@@ -623,9 +839,10 @@ func TestLoad_DirActionWithIcon(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(path, []byte(`
-[[dir_actions]]
+[[actions]]
 name = "Browse"
 cmd = "yazi"
+matches = "dir"
 icon = ":nf-md-folder_open:"
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -635,7 +852,152 @@ icon = ":nf-md-folder_open:"
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.DirActions[0].Icon != "\U000f0770" {
-		t.Errorf("Icon = %q, want resolved unicode \\U000f0770", cfg.DirActions[0].Icon)
+	if cfg.Actions[0].Icon != "\U000f0770" {
+		t.Errorf("Icon = %q, want resolved unicode \\U000f0770", cfg.Actions[0].Icon)
+	}
+}
+
+func TestLoad_Actions(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[[actions]]
+name = "Yazi"
+cmd = "tmux split-window -h yazi"
+matches = "dir"
+
+[[actions]]
+name = "New pane"
+cmd = "tmux split-window -v"
+matches = "dir"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Actions) != 2 {
+		t.Fatalf("got %d actions, want 2", len(cfg.Actions))
+	}
+	if cfg.Actions[0].Name != "Yazi" {
+		t.Errorf("actions[0].Name = %q, want %q", cfg.Actions[0].Name, "Yazi")
+	}
+	if cfg.Actions[1].Cmd != "tmux split-window -v" {
+		t.Errorf("actions[1].Cmd = %q", cfg.Actions[1].Cmd)
+	}
+}
+
+func TestLoad_NoActions(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[timeout]
+fetch = "2s"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Actions) != 0 {
+		t.Errorf("got %d actions, want 0", len(cfg.Actions))
+	}
+}
+
+func TestLoad_MixedMatchTypes(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[[actions]]
+name = "htop"
+cmd = "htop"
+matches = "root"
+
+[[actions]]
+name = "Yazi"
+cmd = "yazi"
+matches = "dir"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Actions) != 2 {
+		t.Fatalf("got %d actions, want 2", len(cfg.Actions))
+	}
+	if cfg.Actions[0].Matches != "root" {
+		t.Errorf("actions[0].Matches = %q, want root", cfg.Actions[0].Matches)
+	}
+	if cfg.Actions[1].Matches != "dir" {
+		t.Errorf("actions[1].Matches = %q, want dir", cfg.Actions[1].Matches)
+	}
+}
+
+func TestLoad_BehaviorAutoSelectSingle(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[behavior]
+auto_select_single = false
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Behavior.ShouldAutoSelectSingle() {
+		t.Error("ShouldAutoSelectSingle() = true, want false")
+	}
+}
+
+func TestLoad_ActionWithStages(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[[actions]]
+name = "New session"
+cmd = "tmux new-session -s {{.session_name}}"
+matches = "root"
+
+[[actions.stages]]
+type = "prompt"
+key = "session_name"
+text = "Session name"
+default = "dev"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Actions) != 1 {
+		t.Fatalf("got %d actions, want 1", len(cfg.Actions))
+	}
+	if len(cfg.Actions[0].Stages) != 1 {
+		t.Fatalf("got %d stages, want 1", len(cfg.Actions[0].Stages))
+	}
+	s := cfg.Actions[0].Stages[0]
+	if s.Type != "prompt" {
+		t.Errorf("stage.Type = %q, want prompt", s.Type)
+	}
+	if s.Key != "session_name" {
+		t.Errorf("stage.Key = %q, want session_name", s.Key)
+	}
+	if s.Text != "Session name" {
+		t.Errorf("stage.Text = %q, want Session name", s.Text)
+	}
+	if s.Default != "dev" {
+		t.Errorf("stage.Default = %q, want dev", s.Default)
 	}
 }

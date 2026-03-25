@@ -70,15 +70,15 @@ var rootCmd = &cobra.Command{
 			}},
 		}
 		if cfgErr != nil {
-			sources = append(sources, generator.Source{Name: "config", Type: "cmd", Fetch: func(context.Context) ([]item.Item, error) {
+			sources = append(sources, generator.Source{Name: "config", Type: "action", Fetch: func(context.Context) ([]item.Item, error) {
 				return nil, cfgErr
 			}})
 		}
-		sources = append(sources, generator.Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(cfg)})
+		sources = append(sources, generator.Source{Name: "actions", Type: "action", Fetch: config.MatchingActions(cfg, "root")})
 
 		reg := generator.NewRegistry()
 		reg.Register("root", generator.NewRootGenerator(cfg.Timeout.Fetch, sources...))
-		reg.Register("dir-actions", generator.NewDirActionsGenerator())
+		reg.Register("dir-actions", generator.NewActionsGenerator())
 		reg.MapType("", "root")
 		reg.MapType("dir", "dir-actions")
 
@@ -88,7 +88,7 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 		items := gen(nil, ctx)
-		listItems := item.GroupAndOrder(items, cfg.Behaviors.BellToTop)
+		listItems := item.GroupAndOrder(items, cfg.Behavior.BellToTop)
 
 		t, err := theme.Resolve(themeFlag)
 		if err != nil {

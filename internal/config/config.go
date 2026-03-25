@@ -6,6 +6,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
+	"strings"
 	"time"
 
 	log "charm.land/log/v2"
@@ -14,14 +17,34 @@ import (
 	"github.com/jmcampanini/cmdk/internal/icon"
 )
 
-type Command struct {
-	Name string `toml:"name"`
-	Cmd  string `toml:"cmd"`
-	Icon string `toml:"icon"`
+type StageConfig struct {
+	Type    string `toml:"type"`
+	Key     string `toml:"key"`
+	Text    string `toml:"text"`
+	Default string `toml:"default"`
+	Source  string `toml:"source"`
+}
+
+type Action struct {
+	Name    string        `toml:"name"`
+	Matches string        `toml:"matches"`
+	Cmd     string        `toml:"cmd"`
+	Icon    string        `toml:"icon"`
+	Stages  []StageConfig `toml:"stages"`
+}
+
+type Behavior struct {
+	AutoSelectSingle *bool `toml:"auto_select_single"`
+	BellToTop        bool  `toml:"bell_to_top"`
+}
+
+func (b Behavior) ShouldAutoSelectSingle() bool {
+	return b.AutoSelectSingle == nil || *b.AutoSelectSingle
 }
 
 type Timeout struct {
-	Fetch time.Duration `toml:"fetch"`
+	Fetch  time.Duration `toml:"fetch"`
+	Picker time.Duration `toml:"picker"`
 }
 
 type SourceConfig struct {
@@ -34,35 +57,37 @@ type Display struct {
 	Rules       map[string]string `toml:"rules"`
 }
 
-type Behaviors struct {
-	BellToTop bool `toml:"bell_to_top"`
+type Config struct {
+	Actions  []Action                `toml:"actions"`
+	Behavior Behavior                `toml:"behavior"`
+	Timeout  Timeout                 `toml:"timeout"`
+	Sources  map[string]SourceConfig `toml:"sources"`
+	Display  Display                 `toml:"display"`
 }
 
-type Config struct {
-	Commands   []Command               `toml:"commands"`
-	DirActions []Command               `toml:"dir_actions"`
-	Timeout    Timeout                 `toml:"timeout"`
-	Sources    map[string]SourceConfig `toml:"sources"`
-	Display    Display                 `toml:"display"`
-	Behaviors  Behaviors               `toml:"behaviors"`
-}
+var validMatchTypes = []string{"root", "dir"}
+
+// reservedKeys are set by the runtime (from the selection stack or CLI flags) and must not collide with stage keys.
+var reservedKeys = []string{"path", "pane_id", "session", "window_index"}
+
+var validStageKey = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 func DefaultConfig() Config {
 	defaultShortenHome := "~"
 	return Config{
-		Timeout:   Timeout{Fetch: 2 * time.Second},
-		Sources:   map[string]SourceConfig{"zoxide": {Limit: 0}},
-		Display:   Display{ShortenHome: &defaultShortenHome},
-		Behaviors: Behaviors{BellToTop: true},
+		Behavior: Behavior{BellToTop: true},
+		Timeout:  Timeout{Fetch: 2 * time.Second, Picker: 2 * time.Second},
+		Sources:  map[string]SourceConfig{"zoxide": {Limit: 0}},
+		Display:  Display{ShortenHome: &defaultShortenHome},
 	}
 }
 
 func (c Config) Validate() error {
-	if c.Timeout.Fetch < 0 {
-		return errors.New("timeout.fetch cannot be negative")
+	if err := validateTimeout("fetch", c.Timeout.Fetch); err != nil {
+		return err
 	}
-	if c.Timeout.Fetch > 0 && c.Timeout.Fetch < time.Millisecond {
-		return fmt.Errorf("timeout.fetch value %s is suspiciously small; use a duration string like \"2s\"", c.Timeout.Fetch)
+	if err := validateTimeout("picker", c.Timeout.Picker); err != nil {
+		return err
 	}
 	for name, sc := range c.Sources {
 		if sc.Limit < 0 {
@@ -72,10 +97,7 @@ func (c Config) Validate() error {
 			return fmt.Errorf("sources.%s.min_score cannot be negative", name)
 		}
 	}
-	if err := validateCommands("commands", c.Commands); err != nil {
-		return err
-	}
-	if err := validateCommands("dir_actions", c.DirActions); err != nil {
+	if err := validateActions(c.Actions); err != nil {
 		return err
 	}
 	for match := range c.Display.Rules {
@@ -86,41 +108,93 @@ func (c Config) Validate() error {
 	return nil
 }
 
-func validateCommands(section string, cmds []Command) error {
-	for i, cmd := range cmds {
-		if cmd.Name == "" {
-			return fmt.Errorf("%s[%d].name cannot be empty", section, i)
+func validateTimeout(name string, d time.Duration) error {
+	if d < 0 {
+		return fmt.Errorf("timeout.%s cannot be negative", name)
+	}
+	if d > 0 && d < time.Millisecond {
+		return fmt.Errorf("timeout.%s value %s is suspiciously small; use a duration string like \"2s\"", name, d)
+	}
+	return nil
+}
+
+func validateActions(actions []Action) error {
+	for i, a := range actions {
+		if a.Name == "" {
+			return fmt.Errorf("actions[%d].name cannot be empty", i)
 		}
-		if cmd.Cmd == "" {
-			return fmt.Errorf("%s[%d].cmd cannot be empty", section, i)
+		if a.Cmd == "" {
+			return fmt.Errorf("actions[%d].cmd cannot be empty", i)
 		}
-		if cmd.Icon != "" {
-			if _, err := icon.Resolve(cmd.Icon); err != nil {
-				return fmt.Errorf("%s[%d].icon: %w", section, i, err)
+		if a.Matches == "" {
+			return fmt.Errorf("actions[%d].matches cannot be empty", i)
+		}
+		if !slices.Contains(validMatchTypes, a.Matches) {
+			return fmt.Errorf("actions[%d].matches %q is not a valid match type (valid: %v)", i, a.Matches, validMatchTypes)
+		}
+		if a.Icon != "" {
+			if _, err := icon.Resolve(a.Icon); err != nil {
+				return fmt.Errorf("actions[%d].icon: %w", i, err)
 			}
+		}
+		if err := validateStages(i, a.Stages); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateStages(actionIdx int, stages []StageConfig) error {
+	seenKeys := make(map[string]bool, len(stages))
+	for j, s := range stages {
+		prefix := fmt.Sprintf("actions[%d].stages[%d]", actionIdx, j)
+		if s.Key == "" {
+			return fmt.Errorf("%s.key cannot be empty", prefix)
+		}
+		if !validStageKey.MatchString(s.Key) {
+			return fmt.Errorf("%s.key %q must be a valid identifier (letters, digits, underscores; cannot start with a digit)", prefix, s.Key)
+		}
+		lower := strings.ToLower(s.Key)
+		if seenKeys[lower] {
+			return fmt.Errorf("%s.key %q is duplicate within this action (case-insensitive)", prefix, s.Key)
+		}
+		seenKeys[lower] = true
+		if slices.Contains(reservedKeys, lower) {
+			return fmt.Errorf("%s.key %q is reserved (reserved keys: %v)", prefix, s.Key, reservedKeys)
+		}
+		switch s.Type {
+		case "prompt":
+			if s.Text == "" {
+				return fmt.Errorf("%s.text cannot be empty for prompt stage", prefix)
+			}
+			if s.Source != "" {
+				return fmt.Errorf("%s.source must not be set for prompt stage", prefix)
+			}
+		case "picker":
+			if s.Source == "" {
+				return fmt.Errorf("%s.source cannot be empty for picker stage", prefix)
+			}
+			if s.Text != "" {
+				return fmt.Errorf("%s.text must not be set for picker stage", prefix)
+			}
+			if s.Default != "" {
+				return fmt.Errorf("%s.default must not be set for picker stage", prefix)
+			}
+		default:
+			return fmt.Errorf("%s.type %q is not valid (valid: prompt, picker)", prefix, s.Type)
 		}
 	}
 	return nil
 }
 
 func (c *Config) resolveIcons() error {
-	if err := resolveCommandIcons(c.Commands); err != nil {
-		return fmt.Errorf("resolving command icons: %w", err)
-	}
-	if err := resolveCommandIcons(c.DirActions); err != nil {
-		return fmt.Errorf("resolving dir_action icons: %w", err)
-	}
-	return nil
-}
-
-func resolveCommandIcons(cmds []Command) error {
-	for i := range cmds {
-		if cmds[i].Icon != "" {
-			resolved, err := icon.Resolve(cmds[i].Icon)
+	for i := range c.Actions {
+		if c.Actions[i].Icon != "" {
+			resolved, err := icon.Resolve(c.Actions[i].Icon)
 			if err != nil {
-				return fmt.Errorf("command %q icon: %w", cmds[i].Name, err)
+				return fmt.Errorf("action %q icon: %w", c.Actions[i].Name, err)
 			}
-			cmds[i].Icon = resolved
+			c.Actions[i].Icon = resolved
 		}
 	}
 	return nil

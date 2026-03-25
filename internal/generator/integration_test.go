@@ -37,7 +37,7 @@ func setupRegistry() *Registry {
 	}}
 
 	reg.Register("root", newIntegrationRootGenerator(windows, dirs))
-	reg.Register("dir-actions", NewDirActionsGenerator())
+	reg.Register("dir-actions", NewActionsGenerator())
 	reg.MapType("", "root")
 	reg.MapType("dir", "dir-actions")
 	return reg
@@ -131,20 +131,20 @@ func TestIntegration_DataFlattening(t *testing.T) {
 		Type: "dir",
 		Data: map[string]string{"path": "/home/user"},
 	}
-	cmdItem := item.Item{
-		Type: "cmd",
+	actionItem := item.Item{
+		Type: "action",
 		Cmd:  "tmux new-window -c {{sq .path}}",
 		Data: map[string]string{},
 	}
 
-	all := []item.Item{dirItem, cmdItem}
+	all := []item.Item{dirItem, actionItem}
 	data := execute.FlattenData(all)
 
 	if data["path"] != "/home/user" {
 		t.Errorf("path = %q, want /home/user", data["path"])
 	}
 
-	rendered, err := execute.RenderCmd(cmdItem.Cmd, data)
+	rendered, err := execute.RenderCmd(actionItem.Cmd, data)
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -165,18 +165,18 @@ func TestIntegration_ThreeSourceTypes(t *testing.T) {
 		}, nil
 	}}
 	cfg := &config.Config{
-		Commands: []config.Command{
-			{Name: "htop", Cmd: "htop"},
+		Actions: []config.Action{
+			{Name: "htop", Cmd: "htop", Matches: "root"},
 		},
 	}
 
-	gen := newIntegrationRootGenerator(windows, dirs, Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(cfg)})
+	gen := newIntegrationRootGenerator(windows, dirs, Source{Name: "actions", Type: "action", Fetch: config.MatchingActions(cfg, "root")})
 	items := gen(nil, Context{})
 
 	if len(items) != 3 {
 		t.Fatalf("got %d items, want 3", len(items))
 	}
-	wantTypes := []string{"window", "dir", "cmd"}
+	wantTypes := []string{"window", "dir", "action"}
 	for i, wt := range wantTypes {
 		if items[i].Type != wt {
 			t.Errorf("items[%d].Type = %q, want %q", i, items[i].Type, wt)
@@ -184,19 +184,19 @@ func TestIntegration_ThreeSourceTypes(t *testing.T) {
 	}
 }
 
-func TestIntegration_ConfigCommandsInOrder(t *testing.T) {
+func TestIntegration_ConfigActionsInOrder(t *testing.T) {
 	cfg := &config.Config{
-		Commands: []config.Command{
-			{Name: "alpha", Cmd: "echo alpha"},
-			{Name: "beta", Cmd: "echo beta"},
-			{Name: "gamma", Cmd: "echo gamma"},
+		Actions: []config.Action{
+			{Name: "alpha", Cmd: "echo alpha", Matches: "root"},
+			{Name: "beta", Cmd: "echo beta", Matches: "root"},
+			{Name: "gamma", Cmd: "echo gamma", Matches: "root"},
 		},
 	}
 	windows := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
 	}}
 
-	gen := newIntegrationRootGenerator(windows, Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(cfg)})
+	gen := newIntegrationRootGenerator(windows, Source{Name: "actions", Type: "action", Fetch: config.MatchingActions(cfg, "root")})
 	items := gen(nil, Context{})
 
 	if len(items) != 4 {
@@ -219,7 +219,7 @@ func TestIntegration_EmptyConfig(t *testing.T) {
 		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
 	}}
 
-	gen := newIntegrationRootGenerator(windows, Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(&config.Config{})})
+	gen := newIntegrationRootGenerator(windows, Source{Name: "actions", Type: "action", Fetch: config.MatchingActions(&config.Config{}, "root")})
 	items := gen(nil, Context{})
 
 	if len(items) != 1 {
@@ -271,11 +271,11 @@ func TestIntegration_MalformedConfig(t *testing.T) {
 		return []item.Item{{Type: "dir", Display: "/projects"}}, nil
 	}}
 	cfgErr := errors.New("bad toml")
-	badConfig := Source{Name: "config", Type: "cmd", Fetch: func(context.Context) ([]item.Item, error) {
+	badConfig := Source{Name: "config", Type: "action", Fetch: func(context.Context) ([]item.Item, error) {
 		return nil, cfgErr
 	}}
 
-	gen := newIntegrationRootGenerator(windows, dirs, badConfig, Source{Name: "commands", Type: "cmd", Fetch: config.CommandItems(&config.Config{})})
+	gen := newIntegrationRootGenerator(windows, dirs, badConfig, Source{Name: "actions", Type: "action", Fetch: config.MatchingActions(&config.Config{}, "root")})
 	items := gen(nil, Context{})
 
 	if len(items) != 3 {
@@ -303,11 +303,11 @@ func TestIntegration_OneSourceFailsOthersWork(t *testing.T) {
 	badDirs := Source{Name: "zoxide", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
 		return nil, errors.New("command not found")
 	}}
-	cmds := Source{Name: "commands", Type: "cmd", Fetch: func(context.Context) ([]item.Item, error) {
-		return []item.Item{{Type: "cmd", Display: "htop", Action: item.ActionExecute}}, nil
+	actions := Source{Name: "actions", Type: "action", Fetch: func(context.Context) ([]item.Item, error) {
+		return []item.Item{{Type: "action", Display: "htop", Action: item.ActionExecute}}, nil
 	}}
 
-	gen := newIntegrationRootGenerator(windows, badDirs, cmds)
+	gen := newIntegrationRootGenerator(windows, badDirs, actions)
 	items := gen(nil, Context{})
 
 	if len(items) != 3 {
@@ -326,9 +326,9 @@ func TestIntegration_OneSourceFailsOthersWork(t *testing.T) {
 
 func TestIntegration_DirActionsWithConfig(t *testing.T) {
 	cfg := &config.Config{
-		DirActions: []config.Command{
-			{Name: "Yazi", Cmd: "tmux split-window -h -t {{sq .pane_id}} -c {{sq .path}} yazi"},
-			{Name: "New pane", Cmd: "tmux split-window -v -c {{sq .path}}"},
+		Actions: []config.Action{
+			{Name: "Yazi", Cmd: "tmux split-window -h -t {{sq .pane_id}} -c {{sq .path}} yazi", Matches: "dir"},
+			{Name: "New pane", Cmd: "tmux split-window -v -c {{sq .path}}", Matches: "dir"},
 		},
 	}
 	reg := setupRegistry()
@@ -364,8 +364,8 @@ func TestIntegration_DirActionsWithConfig(t *testing.T) {
 
 func TestIntegration_DirActionConfigCmdRendersWithPathAndPaneID(t *testing.T) {
 	cfg := &config.Config{
-		DirActions: []config.Command{
-			{Name: "Yazi", Cmd: "tmux split-window -h -t {{sq .pane_id}} -c {{sq .path}} yazi"},
+		Actions: []config.Action{
+			{Name: "Yazi", Cmd: "tmux split-window -h -t {{sq .pane_id}} -c {{sq .path}} yazi", Matches: "dir"},
 		},
 	}
 	reg := setupRegistry()
@@ -399,7 +399,7 @@ func TestIntegration_DirActionConfigCmdRendersWithPathAndPaneID(t *testing.T) {
 }
 
 func TestIntegration_DirActionsEmptyConfig(t *testing.T) {
-	cfg := &config.Config{DirActions: []config.Command{}}
+	cfg := &config.Config{Actions: []config.Action{}}
 	reg := setupRegistry()
 	ctx := Context{PaneID: "%1", Config: cfg}
 
