@@ -19,7 +19,6 @@ func GroupAndOrder(items []Item, bellToTop bool) []list.Item {
 	for _, it := range bellItems {
 		result = append(result, it)
 	}
-
 	seen := make(map[string]bool, len(TypeOrder))
 	for _, typ := range TypeOrder {
 		seen[typ] = true
