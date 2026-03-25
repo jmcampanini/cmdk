@@ -673,14 +673,7 @@ func TestE2E_ErrorItemNotSelectable(t *testing.T) {
 
 	waitForReady(t, sess)
 
-	exitFilterModeE2E(t, sess)
-	content := capturePane(t, sess)
-	cmdCount := strings.Count(content, iconCmd)
-	for range cmdCount {
-		sendKeys(t, sess, "Down")
-		time.Sleep(50 * time.Millisecond)
-	}
-
+	typeText(t, sess, "zoxide error")
 	waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, "zoxide error")
 	}, 3*time.Second)
@@ -692,7 +685,7 @@ func TestE2E_ErrorItemNotSelectable(t *testing.T) {
 		t.Fatal("session should still exist — error items should not be selectable")
 	}
 
-	content = capturePane(t, sess)
+	content := capturePane(t, sess)
 	if !strings.Contains(content, "zoxide error") {
 		t.Errorf("error item should still be visible\nCapture:\n%s", content)
 	}
