@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"strings"
 	"time"
 
 	log "charm.land/log/v2"
@@ -45,7 +44,8 @@ func (b Behavior) ShouldAutoSelectSingle() bool {
 }
 
 type Timeout struct {
-	Fetch time.Duration `toml:"fetch"`
+	Fetch  time.Duration `toml:"fetch"`
+	Picker time.Duration `toml:"picker"`
 }
 
 type SourceConfig struct {
@@ -75,7 +75,7 @@ var validStageKey = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 func DefaultConfig() Config {
 	defaultShortenHome := "~"
 	return Config{
-		Timeout: Timeout{Fetch: 2 * time.Second},
+		Timeout: Timeout{Fetch: 2 * time.Second, Picker: 2 * time.Second},
 		Sources: map[string]SourceConfig{"zoxide": {Limit: 0}},
 		Display: Display{ShortenHome: &defaultShortenHome},
 	}
@@ -87,6 +87,12 @@ func (c Config) Validate() error {
 	}
 	if c.Timeout.Fetch > 0 && c.Timeout.Fetch < time.Millisecond {
 		return fmt.Errorf("timeout.fetch value %s is suspiciously small; use a duration string like \"2s\"", c.Timeout.Fetch)
+	}
+	if c.Timeout.Picker < 0 {
+		return errors.New("timeout.picker cannot be negative")
+	}
+	if c.Timeout.Picker > 0 && c.Timeout.Picker < time.Millisecond {
+		return fmt.Errorf("timeout.picker value %s is suspiciously small; use a duration string like \"2s\"", c.Timeout.Picker)
 	}
 	for name, sc := range c.Sources {
 		if sc.Limit < 0 {
@@ -192,19 +198,12 @@ func (c *Config) resolveIcons() error {
 func Load(path string) (*Config, error) {
 	cfg := DefaultConfig()
 
-	meta, err := toml.DecodeFile(path, &cfg)
+	_, err := toml.DecodeFile(path, &cfg)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return newDefaultConfig(), nil
 		}
 		return newDefaultConfig(), err
-	}
-
-	for _, key := range meta.Undecoded() {
-		k := key.String()
-		if k == "commands" || k == "dir_actions" || strings.HasPrefix(k, "commands.") || strings.HasPrefix(k, "dir_actions.") {
-			return newDefaultConfig(), fmt.Errorf("config key %q is no longer supported; migrate to [[actions]] (see cmdk docs)", k)
-		}
 	}
 
 	defaults := DefaultConfig()

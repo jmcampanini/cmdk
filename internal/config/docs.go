@@ -57,8 +57,9 @@ func ConfigDocs() []SectionDoc {
 			Description: "Timeouts for async operations.",
 			Fields: []FieldDoc{
 				{Name: "fetch", Type: "duration", Description: "Max wait for source data. Accepts Go duration strings: ms, s, m, h.", Validation: "cannot be negative; if non-zero, must be >= 1ms"},
+				{Name: "picker", Type: "duration", Description: "Max wait for picker stage source commands.", Validation: "cannot be negative; if non-zero, must be >= 1ms"},
 			},
-			Example: "[timeout]\nfetch = \"5s\"    # e.g. 500ms, 2s, 1m",
+			Example: "[timeout]\nfetch = \"5s\"    # e.g. 500ms, 2s, 1m\npicker = \"2s\"",
 		},
 		{
 			Name:        "sources",
@@ -154,8 +155,11 @@ EXECUTION
 func defaultValue(cfg *Config, section, field string) string {
 	switch section {
 	case "timeout":
-		if field == "fetch" {
+		switch field {
+		case "fetch":
 			return fmt.Sprintf("%q", cfg.Timeout.Fetch.String())
+		case "picker":
+			return fmt.Sprintf("%q", cfg.Timeout.Picker.String())
 		}
 	case "sources":
 		zoxide := cfg.Sources["zoxide"]

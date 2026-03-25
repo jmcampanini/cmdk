@@ -420,7 +420,7 @@ func (m Model) advanceStage() Model {
 			m = m.initPickerWithError(stage.Key, fmt.Sprintf("template error: %s", err))
 			return m
 		}
-		items, runErr := runPickerSource(rendered)
+		items, runErr := runPickerSource(rendered, m.ctx.Config.Timeout.Picker)
 		if runErr != nil {
 			log.Error("picker source command failed", "key", stage.Key, "command", rendered, "error", runErr)
 			m = m.initPickerWithError(stage.Key, fmt.Sprintf("command error: %s", runErr))
@@ -442,8 +442,8 @@ func (m Model) advanceStage() Model {
 
 // runPickerSource executes a shell command and returns one item per output line.
 // Structured as a standalone function for future conversion to async tea.Cmd.
-func runPickerSource(rendered string) ([]item.Item, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+func runPickerSource(rendered string, timeout time.Duration) ([]item.Item, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	var stderr bytes.Buffer
@@ -452,7 +452,7 @@ func runPickerSource(rendered string) ([]item.Item, error) {
 	out, err := cmd.Output()
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return nil, fmt.Errorf("command timed out after 10s")
+			return nil, fmt.Errorf("command timed out after %s", timeout)
 		}
 		if stderr.Len() > 0 {
 			return nil, fmt.Errorf("command failed: %w\nstderr: %s", err, stderr.String())
