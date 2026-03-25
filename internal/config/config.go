@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 	"time"
 
 	log "charm.land/log/v2"
@@ -151,11 +152,12 @@ func validateStages(actionIdx int, stages []StageConfig) error {
 		if !validStageKey.MatchString(s.Key) {
 			return fmt.Errorf("%s.key %q must be a valid identifier (letters, digits, underscores; cannot start with a digit)", prefix, s.Key)
 		}
-		if seenKeys[s.Key] {
-			return fmt.Errorf("%s.key %q is duplicate within this action", prefix, s.Key)
+		lower := strings.ToLower(s.Key)
+		if seenKeys[lower] {
+			return fmt.Errorf("%s.key %q is duplicate within this action (case-insensitive)", prefix, s.Key)
 		}
-		seenKeys[s.Key] = true
-		if slices.Contains(reservedKeys, s.Key) {
+		seenKeys[lower] = true
+		if slices.Contains(reservedKeys, lower) {
 			return fmt.Errorf("%s.key %q is reserved (reserved keys: %v)", prefix, s.Key, reservedKeys)
 		}
 		switch s.Type {

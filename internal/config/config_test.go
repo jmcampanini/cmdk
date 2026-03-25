@@ -280,6 +280,39 @@ func TestValidate_StageReservedKey_WindowIndex(t *testing.T) {
 	}
 }
 
+func TestValidate_StageDuplicateKeys_CaseInsensitive(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{
+			{Type: "prompt", Key: "name", Text: "Enter name"},
+			{Type: "prompt", Key: "Name", Text: "Enter Name"},
+		},
+	}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for case-insensitive duplicate stage keys")
+	}
+	if !strings.Contains(err.Error(), "duplicate") {
+		t.Errorf("error = %q, want to contain 'duplicate'", err.Error())
+	}
+}
+
+func TestValidate_StageReservedKey_CaseInsensitive(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "Path", Text: "Enter"}},
+	}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for reserved key 'Path' (case-insensitive)")
+	}
+	if !strings.Contains(err.Error(), "reserved") {
+		t.Errorf("error = %q, want to contain 'reserved'", err.Error())
+	}
+}
+
 func TestValidate_StageEmptyKey(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Actions = []Action{{
