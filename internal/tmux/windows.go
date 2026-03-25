@@ -20,6 +20,7 @@ func ParseWindows(output string) []item.Item {
 	type entry struct {
 		session string
 		index   int
+		bell    bool
 		item    item.Item
 	}
 
@@ -30,7 +31,9 @@ func ParseWindows(output string) []item.Item {
 			continue
 		}
 
-		session, rest, ok := strings.Cut(line, ":")
+		displayPart, bellFlag, _ := strings.Cut(line, "\t")
+
+		session, rest, ok := strings.Cut(displayPart, ":")
 		if !ok {
 			continue
 		}
@@ -45,19 +48,27 @@ func ParseWindows(output string) []item.Item {
 			continue
 		}
 
+		bell := bellFlag == "1"
+
 		it := item.NewItem()
 		it.Type = "window"
 		it.Source = "tmux"
-		it.Display = "tmux: " + line
+		it.Display = "tmux: " + displayPart
 		it.Action = item.ActionExecute
 		it.Cmd = "tmux switch-client -t '{{.session}}:{{.window_index}}'"
 		it.Data["session"] = session
 		it.Data["window_index"] = windowIndex
+		if bell {
+			it.Data["bell"] = "1"
+		}
 
-		entries = append(entries, entry{session: session, index: idx, item: it})
+		entries = append(entries, entry{session: session, index: idx, bell: bell, item: it})
 	}
 
 	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].bell != entries[j].bell {
+			return entries[i].bell
+		}
 		if entries[i].session != entries[j].session {
 			return entries[i].session < entries[j].session
 		}
@@ -72,7 +83,7 @@ func ParseWindows(output string) []item.Item {
 }
 
 func ListWindows(ctx context.Context) ([]item.Item, error) {
-	out, err := exec.CommandContext(ctx, "tmux", "list-windows", "-a", "-F", "#{session_name}:#{window_index} #{window_name}").Output()
+	out, err := exec.CommandContext(ctx, "tmux", "list-windows", "-a", "-F", "#{session_name}:#{window_index} #{window_name}\t#{window_bell_flag}").Output()
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, fmt.Errorf("tmux did not respond within the configured timeout: %w", err)

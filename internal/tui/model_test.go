@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/jmcampanini/cmdk/internal/config"
 	"github.com/jmcampanini/cmdk/internal/generator"
 	"github.com/jmcampanini/cmdk/internal/item"
 	"github.com/jmcampanini/cmdk/internal/theme"
@@ -54,8 +55,13 @@ func newTestModel(items []list.Item, reg *generator.Registry) Model {
 	return newTestModelWithTheme(items, reg, theme.Light())
 }
 
+func testConfig() *config.Config {
+	cfg := config.DefaultConfig()
+	return &cfg
+}
+
 func newTestModelWithTheme(items []list.Item, reg *generator.Registry, t theme.Theme) Model {
-	return NewModel(items, "%1", nil, reg, generator.Context{}, t)
+	return NewModel(items, "%1", nil, reg, generator.Context{Config: testConfig()}, t)
 }
 
 func exitFilterMode(t *testing.T, m Model) Model {

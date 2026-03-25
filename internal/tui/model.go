@@ -227,7 +227,7 @@ func (m Model) navigateTo(accumulated []item.Item) Model {
 		listItems = []list.Item{errItem}
 	} else {
 		m.accumulated = accumulated
-		listItems = item.GroupAndOrder(gen(m.accumulated, m.ctx))
+		listItems = item.GroupAndOrder(gen(m.accumulated, m.ctx), m.ctx.Config.Behaviors.BellToTop)
 	}
 
 	m.list.SetItems(listItems)

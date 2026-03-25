@@ -34,20 +34,26 @@ type Display struct {
 	Rules       map[string]string `toml:"rules"`
 }
 
+type Behaviors struct {
+	BellToTop bool `toml:"bell_to_top"`
+}
+
 type Config struct {
-	Commands    []Command               `toml:"commands"`
-	DirActions  []Command               `toml:"dir_actions"`
-	Timeout     Timeout                 `toml:"timeout"`
-	Sources     map[string]SourceConfig `toml:"sources"`
-	Display     Display                 `toml:"display"`
+	Commands   []Command               `toml:"commands"`
+	DirActions []Command               `toml:"dir_actions"`
+	Timeout    Timeout                 `toml:"timeout"`
+	Sources    map[string]SourceConfig `toml:"sources"`
+	Display    Display                 `toml:"display"`
+	Behaviors  Behaviors               `toml:"behaviors"`
 }
 
 func DefaultConfig() Config {
 	defaultShortenHome := "~"
 	return Config{
-		Timeout: Timeout{Fetch: 2 * time.Second},
-		Sources: map[string]SourceConfig{"zoxide": {Limit: 0}},
-		Display: Display{ShortenHome: &defaultShortenHome},
+		Timeout:   Timeout{Fetch: 2 * time.Second},
+		Sources:   map[string]SourceConfig{"zoxide": {Limit: 0}},
+		Display:   Display{ShortenHome: &defaultShortenHome},
+		Behaviors: Behaviors{BellToTop: true},
 	}
 }
 

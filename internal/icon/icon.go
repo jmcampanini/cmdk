@@ -39,6 +39,7 @@ var entries = []Entry{
 
 	// Material Design (Files, Folders, UI, Actions)
 	{"nf-md-archive", "\U000f003c", "Archive"},
+	{"nf-md-bell", "\U000f009e", "Bell"},
 	{"nf-md-bookmark", "\U000f00c0", "Bookmark"},
 	{"nf-md-bug", "\U000f00e4", "Bug"},
 	{"nf-md-clipboard", "\U000f0147", "Clipboard"},

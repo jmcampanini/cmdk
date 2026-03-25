@@ -59,6 +59,14 @@ func ConfigDocs() []SectionDoc {
 			Example: "[sources.zoxide]\nlimit = 5\nmin_score = 2.5",
 		},
 		{
+			Name:        "behaviors",
+			Description: "Feature toggles that control how items are displayed and ordered.",
+			Fields: []FieldDoc{
+				{Name: "bell_to_top", Type: "bool", Description: "Sort tmux windows with bell activity to the top of the list, above all other items."},
+			},
+			Example: "[behaviors]\nbell_to_top = true",
+		},
+		{
 			Name:        "display",
 			Description: "Path display formatting.",
 			Fields: []FieldDoc{
@@ -139,6 +147,10 @@ EXECUTION
 
 func defaultValue(cfg *Config, section, field string) string {
 	switch section {
+	case "behaviors":
+		if field == "bell_to_top" {
+			return fmt.Sprintf("%t", cfg.Behaviors.BellToTop)
+		}
 	case "timeout":
 		if field == "fetch" {
 			return fmt.Sprintf("%q", cfg.Timeout.Fetch.String())

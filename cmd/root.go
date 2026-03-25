@@ -88,7 +88,7 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 		items := gen(nil, ctx)
-		listItems := item.GroupAndOrder(items)
+		listItems := item.GroupAndOrder(items, cfg.Behaviors.BellToTop)
 
 		t, err := theme.Resolve(themeFlag)
 		if err != nil {

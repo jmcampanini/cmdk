@@ -4,15 +4,23 @@ import "charm.land/bubbles/v2/list"
 
 var TypeOrder = []string{"cmd", "dir", "window"}
 
-func GroupAndOrder(items []Item) []list.Item {
+func GroupAndOrder(items []Item, bellToTop bool) []list.Item {
+	var bellItems []Item
 	buckets := make(map[string][]Item)
 	for _, it := range items {
+		if bellToTop && it.Data["bell"] == "1" {
+			bellItems = append(bellItems, it)
+			continue
+		}
 		buckets[it.Type] = append(buckets[it.Type], it)
 	}
 
-	var result []list.Item
-	seen := make(map[string]bool)
+	result := make([]list.Item, 0, len(items))
+	for _, it := range bellItems {
+		result = append(result, it)
+	}
 
+	seen := make(map[string]bool, len(TypeOrder))
 	for _, typ := range TypeOrder {
 		seen[typ] = true
 		for _, it := range buckets[typ] {

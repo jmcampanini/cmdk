@@ -30,6 +30,7 @@ type Theme struct {
 	TypeWindow color.Color
 	TypeDir    color.Color
 	TypeCmd    color.Color
+	Bell       color.Color
 
 	MatchHighlight color.Color
 	TextboxBg      color.Color
@@ -64,6 +65,7 @@ func Light() Theme {
 		TypeWindow: c("#8839ef"),
 		TypeDir:    c("#1e66f5"),
 		TypeCmd:    c("#40a02b"),
+		Bell:       c("#df8e1d"),
 
 		MatchHighlight: c("#e0c8f8"),
 		TextboxBg:      c("#dce0e8"),
@@ -91,6 +93,7 @@ func Dark() Theme {
 		TypeWindow: c("#cba6f7"),
 		TypeDir:    c("#89b4fa"),
 		TypeCmd:    c("#a6e3a1"),
+		Bell:       c("#f9e2af"),
 
 		MatchHighlight: c("#5b3d8f"),
 		TextboxBg:      c("#313244"),
