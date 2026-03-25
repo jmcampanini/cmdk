@@ -162,7 +162,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			sel, ok := m.resolveEnterTarget()
 			if ok {
 				switch sel.Action {
-				case item.ActionExecute:
+				case item.ActionExecute, item.ActionStaged:
+					// TODO: ActionStaged will get its own stage pipeline in Phase 2.
 					m.selected = &sel
 					return m, tea.Quit
 				case item.ActionNextList:

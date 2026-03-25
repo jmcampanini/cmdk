@@ -27,13 +27,30 @@ func TestGroupAndOrder_MixedTypes(t *testing.T) {
 	items := []Item{
 		{Type: "dir", Display: "~/foo"},
 		{Type: "window", Display: "main:1 zsh"},
-		{Type: "cmd", Display: "htop"},
+		{Type: "action", Display: "htop"},
 		{Type: "window", Display: "dev:1 node"},
 		{Type: "dir", Display: "~/bar"},
 	}
 
 	got := types(GroupAndOrder(items))
-	want := []string{"cmd", "dir", "dir", "window", "window"}
+	want := []string{"action", "dir", "dir", "window", "window"}
+
+	if !slices.Equal(got, want) {
+		t.Errorf("types = %v, want %v", got, want)
+	}
+}
+
+func TestGroupAndOrder_MixedTypesWithCmd(t *testing.T) {
+	items := []Item{
+		{Type: "dir", Display: "~/foo"},
+		{Type: "window", Display: "main:1 zsh"},
+		{Type: "cmd", Display: "htop"},
+		{Type: "action", Display: "deploy"},
+		{Type: "dir", Display: "~/bar"},
+	}
+
+	got := types(GroupAndOrder(items))
+	want := []string{"action", "cmd", "dir", "dir", "window"}
 
 	if !slices.Equal(got, want) {
 		t.Errorf("types = %v, want %v", got, want)
@@ -71,6 +88,20 @@ func TestGroupAndOrder_UnknownTypesAtEnd(t *testing.T) {
 
 	got := types(GroupAndOrder(items))
 	want := []string{"window", "custom", "alien"}
+
+	if !slices.Equal(got, want) {
+		t.Errorf("types = %v, want %v", got, want)
+	}
+}
+
+func TestGroupAndOrder_ActionBeforeCmd(t *testing.T) {
+	items := []Item{
+		{Type: "cmd", Display: "legacy"},
+		{Type: "action", Display: "new"},
+	}
+
+	got := types(GroupAndOrder(items))
+	want := []string{"action", "cmd"}
 
 	if !slices.Equal(got, want) {
 		t.Errorf("types = %v, want %v", got, want)

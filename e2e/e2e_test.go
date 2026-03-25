@@ -346,9 +346,10 @@ func writeConfig(t *testing.T, content string) string {
 
 func TestE2E_ConfigCommandsVisible(t *testing.T) {
 	xdg := writeConfig(t, `
-[[commands]]
+[[actions]]
 name = "my-custom-cmd"
 cmd = "echo hello"
+matches = "root"
 `)
 	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
 	defer killSession(t, sess)
@@ -364,9 +365,10 @@ cmd = "echo hello"
 func TestE2E_ExecuteCustomCommand(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "executed")
 	xdg := writeConfig(t, fmt.Sprintf(`
-[[commands]]
+[[actions]]
 name = "xq-run-this"
 cmd = "touch '%s'"
+matches = "root"
 `, marker))
 
 	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
@@ -442,17 +444,20 @@ func TestE2E_CWDVisible(t *testing.T) {
 
 func TestE2E_ConfigCommandOrder(t *testing.T) {
 	xdg := writeConfig(t, `
-[[commands]]
+[[actions]]
 name = "alpha-cmd"
 cmd = "echo alpha"
+matches = "root"
 
-[[commands]]
+[[actions]]
 name = "beta-cmd"
 cmd = "echo beta"
+matches = "root"
 
-[[commands]]
+[[actions]]
 name = "gamma-cmd"
 cmd = "echo gamma"
+matches = "root"
 `)
 	sess := "cmdk-test-" + strings.ReplaceAll(t.Name(), "/", "-")
 	cmd := tmuxCmd("new-session", "-d", "-s", sess, "-x", "120", "-y", "80",
@@ -486,9 +491,10 @@ func TestE2E_DirActionsVisible(t *testing.T) {
 	requireZoxideEntries(t)
 
 	xdg := writeConfig(t, `
-[[dir_actions]]
+[[actions]]
 name = "xq-yazi-action"
 cmd = "echo yazi"
+matches = "dir"
 `)
 	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
 	defer killSession(t, sess)
@@ -506,13 +512,15 @@ func TestE2E_DirActionsOrder(t *testing.T) {
 	requireZoxideEntries(t)
 
 	xdg := writeConfig(t, `
-[[dir_actions]]
+[[actions]]
 name = "xq-alpha-dirc"
 cmd = "echo alpha"
+matches = "dir"
 
-[[dir_actions]]
+[[actions]]
 name = "xq-beta-dirc"
 cmd = "echo beta"
+matches = "dir"
 `)
 	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
 	defer killSession(t, sess)
@@ -569,9 +577,10 @@ func restrictedPATH(t *testing.T) string {
 func TestE2E_EnvVarsPresent(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "cmdk-env")
 	xdg := writeConfig(t, fmt.Sprintf(`
-[[commands]]
+[[actions]]
 name = "xq-dump-env"
 cmd = "env | grep CMDK_ > '%s'"
+matches = "root"
 `, marker))
 
 	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
@@ -593,9 +602,10 @@ cmd = "env | grep CMDK_ > '%s'"
 func TestE2E_CMDKPaneIDInShell(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "pane-id")
 	xdg := writeConfig(t, fmt.Sprintf(`
-[[commands]]
+[[actions]]
 name = "xq-pane-id"
 cmd = "sh -c 'echo $CMDK_PANE_ID > %s'"
+matches = "root"
 `, marker))
 
 	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
@@ -678,9 +688,10 @@ func TestE2E_ErrorItemNotSelectable(t *testing.T) {
 func TestE2E_ExitCodePropagation(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "exitcode")
 	xdg := writeConfig(t, `
-[[commands]]
+[[actions]]
 name = "xq-exit-42"
 cmd = "exit 42"
+matches = "root"
 `)
 
 	sess := "cmdk-test-" + strings.ReplaceAll(t.Name(), "/", "-")

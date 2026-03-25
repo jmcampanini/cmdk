@@ -7,8 +7,8 @@ import (
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
-func TestCommandItems_EmptyConfig(t *testing.T) {
-	fn := CommandItems(&Config{})
+func TestMatchingActions_EmptyConfig(t *testing.T) {
+	fn := MatchingActions(&Config{}, "root")
 	items, err := fn(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -18,13 +18,13 @@ func TestCommandItems_EmptyConfig(t *testing.T) {
 	}
 }
 
-func TestCommandItems_CorrectFields(t *testing.T) {
+func TestMatchingActions_CorrectFields(t *testing.T) {
 	cfg := &Config{
-		Commands: []Command{
-			{Name: "htop", Cmd: "htop"},
+		Actions: []Action{
+			{Name: "htop", Cmd: "htop", Matches: "root"},
 		},
 	}
-	fn := CommandItems(cfg)
+	fn := MatchingActions(cfg, "root")
 	items, err := fn(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -33,8 +33,8 @@ func TestCommandItems_CorrectFields(t *testing.T) {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
 	it := items[0]
-	if it.Type != "cmd" {
-		t.Errorf("Type = %q, want %q", it.Type, "cmd")
+	if it.Type != "action" {
+		t.Errorf("Type = %q, want %q", it.Type, "action")
 	}
 	if it.Source != "config" {
 		t.Errorf("Source = %q, want %q", it.Source, "config")
@@ -50,15 +50,15 @@ func TestCommandItems_CorrectFields(t *testing.T) {
 	}
 }
 
-func TestCommandItems_PreservesOrder(t *testing.T) {
+func TestMatchingActions_PreservesOrder(t *testing.T) {
 	cfg := &Config{
-		Commands: []Command{
-			{Name: "alpha", Cmd: "echo alpha"},
-			{Name: "beta", Cmd: "echo beta"},
-			{Name: "gamma", Cmd: "echo gamma"},
+		Actions: []Action{
+			{Name: "alpha", Cmd: "echo alpha", Matches: "root"},
+			{Name: "beta", Cmd: "echo beta", Matches: "root"},
+			{Name: "gamma", Cmd: "echo gamma", Matches: "root"},
 		},
 	}
-	fn := CommandItems(cfg)
+	fn := MatchingActions(cfg, "root")
 	items, err := fn(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -74,13 +74,13 @@ func TestCommandItems_PreservesOrder(t *testing.T) {
 	}
 }
 
-func TestCommandItems_IconPassedThrough(t *testing.T) {
+func TestMatchingActions_IconPassedThrough(t *testing.T) {
 	cfg := &Config{
-		Commands: []Command{
-			{Name: "GitHub", Cmd: "open gh", Icon: "\ue709"},
+		Actions: []Action{
+			{Name: "GitHub", Cmd: "open gh", Matches: "root", Icon: "\ue709"},
 		},
 	}
-	fn := CommandItems(cfg)
+	fn := MatchingActions(cfg, "root")
 	items, err := fn(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -90,18 +90,145 @@ func TestCommandItems_IconPassedThrough(t *testing.T) {
 	}
 }
 
-func TestCommandItems_NoIcon(t *testing.T) {
+func TestMatchingActions_NoIcon(t *testing.T) {
 	cfg := &Config{
-		Commands: []Command{
-			{Name: "htop", Cmd: "htop"},
+		Actions: []Action{
+			{Name: "htop", Cmd: "htop", Matches: "root"},
 		},
 	}
-	fn := CommandItems(cfg)
+	fn := MatchingActions(cfg, "root")
 	items, err := fn(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if items[0].Icon != "" {
 		t.Errorf("Icon = %q, want empty", items[0].Icon)
+	}
+}
+
+func TestMatchingActions_FiltersByMatchType(t *testing.T) {
+	cfg := &Config{
+		Actions: []Action{
+			{Name: "htop", Cmd: "htop", Matches: "root"},
+			{Name: "Yazi", Cmd: "yazi", Matches: "dir"},
+			{Name: "logs", Cmd: "tail -f", Matches: "root"},
+		},
+	}
+
+	rootFn := MatchingActions(cfg, "root")
+	rootItems, err := rootFn(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(rootItems) != 2 {
+		t.Fatalf("root: got %d items, want 2", len(rootItems))
+	}
+	if rootItems[0].Display != "htop" {
+		t.Errorf("root items[0].Display = %q, want htop", rootItems[0].Display)
+	}
+	if rootItems[1].Display != "logs" {
+		t.Errorf("root items[1].Display = %q, want logs", rootItems[1].Display)
+	}
+
+	dirFn := MatchingActions(cfg, "dir")
+	dirItems, err := dirFn(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(dirItems) != 1 {
+		t.Fatalf("dir: got %d items, want 1", len(dirItems))
+	}
+	if dirItems[0].Display != "Yazi" {
+		t.Errorf("dir items[0].Display = %q, want Yazi", dirItems[0].Display)
+	}
+}
+
+func TestMatchingActions_ActionStagedForActionsWithStages(t *testing.T) {
+	cfg := &Config{
+		Actions: []Action{
+			{
+				Name: "New session", Cmd: "tmux new-session", Matches: "root",
+				Stages: []StageConfig{
+					{Type: "prompt", Key: "name", Text: "Session name"},
+				},
+			},
+		},
+	}
+	fn := MatchingActions(cfg, "root")
+	items, err := fn(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
+	}
+	if items[0].Action != item.ActionStaged {
+		t.Errorf("Action = %q, want %q", items[0].Action, item.ActionStaged)
+	}
+}
+
+func TestMatchingActions_StageConversion(t *testing.T) {
+	cfg := &Config{
+		Actions: []Action{
+			{
+				Name: "Multi", Cmd: "echo", Matches: "root",
+				Stages: []StageConfig{
+					{Type: "prompt", Key: "name", Text: "Enter name", Default: "world"},
+					{Type: "picker", Key: "dir", Source: "zoxide"},
+				},
+			},
+		},
+	}
+	fn := MatchingActions(cfg, "root")
+	items, err := fn(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(items[0].Stages) != 2 {
+		t.Fatalf("got %d stages, want 2", len(items[0].Stages))
+	}
+
+	s0 := items[0].Stages[0]
+	if s0.Type != item.StagePrompt {
+		t.Errorf("stages[0].Type = %q, want prompt", s0.Type)
+	}
+	if s0.Key != "name" {
+		t.Errorf("stages[0].Key = %q, want name", s0.Key)
+	}
+	if s0.Text != "Enter name" {
+		t.Errorf("stages[0].Text = %q, want Enter name", s0.Text)
+	}
+	if s0.Default != "world" {
+		t.Errorf("stages[0].Default = %q, want world", s0.Default)
+	}
+
+	s1 := items[0].Stages[1]
+	if s1.Type != item.StagePicker {
+		t.Errorf("stages[1].Type = %q, want picker", s1.Type)
+	}
+	if s1.Key != "dir" {
+		t.Errorf("stages[1].Key = %q, want dir", s1.Key)
+	}
+	if s1.Source != "zoxide" {
+		t.Errorf("stages[1].Source = %q, want zoxide", s1.Source)
+	}
+}
+
+func TestMatchingActions_NoStagesGivesActionExecute(t *testing.T) {
+	cfg := &Config{
+		Actions: []Action{
+			{Name: "htop", Cmd: "htop", Matches: "root"},
+		},
+	}
+	fn := MatchingActions(cfg, "root")
+	items, err := fn(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if items[0].Action != item.ActionExecute {
+		t.Errorf("Action = %q, want %q", items[0].Action, item.ActionExecute)
+	}
+	if len(items[0].Stages) != 0 {
+		t.Errorf("Stages len = %d, want 0", len(items[0].Stages))
 	}
 }
