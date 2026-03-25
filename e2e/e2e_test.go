@@ -284,7 +284,11 @@ func TestE2E_ZoxideDirsVisible(t *testing.T) {
 func TestE2E_SelectDirShowsDirActions(t *testing.T) {
 	requireZoxideEntries(t)
 
-	sess := startSession(t)
+	xdg := writeConfig(t, `
+[behavior]
+auto_select_single = false
+`)
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
 	defer killSession(t, sess)
 
 	waitForReady(t, sess)
@@ -300,7 +304,11 @@ func TestE2E_SelectDirShowsDirActions(t *testing.T) {
 func TestE2E_EscapeFromDirActionsReturnsToRoot(t *testing.T) {
 	requireZoxideEntries(t)
 
-	sess := startSession(t)
+	xdg := writeConfig(t, `
+[behavior]
+auto_select_single = false
+`)
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
 	defer killSession(t, sess)
 
 	waitForReady(t, sess)
@@ -548,7 +556,10 @@ matches = "dir"
 func TestE2E_NoDirActionsShowsDefault(t *testing.T) {
 	requireZoxideEntries(t)
 
-	xdg := t.TempDir()
+	xdg := writeConfig(t, `
+[behavior]
+auto_select_single = false
+`)
 	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
 	defer killSession(t, sess)
 

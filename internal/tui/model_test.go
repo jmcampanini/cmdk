@@ -877,3 +877,284 @@ func TestPromptView_ContainsLabelAndInput(t *testing.T) {
 		t.Error("prompt view should contain the stage label")
 	}
 }
+
+// --- Picker stage tests ---
+
+func pickerItems() []list.Item {
+	return []list.Item{
+		item.Item{
+			Type:    "action",
+			Display: "Pick File",
+			Action:  item.ActionStaged,
+			Cmd:     "cat {{.file}}",
+			Stages: []item.Stage{
+				{Type: item.StagePicker, Key: "file", Source: "printf 'alpha\\nbeta\\ngamma'"},
+			},
+		},
+	}
+}
+
+func pickerErrorItems() []list.Item {
+	return []list.Item{
+		item.Item{
+			Type:    "action",
+			Display: "Bad Picker",
+			Action:  item.ActionStaged,
+			Cmd:     "echo {{.file}}",
+			Stages: []item.Stage{
+				{Type: item.StagePicker, Key: "file", Source: "exit 1"},
+			},
+		},
+	}
+}
+
+func mixedPickerPromptItems() []list.Item {
+	return []list.Item{
+		item.Item{
+			Type:    "action",
+			Display: "Pick Then Name",
+			Action:  item.ActionStaged,
+			Cmd:     "cp {{.file}} {{.dest}}",
+			Stages: []item.Stage{
+				{Type: item.StagePicker, Key: "file", Source: "printf 'a.txt\\nb.txt'"},
+				{Type: item.StagePrompt, Key: "dest", Text: "Destination:"},
+			},
+		},
+	}
+}
+
+func TestPickerStage_EntersPickerMode(t *testing.T) {
+	m := newTestModel(pickerItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+
+	m = selectStagedItem(t, m)
+
+	if m.mode != viewPicker {
+		t.Errorf("mode = %d, want viewPicker (%d)", m.mode, viewPicker)
+	}
+	if len(m.pickerList.Items()) != 3 {
+		t.Errorf("picker items = %d, want 3", len(m.pickerList.Items()))
+	}
+}
+
+func TestPickerStage_SelectAndExecute(t *testing.T) {
+	m := newTestModel(pickerItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+
+	m = selectStagedItem(t, m)
+
+	// Exit filter and select first item.
+	result, _ := m.Update(escMsg)
+	m = result.(Model)
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.Selected() == nil {
+		t.Fatal("Selected() should be set after picker selection")
+	}
+	if m.Selected().Cmd != "cat {{.file}}" {
+		t.Errorf("Selected().Cmd = %q", m.Selected().Cmd)
+	}
+	if cmd == nil {
+		t.Error("expected Quit command")
+	}
+	data := execute.FlattenData(m.Accumulated())
+	if data["file"] != "alpha" {
+		t.Errorf("data[file] = %q, want alpha", data["file"])
+	}
+}
+
+func TestPickerStage_ErrorShowsInList(t *testing.T) {
+	m := newTestModel(pickerErrorItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+
+	m = selectStagedItem(t, m)
+
+	if m.mode != viewPicker {
+		t.Errorf("mode = %d, want viewPicker", m.mode)
+	}
+	if len(m.pickerList.Items()) != 1 {
+		t.Fatalf("picker items = %d, want 1 (error item)", len(m.pickerList.Items()))
+	}
+	it, ok := m.pickerList.Items()[0].(item.Item)
+	if !ok {
+		t.Fatal("expected item.Item")
+	}
+	if !strings.Contains(it.Display, "command error") {
+		t.Errorf("error item Display = %q, want to contain 'command error'", it.Display)
+	}
+}
+
+func TestPickerStage_EscPopsBack(t *testing.T) {
+	m := newTestModel(pickerItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+
+	m = selectStagedItem(t, m)
+	if m.mode != viewPicker {
+		t.Fatal("expected viewPicker")
+	}
+
+	// First esc exits filter mode.
+	result, _ := m.Update(escMsg)
+	m = result.(Model)
+	// Second esc pops back.
+	result, cmd := m.Update(escMsg)
+	m = result.(Model)
+
+	if cmd != nil {
+		t.Error("Esc from picker should not quit")
+	}
+	if m.mode != viewList {
+		t.Errorf("mode = %d, want viewList", m.mode)
+	}
+	if len(m.Accumulated()) != 0 {
+		t.Errorf("Accumulated() len = %d, want 0", len(m.Accumulated()))
+	}
+}
+
+func TestMixedPickerPrompt_Chain(t *testing.T) {
+	m := newTestModel(mixedPickerPromptItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+
+	m = selectStagedItem(t, m)
+	if m.mode != viewPicker {
+		t.Fatal("expected viewPicker for first stage")
+	}
+
+	// Exit filter, select first item from picker.
+	result, _ := m.Update(escMsg)
+	m = result.(Model)
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if cmd != nil {
+		t.Error("should not quit after first stage")
+	}
+	if m.mode != viewPrompt {
+		t.Fatalf("mode = %d, want viewPrompt for second stage", m.mode)
+	}
+	if m.stageLabel != "Destination:" {
+		t.Errorf("stageLabel = %q, want Destination:", m.stageLabel)
+	}
+
+	m = typeInPrompt(t, m, "/tmp/out")
+	result, cmd = m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.Selected() == nil {
+		t.Fatal("Selected() should be set after both stages")
+	}
+	if cmd == nil {
+		t.Error("expected Quit command")
+	}
+	data := execute.FlattenData(m.Accumulated())
+	if data["file"] != "a.txt" {
+		t.Errorf("data[file] = %q, want a.txt", data["file"])
+	}
+	if data["dest"] != "/tmp/out" {
+		t.Errorf("data[dest] = %q, want /tmp/out", data["dest"])
+	}
+}
+
+// --- Auto-select tests ---
+
+func autoSelectRegistry() *generator.Registry {
+	reg := generator.NewRegistry()
+	reg.Register("root", func(_ []item.Item, _ generator.Context) []item.Item {
+		return []item.Item{
+			{Type: "dir", Display: "~/foo", Action: item.ActionNextList, Data: map[string]string{"path": "~/foo"}},
+		}
+	})
+	reg.Register("dir-actions", func(_ []item.Item, _ generator.Context) []item.Item {
+		return []item.Item{
+			{Type: "action", Display: "Only Action", Action: item.ActionExecute, Cmd: "echo hello"},
+		}
+	})
+	reg.MapType("", "root")
+	reg.MapType("dir", "dir-actions")
+	return reg
+}
+
+func autoSelectRegistryMultiple() *generator.Registry {
+	reg := generator.NewRegistry()
+	reg.Register("root", func(_ []item.Item, _ generator.Context) []item.Item {
+		return []item.Item{
+			{Type: "dir", Display: "~/foo", Action: item.ActionNextList, Data: map[string]string{"path": "~/foo"}},
+		}
+	})
+	reg.Register("dir-actions", func(_ []item.Item, _ generator.Context) []item.Item {
+		return []item.Item{
+			{Type: "action", Display: "Action 1", Action: item.ActionExecute, Cmd: "echo 1"},
+			{Type: "action", Display: "Action 2", Action: item.ActionExecute, Cmd: "echo 2"},
+		}
+	})
+	reg.MapType("", "root")
+	reg.MapType("dir", "dir-actions")
+	return reg
+}
+
+func TestAutoSelectSingle_SkipsActionList(t *testing.T) {
+	items := []list.Item{
+		item.Item{Type: "dir", Display: "~/foo", Action: item.ActionNextList, Data: map[string]string{"path": "~/foo"}},
+	}
+	m := newTestModel(items, autoSelectRegistry())
+	m.autoSelectSingle = true
+	m = setWindowSize(t, m, 80, 40)
+
+	m = exitFilterMode(t, m)
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.Selected() == nil {
+		t.Fatal("Selected() should be set — auto-select should have fired")
+	}
+	if m.Selected().Display != "Only Action" {
+		t.Errorf("Selected().Display = %q, want 'Only Action'", m.Selected().Display)
+	}
+	if cmd == nil {
+		t.Error("expected Quit command")
+	}
+}
+
+func TestAutoSelectSingle_Disabled_ShowsList(t *testing.T) {
+	items := []list.Item{
+		item.Item{Type: "dir", Display: "~/foo", Action: item.ActionNextList, Data: map[string]string{"path": "~/foo"}},
+	}
+	m := newTestModel(items, autoSelectRegistry())
+	m.autoSelectSingle = false
+	m = setWindowSize(t, m, 80, 40)
+
+	m = exitFilterMode(t, m)
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.Selected() != nil {
+		t.Error("Selected() should be nil — auto-select disabled, list should be shown")
+	}
+	if len(m.Accumulated()) != 1 {
+		t.Errorf("Accumulated() len = %d, want 1 (dir item)", len(m.Accumulated()))
+	}
+	if len(m.list.Items()) != 1 {
+		t.Errorf("list items = %d, want 1 (action shown)", len(m.list.Items()))
+	}
+}
+
+func TestAutoSelectSingle_MultipleActions_ShowsList(t *testing.T) {
+	items := []list.Item{
+		item.Item{Type: "dir", Display: "~/foo", Action: item.ActionNextList, Data: map[string]string{"path": "~/foo"}},
+	}
+	m := newTestModel(items, autoSelectRegistryMultiple())
+	m.autoSelectSingle = true
+	m = setWindowSize(t, m, 80, 40)
+
+	m = exitFilterMode(t, m)
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.Selected() != nil {
+		t.Error("Selected() should be nil — multiple actions, no auto-select")
+	}
+	if len(m.list.Items()) != 2 {
+		t.Errorf("list items = %d, want 2", len(m.list.Items()))
+	}
+}

@@ -1,9 +1,12 @@
 package tui
 
 import (
+	"context"
 	"fmt"
+	"os/exec"
 	"slices"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/textinput"
@@ -23,22 +26,27 @@ type viewMode int
 const (
 	viewList   viewMode = iota
 	viewPrompt
+	viewPicker
 )
 
 type Model struct {
-	list        list.Model
-	paneID      string
-	accumulated []item.Item
-	selected    *item.Item
-	registry    *generator.Registry
-	ctx         generator.Context
-	stackStyle  lipgloss.Style
-	filterStyle lipgloss.Style
-	winWidth    int
-	winHeight   int
-	mode        viewMode
-	stageInput  textinput.Model
-	stageLabel  string
+	list            list.Model
+	paneID          string
+	accumulated     []item.Item
+	selected        *item.Item
+	registry        *generator.Registry
+	ctx             generator.Context
+	stackStyle      lipgloss.Style
+	filterStyle     lipgloss.Style
+	winWidth        int
+	winHeight       int
+	mode            viewMode
+	stageInput      textinput.Model
+	stageLabel      string
+	pickerList      list.Model
+	pickerKey       string
+	theme           theme.Theme
+	autoSelectSingle bool
 }
 
 const horizontalPadding = 1
@@ -63,14 +71,21 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 		log.Warn("failed to enter filter mode during init; falling back to browse mode")
 	}
 
+	autoSelect := true
+	if ctx.Config != nil {
+		autoSelect = ctx.Config.Behavior.ShouldAutoSelectSingle()
+	}
+
 	return Model{
-		list:        l,
-		paneID:      paneID,
-		accumulated: accumulated,
-		registry:    registry,
-		ctx:         ctx,
-		stackStyle:  lipgloss.NewStyle().Foreground(t.Overlay0),
-		filterStyle: lipgloss.NewStyle().Inline(true).Background(t.TextboxBg),
+		list:             l,
+		paneID:           paneID,
+		accumulated:      accumulated,
+		registry:         registry,
+		ctx:              ctx,
+		stackStyle:       lipgloss.NewStyle().Foreground(t.Overlay0),
+		filterStyle:      lipgloss.NewStyle().Inline(true).Background(t.TextboxBg),
+		theme:            t,
+		autoSelectSingle: autoSelect,
 	}
 }
 
@@ -166,11 +181,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.winWidth = ws.Width
 		m.winHeight = ws.Height
 		m.list.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
+		if m.mode == viewPicker {
+			m.pickerList.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
+		}
 		return m, nil
 	}
 
-	if m.mode == viewPrompt {
+	switch m.mode {
+	case viewPrompt:
 		return m.updatePrompt(msg)
+	case viewPicker:
+		return m.updatePicker(msg)
 	}
 
 	if key, ok := msg.(tea.KeyPressMsg); ok {
@@ -194,7 +215,7 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.accumulated = append(slices.Clone(m.accumulated), sel)
 				return m.advanceStage(), nil
 			case item.ActionNextList:
-				return m.handleNextList(sel), nil
+				return m.handleNextList(sel)
 			}
 		}
 	}
@@ -249,31 +270,100 @@ func (m Model) updatePrompt(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.advanceStage(), nil
 
 	case "esc":
-		actionIdx := m.findActionIndex()
-		if actionIdx < 0 {
-			return m, nil
-		}
-		stageIdx := len(m.accumulated) - actionIdx - 1
-		if stageIdx == 0 {
-			m.accumulated = slices.Clone(m.accumulated[:len(m.accumulated)-1])
-			m.mode = viewList
-			return m.navigateTo(m.accumulated), nil
-		}
-		// Pop the last stage result, re-show previous stage, and restore
-		// the user's prior input so back-navigation is non-destructive.
-		popped := m.accumulated[len(m.accumulated)-1]
-		m.accumulated = slices.Clone(m.accumulated[:len(m.accumulated)-1])
-		m = m.advanceStage()
-		prevStage := m.accumulated[actionIdx].Stages[len(m.accumulated)-actionIdx-1]
-		if prev, ok := popped.Data[prevStage.Key]; ok {
-			m.stageInput.SetValue(prev)
-		}
-		return m, nil
+		return m.stageEsc()
 	}
 
 	var cmd tea.Cmd
 	m.stageInput, cmd = m.stageInput.Update(msg)
 	return m, cmd
+}
+
+func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
+	key, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		var cmd tea.Cmd
+		m.pickerList, cmd = m.pickerList.Update(msg)
+		return m, cmd
+	}
+
+	if key.String() == "enter" {
+		sel, selOk := m.resolvePickerTarget()
+		if selOk && sel.Type != "error" {
+			actionIdx := m.findActionIndex()
+			if actionIdx < 0 {
+				return m, nil
+			}
+			action := m.accumulated[actionIdx]
+			stageIdx := len(m.accumulated) - actionIdx - 1
+
+			resultItem := item.NewItem()
+			resultItem.Type = "stage-result"
+			resultItem.Display = sel.Display
+			resultItem.Data[m.pickerKey] = sel.Display
+			m.accumulated = append(slices.Clone(m.accumulated), resultItem)
+
+			if stageIdx+1 >= len(action.Stages) {
+				return m.completeStages(), tea.Quit
+			}
+			return m.advanceStage(), nil
+		}
+	}
+
+	// Esc exits filter first, then pops back (same as main list).
+	if key.String() == "esc" && m.pickerList.FilterState() == list.Unfiltered {
+		return m.stageEsc()
+	}
+
+	if (key.String() == "up" || key.String() == "down") &&
+		m.pickerList.FilterState() == list.Filtering &&
+		m.pickerList.FilterInput.Value() == "" {
+		m.pickerList.ResetFilter()
+		var cmd tea.Cmd
+		m.pickerList, cmd = m.pickerList.Update(msg)
+		return m, cmd
+	}
+
+	var cmd tea.Cmd
+	m.pickerList, cmd = m.pickerList.Update(msg)
+	return m, cmd
+}
+
+// stageEsc handles Esc from prompt or picker stages.
+func (m Model) stageEsc() (tea.Model, tea.Cmd) {
+	actionIdx := m.findActionIndex()
+	if actionIdx < 0 {
+		return m, nil
+	}
+	stageIdx := len(m.accumulated) - actionIdx - 1
+	if stageIdx == 0 {
+		m.accumulated = slices.Clone(m.accumulated[:len(m.accumulated)-1])
+		m.mode = viewList
+		return m.navigateTo(m.accumulated), nil
+	}
+	popped := m.accumulated[len(m.accumulated)-1]
+	m.accumulated = slices.Clone(m.accumulated[:len(m.accumulated)-1])
+	m = m.advanceStage()
+	// Restore prior input if going back to a prompt stage.
+	if m.mode == viewPrompt {
+		prevStage := m.accumulated[actionIdx].Stages[len(m.accumulated)-actionIdx-1]
+		if prev, ok := popped.Data[prevStage.Key]; ok {
+			m.stageInput.SetValue(prev)
+		}
+	}
+	return m, nil
+}
+
+func (m Model) resolvePickerTarget() (item.Item, bool) {
+	switch {
+	case m.pickerList.FilterState() == list.Filtering && len(m.pickerList.VisibleItems()) == 1:
+		sel, ok := m.pickerList.VisibleItems()[0].(item.Item)
+		return sel, ok
+	case m.pickerList.FilterState() != list.Filtering:
+		sel, ok := m.pickerList.SelectedItem().(item.Item)
+		return sel, ok
+	default:
+		return item.Item{}, false
+	}
 }
 
 // findActionIndex returns the index of the last ActionStaged item in the accumulated stack.
@@ -299,9 +389,10 @@ func (m Model) advanceStage() Model {
 	}
 
 	stage := action.Stages[stageIdx]
+	data := execute.FlattenData(m.accumulated)
+
 	switch stage.Type {
 	case item.StagePrompt:
-		data := execute.FlattenData(m.accumulated)
 		label, err := execute.RenderCmd(stage.Text, data)
 		if err != nil {
 			m.stageLabel = fmt.Sprintf("template error: %s", err)
@@ -321,14 +412,81 @@ func (m Model) advanceStage() Model {
 		m.mode = viewPrompt
 
 	case item.StagePicker:
-		// TODO: Phase 3 will implement picker stages.
-		// Pop the action and return to list view to prevent progression through
-		// an unimplemented stage type.
-		m.accumulated = slices.Clone(m.accumulated[:actionIdx])
-		m.mode = viewList
+		rendered, err := execute.RenderCmd(stage.Source, data)
+		if err != nil {
+			m = m.initPickerWithError(stage.Key, fmt.Sprintf("template error: %s", err))
+			return m
+		}
+		items, runErr := runPickerSource(rendered)
+		if runErr != nil {
+			m = m.initPickerWithError(stage.Key, fmt.Sprintf("command error: %s", runErr))
+			return m
+		}
+		m = m.initPicker(stage.Key, items)
 	}
 
 	return m
+}
+
+// runPickerSource executes a shell command and returns one item per output line.
+// Structured as a standalone function for future conversion to async tea.Cmd.
+func runPickerSource(rendered string) ([]item.Item, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "sh", "-c", rendered)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+
+	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+	var items []item.Item
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		it := item.NewItem()
+		it.Type = "pick"
+		it.Display = line
+		items = append(items, it)
+	}
+	return items, nil
+}
+
+func (m Model) initPicker(key string, items []item.Item) Model {
+	listItems := make([]list.Item, len(items))
+	for i, it := range items {
+		listItems[i] = it
+	}
+
+	pl := list.New(listItems, newItemDelegate(m.theme), 0, 0)
+	pl.Title = "cmdk"
+	pl.Filter = list.DefaultFilter
+	pl.SetShowStatusBar(false)
+	pl.SetShowPagination(false)
+	pl.SetShowTitle(false)
+	pl.SetShowFilter(false)
+	applyListStyles(&pl, m.theme)
+
+	pl.SetSize(max(m.winWidth, 1), 1)
+	pl, _ = pl.Update(tea.KeyPressMsg{Code: rune('/')})
+
+	if m.winHeight > 0 {
+		pl.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
+	}
+
+	m.pickerList = pl
+	m.pickerKey = key
+	m.mode = viewPicker
+	return m
+}
+
+func (m Model) initPickerWithError(key string, errMsg string) Model {
+	errItem := item.NewItem()
+	errItem.Type = "error"
+	errItem.Display = errMsg
+	return m.initPicker(key, []item.Item{errItem})
 }
 
 // completeStages extracts the action item as selected and removes it from accumulated,
@@ -363,8 +521,22 @@ func (m Model) resolveEnterTarget() (item.Item, bool) {
 	}
 }
 
-func (m Model) handleNextList(sel item.Item) Model {
-	return m.navigateTo(append(slices.Clone(m.accumulated), sel))
+func (m Model) handleNextList(sel item.Item) (Model, tea.Cmd) {
+	m = m.navigateTo(append(slices.Clone(m.accumulated), sel))
+
+	if m.autoSelectSingle && len(m.list.Items()) == 1 {
+		if it, ok := m.list.Items()[0].(item.Item); ok && it.Type == "action" {
+			switch it.Action {
+			case item.ActionExecute:
+				m.selected = &it
+				return m, tea.Quit
+			case item.ActionStaged:
+				m.accumulated = append(slices.Clone(m.accumulated), it)
+				return m.advanceStage(), nil
+			}
+		}
+	}
+	return m, nil
 }
 
 func (m Model) handleBack() Model {
@@ -396,16 +568,22 @@ func (m Model) navigateTo(accumulated []item.Item) Model {
 
 func (m Model) headerView() string {
 	content := m.list.Styles.Title.Render(m.list.Title)
-	if m.mode == viewList && m.list.FilterState() == list.Filtering {
-		filterView := m.list.FilterInput.View()
-		body, hadPrompt := strings.CutPrefix(filterView, m.list.FilterInput.Prompt)
-		if hadPrompt {
-			content = m.list.FilterInput.Prompt + m.filterStyle.Render(body)
-		} else {
-			content = m.filterStyle.Render(filterView)
-		}
+	switch {
+	case m.mode == viewList && m.list.FilterState() == list.Filtering:
+		content = m.renderFilterHeader(m.list.FilterInput)
+	case m.mode == viewPicker && m.pickerList.FilterState() == list.Filtering:
+		content = m.renderFilterHeader(m.pickerList.FilterInput)
 	}
 	return m.list.Styles.TitleBar.Render(content)
+}
+
+func (m Model) renderFilterHeader(fi textinput.Model) string {
+	filterView := fi.View()
+	body, hadPrompt := strings.CutPrefix(filterView, fi.Prompt)
+	if hadPrompt {
+		return fi.Prompt + m.filterStyle.Render(body)
+	}
+	return m.filterStyle.Render(filterView)
 }
 
 func (m Model) stackView() string {
@@ -444,6 +622,8 @@ func (m Model) View() tea.View {
 	switch m.mode {
 	case viewPrompt:
 		body = m.promptView()
+	case viewPicker:
+		body = m.pickerList.View()
 	default:
 		body = m.list.View()
 	}
