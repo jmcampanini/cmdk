@@ -291,6 +291,36 @@ func TestValidate_StageEmptyKey(t *testing.T) {
 	}
 }
 
+func TestValidate_StageKeyWithHyphen(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "branch-name", Text: "Enter"}},
+	}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for key with hyphen")
+	}
+	if !strings.Contains(err.Error(), "valid identifier") {
+		t.Errorf("error = %q, want to contain 'valid identifier'", err.Error())
+	}
+}
+
+func TestValidate_StageKeyStartsWithDigit(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "1name", Text: "Enter"}},
+	}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for key starting with digit")
+	}
+	if !strings.Contains(err.Error(), "valid identifier") {
+		t.Errorf("error = %q, want to contain 'valid identifier'", err.Error())
+	}
+}
+
 func TestBehavior_ShouldAutoSelectSingle_DefaultTrue(t *testing.T) {
 	b := Behavior{}
 	if !b.ShouldAutoSelectSingle() {

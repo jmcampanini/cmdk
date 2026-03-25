@@ -1161,3 +1161,100 @@ func TestAutoSelectSingle_MultipleActions_ShowsList(t *testing.T) {
 		t.Errorf("list items = %d, want 2", len(m.list.Items()))
 	}
 }
+
+func TestPickerStage_EnterOnErrorItem_NoOp(t *testing.T) {
+	m := newTestModel(pickerErrorItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+
+	m = selectStagedItem(t, m)
+	if m.mode != viewPicker {
+		t.Fatal("expected viewPicker")
+	}
+
+	// Exit filter mode, then press Enter on the error item.
+	result, _ := m.Update(escMsg)
+	m = result.(Model)
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.Selected() != nil {
+		t.Error("Selected() should be nil — error items are not selectable")
+	}
+	if m.mode != viewPicker {
+		t.Errorf("mode = %d, want viewPicker (%d)", m.mode, viewPicker)
+	}
+	if cmd != nil {
+		t.Error("Enter on error item should not produce a quit command")
+	}
+}
+
+func TestAutoSelectSingle_StagedAction_EntersPrompt(t *testing.T) {
+	reg := generator.NewRegistry()
+	reg.Register("root", func(_ []item.Item, _ generator.Context) []item.Item {
+		return []item.Item{
+			{Type: "dir", Display: "~/foo", Action: item.ActionNextList, Data: map[string]string{"path": "~/foo"}},
+		}
+	})
+	reg.Register("dir-actions", func(_ []item.Item, _ generator.Context) []item.Item {
+		return []item.Item{
+			{
+				Type:    "action",
+				Display: "Staged Action",
+				Action:  item.ActionStaged,
+				Cmd:     "echo {{.val}}",
+				Stages: []item.Stage{
+					{Type: item.StagePrompt, Key: "val", Text: "Value:"},
+				},
+			},
+		}
+	})
+	reg.MapType("", "root")
+	reg.MapType("dir", "dir-actions")
+
+	items := []list.Item{
+		item.Item{Type: "dir", Display: "~/foo", Action: item.ActionNextList, Data: map[string]string{"path": "~/foo"}},
+	}
+	m := newTestModel(items, reg)
+	m.autoSelectSingle = true
+	m = setWindowSize(t, m, 80, 40)
+
+	m = exitFilterMode(t, m)
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if cmd != nil {
+		t.Error("should not quit — staged action enters prompt")
+	}
+	if m.mode != viewPrompt {
+		t.Errorf("mode = %d, want viewPrompt (%d)", m.mode, viewPrompt)
+	}
+	if m.stageLabel != "Value:" {
+		t.Errorf("stageLabel = %q, want %q", m.stageLabel, "Value:")
+	}
+}
+
+func TestCompleteStages_RemovesActionFromAccumulated(t *testing.T) {
+	m := newTestModel(stagedItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	m = selectStagedItem(t, m)
+	m = typeInPrompt(t, m, "feature/auth")
+
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.Selected() == nil {
+		t.Fatal("Selected() should be set after completing stages")
+	}
+
+	for _, it := range m.Accumulated() {
+		if it.Action == item.ActionStaged {
+			t.Error("Accumulated() should not contain the action item after completion")
+		}
+	}
+
+	data := execute.FlattenData(m.Accumulated())
+	if data["branch"] != "feature/auth" {
+		t.Errorf("data[branch] = %q, want feature/auth", data["branch"])
+	}
+}

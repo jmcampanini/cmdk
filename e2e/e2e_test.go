@@ -207,9 +207,8 @@ func selectDirAction(t *testing.T, sess string, actionName string) {
 		return strings.Contains(s, actionName)
 	}, defaultTimeout)
 
-	sendKeys(t, sess, "Down")
-	time.Sleep(100 * time.Millisecond)
-	sendKeys(t, sess, "Enter")
+	sendKeys(t, sess, "/")
+	filterAndExecute(t, sess, actionName)
 }
 
 func assertMarkerContains(t *testing.T, marker string, expected string) {

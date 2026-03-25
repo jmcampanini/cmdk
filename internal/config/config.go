@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"time"
 
@@ -67,6 +68,8 @@ type Config struct {
 var validMatchTypes = []string{"root", "dir"}
 
 var reservedKeys = []string{"path", "pane_id", "session", "window_index"}
+
+var validStageKey = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 func DefaultConfig() Config {
 	defaultShortenHome := "~"
@@ -135,6 +138,9 @@ func validateStages(actionIdx int, stages []StageConfig) error {
 		prefix := fmt.Sprintf("actions[%d].stages[%d]", actionIdx, j)
 		if s.Key == "" {
 			return fmt.Errorf("%s.key cannot be empty", prefix)
+		}
+		if !validStageKey.MatchString(s.Key) {
+			return fmt.Errorf("%s.key %q must be a valid identifier (letters, digits, underscores; cannot start with a digit)", prefix, s.Key)
 		}
 		if seenKeys[s.Key] {
 			return fmt.Errorf("%s.key %q is duplicate within this action", prefix, s.Key)

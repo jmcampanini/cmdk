@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os/exec"
@@ -216,6 +217,8 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m.advanceStage(), nil
 			case item.ActionNextList:
 				return m.handleNextList(sel)
+			default:
+				log.Error("bug: unknown action type", "action", sel.Action)
 			}
 		}
 	}
@@ -249,6 +252,7 @@ func (m Model) updatePrompt(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "enter":
 		actionIdx := m.findActionIndex()
 		if actionIdx < 0 {
+			log.Error("bug: no ActionStaged item in accumulated stack")
 			return m, nil
 		}
 		action := m.accumulated[actionIdx]
@@ -289,6 +293,7 @@ func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if selOk && sel.Type != "error" {
 			actionIdx := m.findActionIndex()
 			if actionIdx < 0 {
+				log.Error("bug: no ActionStaged item in accumulated stack")
 				return m, nil
 			}
 			action := m.accumulated[actionIdx]
@@ -328,6 +333,7 @@ func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) stageEsc() (tea.Model, tea.Cmd) {
 	actionIdx := m.findActionIndex()
 	if actionIdx < 0 {
+		log.Error("bug: no ActionStaged item in accumulated stack")
 		return m, nil
 	}
 	stageIdx := len(m.accumulated) - actionIdx - 1
@@ -376,16 +382,21 @@ func (m Model) findActionIndex() int {
 func (m Model) advanceStage() Model {
 	actionIdx := m.findActionIndex()
 	if actionIdx < 0 {
+		log.Error("bug: no ActionStaged item in accumulated stack")
 		return m
 	}
 	action := m.accumulated[actionIdx]
 	stageIdx := len(m.accumulated) - actionIdx - 1
 	if stageIdx >= len(action.Stages) {
+		log.Error("bug: stageIdx out of bounds", "stageIdx", stageIdx, "stages", len(action.Stages))
 		return m
 	}
 
 	stage := action.Stages[stageIdx]
 	data := execute.FlattenData(m.accumulated)
+	if m.paneID != "" {
+		data["pane_id"] = m.paneID
+	}
 
 	switch stage.Type {
 	case item.StagePrompt:
@@ -399,7 +410,9 @@ func (m Model) advanceStage() Model {
 		ti := textinput.New()
 		if stage.Default != "" {
 			def, err := execute.RenderCmd(stage.Default, data)
-			if err == nil {
+			if err != nil {
+				log.Warn("failed to render stage default template", "key", stage.Key, "error", err)
+			} else {
 				ti.SetValue(def)
 			}
 		}
@@ -418,7 +431,14 @@ func (m Model) advanceStage() Model {
 			m = m.initPickerWithError(stage.Key, fmt.Sprintf("command error: %s", runErr))
 			return m
 		}
+		if len(items) == 0 {
+			m = m.initPickerWithError(stage.Key, "no items returned")
+			return m
+		}
 		m = m.initPicker(stage.Key, items)
+
+	default:
+		log.Error("bug: unknown stage type", "type", stage.Type)
 	}
 
 	return m
@@ -430,10 +450,18 @@ func runPickerSource(rendered string) ([]item.Item, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	var stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, "sh", "-c", rendered)
+	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, err
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, fmt.Errorf("command timed out after 10s")
+		}
+		if stderr.Len() > 0 {
+			return nil, fmt.Errorf("command failed: %w\nstderr: %s", err, stderr.String())
+		}
+		return nil, fmt.Errorf("command failed: %w", err)
 	}
 
 	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
@@ -467,6 +495,9 @@ func (m Model) initPicker(key string, items []item.Item) Model {
 
 	pl.SetSize(max(m.winWidth, 1), 1)
 	pl, _ = pl.Update(tea.KeyPressMsg{Code: rune('/')})
+	if pl.FilterState() != list.Filtering {
+		log.Warn("failed to enter filter mode during picker init; falling back to browse mode")
+	}
 
 	if m.winHeight > 0 {
 		pl.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
@@ -490,6 +521,7 @@ func (m Model) initPickerWithError(key string, errMsg string) Model {
 func (m Model) completeStages() Model {
 	actionIdx := m.findActionIndex()
 	if actionIdx < 0 {
+		log.Error("bug: no ActionStaged item in accumulated stack")
 		return m
 	}
 	action := m.accumulated[actionIdx]
@@ -529,6 +561,8 @@ func (m Model) handleNextList(sel item.Item) (Model, tea.Cmd) {
 			case item.ActionStaged:
 				m.accumulated = append(slices.Clone(m.accumulated), it)
 				return m.advanceStage(), nil
+			default:
+				log.Error("bug: unknown action type in auto-select", "action", it.Action)
 			}
 		}
 	}
