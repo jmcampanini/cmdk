@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/jmcampanini/cmdk/internal/execute"
 	"github.com/jmcampanini/cmdk/internal/generator"
 	"github.com/jmcampanini/cmdk/internal/item"
 	"github.com/jmcampanini/cmdk/internal/theme"
@@ -622,5 +623,257 @@ func TestDownDuringNonEmptyFilter_StaysInFilterMode(t *testing.T) {
 
 	if m.list.FilterState() == list.Unfiltered {
 		t.Error("FilterState() should not be Unfiltered when filter has text")
+	}
+}
+
+func stagedItems() []list.Item {
+	return []list.Item{
+		item.Item{
+			Type:    "action",
+			Display: "New Branch",
+			Action:  item.ActionStaged,
+			Cmd:     "git checkout -b {{.branch}}",
+			Stages: []item.Stage{
+				{Type: item.StagePrompt, Key: "branch", Text: "Branch name:"},
+			},
+		},
+	}
+}
+
+func stagedItemWithDefault() []list.Item {
+	return []list.Item{
+		item.Item{
+			Type:    "action",
+			Display: "New Branch",
+			Action:  item.ActionStaged,
+			Cmd:     "git checkout -b {{.branch}}",
+			Stages: []item.Stage{
+				{Type: item.StagePrompt, Key: "branch", Text: "Branch name:", Default: "feature/"},
+			},
+		},
+	}
+}
+
+func multiStageItems() []list.Item {
+	return []list.Item{
+		item.Item{
+			Type:    "action",
+			Display: "Rename",
+			Action:  item.ActionStaged,
+			Cmd:     "mv {{.old}} {{.new}}",
+			Stages: []item.Stage{
+				{Type: item.StagePrompt, Key: "old", Text: "Old name:"},
+				{Type: item.StagePrompt, Key: "new", Text: "New name:"},
+			},
+		},
+	}
+}
+
+func selectStagedItem(t *testing.T, m Model) Model {
+	t.Helper()
+	m = exitFilterMode(t, m)
+	result, _ := m.Update(enterMsg)
+	return result.(Model)
+}
+
+func typeInPrompt(t *testing.T, m Model, text string) Model {
+	t.Helper()
+	for _, ch := range text {
+		result, _ := m.Update(tea.KeyPressMsg{Code: ch, Text: string(ch)})
+		m = result.(Model)
+	}
+	return m
+}
+
+func TestActionStaged_EntersPromptMode(t *testing.T) {
+	m := newTestModel(stagedItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	m = selectStagedItem(t, m)
+
+	if m.mode != viewPrompt {
+		t.Errorf("mode = %d, want viewPrompt (%d)", m.mode, viewPrompt)
+	}
+	if m.stageLabel != "Branch name:" {
+		t.Errorf("stageLabel = %q, want %q", m.stageLabel, "Branch name:")
+	}
+	if len(m.Accumulated()) != 1 {
+		t.Errorf("Accumulated() len = %d, want 1 (action item)", len(m.Accumulated()))
+	}
+}
+
+func TestPromptEnter_PushesResultAndExecutes(t *testing.T) {
+	m := newTestModel(stagedItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	m = selectStagedItem(t, m)
+	m = typeInPrompt(t, m, "feature/auth")
+
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.Selected() == nil {
+		t.Fatal("Selected() should be set after completing single stage")
+	}
+	if m.Selected().Cmd != "git checkout -b {{.branch}}" {
+		t.Errorf("Selected().Cmd = %q", m.Selected().Cmd)
+	}
+	if cmd == nil {
+		t.Error("expected Quit command")
+	}
+	found := false
+	for _, it := range m.Accumulated() {
+		if v, ok := it.Data["branch"]; ok && v == "feature/auth" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("Accumulated() should contain stage result with branch=feature/auth")
+	}
+}
+
+func TestPromptEsc_PopsBackToList(t *testing.T) {
+	m := newTestModel(stagedItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	m = selectStagedItem(t, m)
+	if m.mode != viewPrompt {
+		t.Fatal("expected viewPrompt mode")
+	}
+
+	result, cmd := m.Update(escMsg)
+	m = result.(Model)
+
+	if m.mode != viewList {
+		t.Errorf("mode = %d, want viewList (%d)", m.mode, viewList)
+	}
+	if cmd != nil {
+		t.Error("Esc from prompt should not quit")
+	}
+	if len(m.Accumulated()) != 0 {
+		t.Errorf("Accumulated() len = %d, want 0 (action popped)", len(m.Accumulated()))
+	}
+}
+
+func TestPromptWithDefault_PreFilled(t *testing.T) {
+	m := newTestModel(stagedItemWithDefault(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	m = selectStagedItem(t, m)
+
+	if m.stageInput.Value() != "feature/" {
+		t.Errorf("stageInput.Value() = %q, want %q", m.stageInput.Value(), "feature/")
+	}
+}
+
+func TestMultiPromptChain_FirstStage(t *testing.T) {
+	m := newTestModel(multiStageItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	m = selectStagedItem(t, m)
+
+	if m.mode != viewPrompt {
+		t.Fatal("expected viewPrompt mode for first stage")
+	}
+	if m.stageLabel != "Old name:" {
+		t.Errorf("stageLabel = %q, want %q", m.stageLabel, "Old name:")
+	}
+}
+
+func TestMultiPromptChain_SecondStage(t *testing.T) {
+	m := newTestModel(multiStageItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	m = selectStagedItem(t, m)
+	m = typeInPrompt(t, m, "main.go")
+
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if cmd != nil {
+		t.Error("should not quit after first stage — second stage remains")
+	}
+	if m.mode != viewPrompt {
+		t.Fatal("expected viewPrompt mode for second stage")
+	}
+	if m.stageLabel != "New name:" {
+		t.Errorf("stageLabel = %q, want %q", m.stageLabel, "New name:")
+	}
+	if len(m.Accumulated()) != 2 {
+		t.Errorf("Accumulated() len = %d, want 2 (action + first result)", len(m.Accumulated()))
+	}
+}
+
+func TestMultiPromptChain_CompleteBoth(t *testing.T) {
+	m := newTestModel(multiStageItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	m = selectStagedItem(t, m)
+	m = typeInPrompt(t, m, "main.go")
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+
+	m = typeInPrompt(t, m, "app.go")
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.Selected() == nil {
+		t.Fatal("Selected() should be set after both stages complete")
+	}
+	if m.Selected().Cmd != "mv {{.old}} {{.new}}" {
+		t.Errorf("Selected().Cmd = %q", m.Selected().Cmd)
+	}
+	if cmd == nil {
+		t.Error("expected Quit command")
+	}
+	data := execute.FlattenData(m.Accumulated())
+	if data["old"] != "main.go" {
+		t.Errorf("data[old] = %q, want main.go", data["old"])
+	}
+	if data["new"] != "app.go" {
+		t.Errorf("data[new] = %q, want app.go", data["new"])
+	}
+}
+
+func TestMultiPromptChain_EscFromSecondStage(t *testing.T) {
+	m := newTestModel(multiStageItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	m = selectStagedItem(t, m)
+	m = typeInPrompt(t, m, "main.go")
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.stageLabel != "New name:" {
+		t.Fatalf("expected second stage, got label %q", m.stageLabel)
+	}
+
+	result, cmd := m.Update(escMsg)
+	m = result.(Model)
+
+	if cmd != nil {
+		t.Error("Esc from second stage should not quit")
+	}
+	if m.mode != viewPrompt {
+		t.Errorf("mode = %d, want viewPrompt (back to first stage)", m.mode)
+	}
+	if m.stageLabel != "Old name:" {
+		t.Errorf("stageLabel = %q, want %q (first stage re-shown)", m.stageLabel, "Old name:")
+	}
+	if m.stageInput.Value() != "main.go" {
+		t.Errorf("stageInput.Value() = %q, want %q (prior input restored)", m.stageInput.Value(), "main.go")
+	}
+}
+
+func TestPromptView_ContainsLabelAndInput(t *testing.T) {
+	m := newTestModel(stagedItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+
+	m = selectStagedItem(t, m)
+
+	view := m.View()
+	content := ansi.Strip(view.Content)
+	if !strings.Contains(content, "Branch name:") {
+		t.Error("prompt view should contain the stage label")
 	}
 }

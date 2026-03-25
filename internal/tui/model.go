@@ -12,9 +12,17 @@ import (
 	log "charm.land/log/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/jmcampanini/cmdk/internal/execute"
 	"github.com/jmcampanini/cmdk/internal/generator"
 	"github.com/jmcampanini/cmdk/internal/item"
 	"github.com/jmcampanini/cmdk/internal/theme"
+)
+
+type viewMode int
+
+const (
+	viewList   viewMode = iota
+	viewPrompt
 )
 
 type Model struct {
@@ -28,6 +36,9 @@ type Model struct {
 	filterStyle lipgloss.Style
 	winWidth    int
 	winHeight   int
+	mode        viewMode
+	stageInput  textinput.Model
+	stageLabel  string
 }
 
 const horizontalPadding = 1
@@ -151,45 +162,186 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.winWidth = msg.Width
-		m.winHeight = msg.Height
+	if ws, ok := msg.(tea.WindowSizeMsg); ok {
+		m.winWidth = ws.Width
+		m.winHeight = ws.Height
 		m.list.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
 		return m, nil
-	case tea.KeyPressMsg:
-		if msg.String() == "enter" {
-			sel, ok := m.resolveEnterTarget()
-			if ok {
-				switch sel.Action {
-				case item.ActionExecute, item.ActionStaged:
-					// TODO: ActionStaged will get its own stage pipeline in Phase 2.
-					m.selected = &sel
-					return m, tea.Quit
-				case item.ActionNextList:
-					return m.handleNextList(sel), nil
-				}
-			}
-		}
-		if (msg.String() == "up" || msg.String() == "down") &&
-			m.list.FilterState() == list.Filtering &&
-			m.list.FilterInput.Value() == "" {
-			m.list.ResetFilter()
-			var cmd tea.Cmd
-			m.list, cmd = m.list.Update(msg)
-			return m, cmd
-		}
-		if msg.String() == "esc" && m.list.FilterState() == list.Unfiltered {
-			if len(m.accumulated) > 0 {
-				return m.handleBack(), nil
-			}
-			return m, tea.Quit
-		}
+	}
+
+	if m.mode == viewPrompt {
+		return m.updatePrompt(msg)
+	}
+
+	if key, ok := msg.(tea.KeyPressMsg); ok {
+		return m.updateList(key)
 	}
 
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
 	return m, cmd
+}
+
+func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "enter" {
+		sel, ok := m.resolveEnterTarget()
+		if ok {
+			switch sel.Action {
+			case item.ActionExecute:
+				m.selected = &sel
+				return m, tea.Quit
+			case item.ActionStaged:
+				m.accumulated = append(slices.Clone(m.accumulated), sel)
+				return m.advanceStage(), nil
+			case item.ActionNextList:
+				return m.handleNextList(sel), nil
+			}
+		}
+	}
+	if (msg.String() == "up" || msg.String() == "down") &&
+		m.list.FilterState() == list.Filtering &&
+		m.list.FilterInput.Value() == "" {
+		m.list.ResetFilter()
+		var cmd tea.Cmd
+		m.list, cmd = m.list.Update(msg)
+		return m, cmd
+	}
+	if msg.String() == "esc" && m.list.FilterState() == list.Unfiltered {
+		if len(m.accumulated) > 0 {
+			return m.handleBack(), nil
+		}
+		return m, tea.Quit
+	}
+
+	var cmd tea.Cmd
+	m.list, cmd = m.list.Update(msg)
+	return m, cmd
+}
+
+func (m Model) updatePrompt(msg tea.Msg) (tea.Model, tea.Cmd) {
+	key, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		var cmd tea.Cmd
+		m.stageInput, cmd = m.stageInput.Update(msg)
+		return m, cmd
+	}
+
+	switch key.String() {
+	case "enter":
+		actionIdx := m.findActionIndex()
+		if actionIdx < 0 {
+			return m, nil
+		}
+		action := m.accumulated[actionIdx]
+		stageIdx := len(m.accumulated) - actionIdx - 1
+		stage := action.Stages[stageIdx]
+
+		value := m.stageInput.Value()
+		resultItem := item.NewItem()
+		resultItem.Type = "stage-result"
+		resultItem.Display = value
+		resultItem.Data[stage.Key] = value
+		m.accumulated = append(slices.Clone(m.accumulated), resultItem)
+
+		if stageIdx+1 >= len(action.Stages) {
+			return m.completeStages(), tea.Quit
+		}
+		return m.advanceStage(), nil
+
+	case "esc":
+		actionIdx := m.findActionIndex()
+		if actionIdx < 0 {
+			return m, nil
+		}
+		stageIdx := len(m.accumulated) - actionIdx - 1
+		if stageIdx == 0 {
+			m.accumulated = slices.Clone(m.accumulated[:len(m.accumulated)-1])
+			m.mode = viewList
+			return m.navigateTo(m.accumulated), nil
+		}
+		// Pop the last stage result, re-show previous stage, and restore
+		// the user's prior input so back-navigation is non-destructive.
+		popped := m.accumulated[len(m.accumulated)-1]
+		m.accumulated = slices.Clone(m.accumulated[:len(m.accumulated)-1])
+		m = m.advanceStage()
+		prevStage := m.accumulated[actionIdx].Stages[len(m.accumulated)-actionIdx-1]
+		if prev, ok := popped.Data[prevStage.Key]; ok {
+			m.stageInput.SetValue(prev)
+		}
+		return m, nil
+	}
+
+	var cmd tea.Cmd
+	m.stageInput, cmd = m.stageInput.Update(msg)
+	return m, cmd
+}
+
+// findActionIndex returns the index of the last ActionStaged item in the accumulated stack.
+func (m Model) findActionIndex() int {
+	for i := len(m.accumulated) - 1; i >= 0; i-- {
+		if m.accumulated[i].Action == item.ActionStaged {
+			return i
+		}
+	}
+	return -1
+}
+
+// advanceStage looks at the current stage index and configures the appropriate view.
+func (m Model) advanceStage() Model {
+	actionIdx := m.findActionIndex()
+	if actionIdx < 0 {
+		return m
+	}
+	action := m.accumulated[actionIdx]
+	stageIdx := len(m.accumulated) - actionIdx - 1
+	if stageIdx >= len(action.Stages) {
+		return m
+	}
+
+	stage := action.Stages[stageIdx]
+	switch stage.Type {
+	case item.StagePrompt:
+		data := execute.FlattenData(m.accumulated)
+		label, err := execute.RenderCmd(stage.Text, data)
+		if err != nil {
+			m.stageLabel = fmt.Sprintf("template error: %s", err)
+		} else {
+			m.stageLabel = label
+		}
+
+		ti := textinput.New()
+		if stage.Default != "" {
+			def, err := execute.RenderCmd(stage.Default, data)
+			if err == nil {
+				ti.SetValue(def)
+			}
+		}
+		ti.Focus()
+		m.stageInput = ti
+		m.mode = viewPrompt
+
+	case item.StagePicker:
+		// TODO: Phase 3 will implement picker stages.
+		// Pop the action and return to list view to prevent progression through
+		// an unimplemented stage type.
+		m.accumulated = slices.Clone(m.accumulated[:actionIdx])
+		m.mode = viewList
+	}
+
+	return m
+}
+
+// completeStages extracts the action item as selected and removes it from accumulated,
+// leaving stage results in place for FlattenData.
+func (m Model) completeStages() Model {
+	actionIdx := m.findActionIndex()
+	if actionIdx < 0 {
+		return m
+	}
+	action := m.accumulated[actionIdx]
+	m.selected = &action
+	m.accumulated = slices.Delete(slices.Clone(m.accumulated), actionIdx, actionIdx+1)
+	return m
 }
 
 // resolveEnterTarget returns the item that Enter should act on.
@@ -244,7 +396,7 @@ func (m Model) navigateTo(accumulated []item.Item) Model {
 
 func (m Model) headerView() string {
 	content := m.list.Styles.Title.Render(m.list.Title)
-	if m.list.FilterState() == list.Filtering {
+	if m.mode == viewList && m.list.FilterState() == list.Filtering {
 		filterView := m.list.FilterInput.View()
 		body, hadPrompt := strings.CutPrefix(filterView, m.list.FilterInput.Prompt)
 		if hadPrompt {
@@ -279,9 +431,22 @@ func (m Model) overheadHeight() int {
 	return h
 }
 
+func (m Model) promptView() string {
+	pad := strings.Repeat(" ", horizontalPadding)
+	return pad + m.stageLabel + "\n" + pad + m.stageInput.View()
+}
+
 func (m Model) View() tea.View {
 	header := m.headerView()
 	stack := m.stackView()
-	body := m.list.View()
+
+	var body string
+	switch m.mode {
+	case viewPrompt:
+		body = m.promptView()
+	default:
+		body = m.list.View()
+	}
+
 	return tea.NewView(header + "\n\n" + stack + body)
 }
