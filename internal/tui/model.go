@@ -1,9 +1,13 @@
 package tui
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"os/exec"
 	"slices"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/textinput"
@@ -12,55 +16,81 @@ import (
 	log "charm.land/log/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/jmcampanini/cmdk/internal/execute"
 	"github.com/jmcampanini/cmdk/internal/generator"
 	"github.com/jmcampanini/cmdk/internal/item"
 	"github.com/jmcampanini/cmdk/internal/theme"
 )
 
+type viewMode int
+
+const (
+	viewList   viewMode = iota
+	viewPrompt
+	viewPicker
+)
+
 type Model struct {
-	list        list.Model
-	paneID      string
-	accumulated []item.Item
-	selected    *item.Item
-	registry    *generator.Registry
-	ctx         generator.Context
-	stackStyle  lipgloss.Style
-	filterStyle lipgloss.Style
-	winWidth    int
-	winHeight   int
+	list            list.Model
+	paneID          string
+	accumulated     []item.Item
+	selected        *item.Item
+	registry        *generator.Registry
+	ctx             generator.Context
+	stackStyle      lipgloss.Style
+	filterStyle     lipgloss.Style
+	winWidth        int
+	winHeight       int
+	mode            viewMode
+	stageInput      textinput.Model
+	stageLabel      string
+	pickerList      list.Model
+	pickerKey       string
+	theme           theme.Theme
+	autoSelectSingle bool
 }
 
 const horizontalPadding = 1
 
 func NewModel(items []list.Item, paneID string, accumulated []item.Item, registry *generator.Registry, ctx generator.Context, t theme.Theme) Model {
+	autoSelect := true
+	if ctx.Config != nil {
+		autoSelect = ctx.Config.Behavior.ShouldAutoSelectSingle()
+	}
+
+	return Model{
+		list:             newFilterList(items, t),
+		paneID:           paneID,
+		accumulated:      accumulated,
+		registry:         registry,
+		ctx:              ctx,
+		stackStyle:       lipgloss.NewStyle().Foreground(t.Overlay0),
+		filterStyle:      lipgloss.NewStyle().Inline(true).Background(t.TextboxBg),
+		theme:            t,
+		autoSelectSingle: autoSelect,
+	}
+}
+
+// newFilterList creates a styled list that starts in filter mode.
+// tea.Cmd from the '/' key is intentionally discarded -- it returns
+// textinput.Blink which is unused because Cursor.Blink is set to false
+// in applyListStyles.
+func newFilterList(items []list.Item, t theme.Theme) list.Model {
 	l := list.New(items, newItemDelegate(t), 0, 0)
 	l.Title = "cmdk"
 	l.Filter = list.DefaultFilter
 	l.SetShowStatusBar(false)
 	l.SetShowPagination(false)
-	applyListStyles(&l, t)
 	l.SetShowTitle(false)
 	l.SetShowFilter(false)
+	applyListStyles(&l, t)
 
-	// Start in filter mode so the user can begin typing immediately.
-	// tea.Cmd is intentionally discarded — it returns textinput.Blink which is
-	// unused because Cursor.Blink is set to false in applyListStyles. Moving
-	// this to Init() would be cleaner but requires a larger refactor.
 	l.SetSize(1, 1)
 	l, _ = l.Update(tea.KeyPressMsg{Code: rune('/')})
 	if l.FilterState() != list.Filtering {
-		log.Warn("failed to enter filter mode during init; falling back to browse mode")
+		log.Warn("failed to enter filter mode during list init; falling back to browse mode")
 	}
-
-	return Model{
-		list:        l,
-		paneID:      paneID,
-		accumulated: accumulated,
-		registry:    registry,
-		ctx:         ctx,
-		stackStyle:  lipgloss.NewStyle().Foreground(t.Overlay0),
-		filterStyle: lipgloss.NewStyle().Inline(true).Background(t.TextboxBg),
-	}
+	return l
 }
 
 func applyListStyles(l *list.Model, t theme.Theme) {
@@ -151,37 +181,25 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		m.winWidth = msg.Width
-		m.winHeight = msg.Height
+	if ws, ok := msg.(tea.WindowSizeMsg); ok {
+		m.winWidth = ws.Width
+		m.winHeight = ws.Height
 		m.list.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
+		if m.mode == viewPicker {
+			m.pickerList.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
+		}
 		return m, nil
-	case tea.KeyPressMsg:
-		if msg.String() == "enter" {
-			sel, ok := m.resolveEnterTarget()
-			if ok {
-				switch sel.Action {
-				case item.ActionExecute:
-					m.selected = &sel
-					return m, tea.Quit
-				case item.ActionNextList:
-					return m.handleNextList(sel), nil
-				}
-			}
-		}
-		if (msg.String() == "up" || msg.String() == "down") &&
-			m.list.FilterState() == list.Filtering &&
-			m.list.FilterInput.Value() == "" {
-			m.list.ResetFilter()
-			return m, nil
-		}
-		if msg.String() == "esc" && m.list.FilterState() == list.Unfiltered {
-			if len(m.accumulated) > 0 {
-				return m.handleBack(), nil
-			}
-			return m, tea.Quit
-		}
+	}
+
+	switch m.mode {
+	case viewPrompt:
+		return m.updatePrompt(msg)
+	case viewPicker:
+		return m.updatePicker(msg)
+	}
+
+	if key, ok := msg.(tea.KeyPressMsg); ok {
+		return m.updateList(key)
 	}
 
 	var cmd tea.Cmd
@@ -189,27 +207,345 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// resolveEnterTarget returns the item that Enter should act on.
-// When filtering with exactly one visible match, that match is returned
-// directly so the user doesn't have to explicitly accept the filter first.
-// When filtering with multiple matches, no item is returned (false),
-// allowing Enter to fall through to the list's built-in filter acceptance.
-// Outside filter mode, the normal list selection is returned.
-func (m Model) resolveEnterTarget() (item.Item, bool) {
+func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "enter" {
+		sel, ok := resolveListTarget(m.list)
+		if ok && sel.Type != "error" {
+			switch sel.Action {
+			case item.ActionExecute:
+				m.selected = &sel
+				return m, tea.Quit
+			case item.ActionStaged:
+				m.accumulated = append(slices.Clone(m.accumulated), sel)
+				return m.advanceStage(), nil
+			case item.ActionNextList:
+				return m.handleNextList(sel)
+			default:
+				log.Error("bug: unknown action type", "action", sel.Action)
+				return m, nil
+			}
+		}
+	}
+	if (msg.String() == "up" || msg.String() == "down") &&
+		m.list.FilterState() == list.Filtering &&
+		m.list.FilterInput.Value() == "" {
+		m.list.ResetFilter()
+		return m, nil
+	}
+	if msg.String() == "esc" && m.list.FilterState() == list.Unfiltered {
+		if len(m.accumulated) > 0 {
+			return m.handleBack(), nil
+		}
+		return m, tea.Quit
+	}
+
+	var cmd tea.Cmd
+	m.list, cmd = m.list.Update(msg)
+	return m, cmd
+}
+
+func (m Model) updatePrompt(msg tea.Msg) (tea.Model, tea.Cmd) {
+	key, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		var cmd tea.Cmd
+		m.stageInput, cmd = m.stageInput.Update(msg)
+		return m, cmd
+	}
+
+	switch key.String() {
+	case "enter":
+		actionIdx := m.findActionIndex()
+		if actionIdx < 0 {
+			return m.recoverFromMissingAction(), nil
+		}
+		stage := m.accumulated[actionIdx].Stages[len(m.accumulated)-actionIdx-1]
+		value := m.stageInput.Value()
+		return m.pushStageResult(stage.Key, value)
+
+	case "esc":
+		return m.stageEsc()
+
+	case "ctrl+c":
+		return m, tea.Quit
+	}
+
+	var cmd tea.Cmd
+	m.stageInput, cmd = m.stageInput.Update(msg)
+	return m, cmd
+}
+
+func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
+	key, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		var cmd tea.Cmd
+		m.pickerList, cmd = m.pickerList.Update(msg)
+		return m, cmd
+	}
+
+	if key.String() == "enter" {
+		sel, ok := resolveListTarget(m.pickerList)
+		if ok && sel.Type != "error" {
+			return m.pushStageResult(m.pickerKey, sel.Display)
+		}
+	}
+
+	if key.String() == "esc" && m.pickerList.FilterState() == list.Unfiltered {
+		return m.stageEsc()
+	}
+
+	if (key.String() == "up" || key.String() == "down") &&
+		m.pickerList.FilterState() == list.Filtering &&
+		m.pickerList.FilterInput.Value() == "" {
+		m.pickerList.ResetFilter()
+		return m, nil
+	}
+
+	var cmd tea.Cmd
+	m.pickerList, cmd = m.pickerList.Update(msg)
+	return m, cmd
+}
+
+// pushStageResult records a stage value and either advances to the next stage or completes.
+func (m Model) pushStageResult(key string, value string) (tea.Model, tea.Cmd) {
+	actionIdx := m.findActionIndex()
+	if actionIdx < 0 {
+		return m.recoverFromMissingAction(), nil
+	}
+	action := m.accumulated[actionIdx]
+	stageIdx := len(m.accumulated) - actionIdx - 1
+
+	resultItem := item.NewItem()
+	resultItem.Type = "stage-result"
+	resultItem.Display = value
+	resultItem.Data[key] = value
+	m.accumulated = append(slices.Clone(m.accumulated), resultItem)
+
+	if stageIdx+1 >= len(action.Stages) {
+		return m.completeStages(), tea.Quit
+	}
+	return m.advanceStage(), nil
+}
+
+// stageEsc handles Esc from prompt or picker stages.
+func (m Model) stageEsc() (tea.Model, tea.Cmd) {
+	actionIdx := m.findActionIndex()
+	if actionIdx < 0 {
+		return m.recoverFromMissingAction(), nil
+	}
+	stageIdx := len(m.accumulated) - actionIdx - 1
+	if stageIdx == 0 {
+		return m.handleBack(), nil
+	}
+	popped := m.accumulated[len(m.accumulated)-1]
+	m.accumulated = slices.Clone(m.accumulated[:len(m.accumulated)-1])
+	m = m.advanceStage()
+	// Restore prior input if going back to a prompt stage.
+	if m.mode == viewPrompt {
+		prevIdx := len(m.accumulated) - actionIdx - 1
+		if prevIdx >= 0 && prevIdx < len(m.accumulated[actionIdx].Stages) {
+			prevStage := m.accumulated[actionIdx].Stages[prevIdx]
+			if prev, ok := popped.Data[prevStage.Key]; ok {
+				m.stageInput.SetValue(prev)
+			}
+		}
+	}
+	return m, nil
+}
+
+func resolveListTarget(l list.Model) (item.Item, bool) {
 	switch {
-	case m.list.FilterState() == list.Filtering && len(m.list.VisibleItems()) == 1:
-		sel, ok := m.list.VisibleItems()[0].(item.Item)
+	case l.FilterState() == list.Filtering && len(l.VisibleItems()) == 1:
+		sel, ok := l.VisibleItems()[0].(item.Item)
 		return sel, ok
-	case m.list.FilterState() != list.Filtering:
-		sel, ok := m.list.SelectedItem().(item.Item)
+	case l.FilterState() != list.Filtering:
+		sel, ok := l.SelectedItem().(item.Item)
 		return sel, ok
 	default:
 		return item.Item{}, false
 	}
 }
 
-func (m Model) handleNextList(sel item.Item) Model {
-	return m.navigateTo(append(slices.Clone(m.accumulated), sel))
+// findActionIndex returns the index of the last ActionStaged item in the accumulated stack.
+func (m Model) findActionIndex() int {
+	for i := len(m.accumulated) - 1; i >= 0; i-- {
+		if m.accumulated[i].Action == item.ActionStaged {
+			return i
+		}
+	}
+	return -1
+}
+
+func (m Model) recoverFromMissingAction() Model {
+	log.Error("bug: no ActionStaged item in accumulated stack")
+	m.accumulated = nil
+	return m.navigateTo(nil)
+}
+
+// advanceStage looks at the current stage index and configures the appropriate view.
+func (m Model) advanceStage() Model {
+	actionIdx := m.findActionIndex()
+	if actionIdx < 0 {
+		return m.recoverFromMissingAction()
+	}
+	action := m.accumulated[actionIdx]
+	stageIdx := len(m.accumulated) - actionIdx - 1
+	if stageIdx >= len(action.Stages) {
+		log.Error("bug: stageIdx out of bounds", "stageIdx", stageIdx, "stages", len(action.Stages))
+		m.accumulated = slices.Clone(m.accumulated[:actionIdx])
+		return m.navigateTo(m.accumulated)
+	}
+
+	stage := action.Stages[stageIdx]
+	data := execute.FlattenData(m.accumulated)
+	if m.paneID != "" {
+		data["pane_id"] = m.paneID
+	}
+
+	switch stage.Type {
+	case item.StagePrompt:
+		label, err := execute.RenderCmd(stage.Text, data)
+		if err != nil {
+			log.Error("failed to render prompt text template", "key", stage.Key, "error", err)
+			m.stageLabel = fmt.Sprintf("template error: %s", err)
+		} else {
+			m.stageLabel = label
+		}
+
+		ti := textinput.New()
+		if stage.Default != "" {
+			def, err := execute.RenderCmd(stage.Default, data)
+			if err != nil {
+				log.Warn("failed to render stage default template", "key", stage.Key, "error", err)
+			} else {
+				ti.SetValue(def)
+			}
+		}
+		ti.Focus()
+		m.stageInput = ti
+		m.mode = viewPrompt
+
+	case item.StagePicker:
+		rendered, err := execute.RenderCmd(stage.Source, data)
+		if err != nil {
+			log.Error("failed to render picker source template", "key", stage.Key, "error", err)
+			return m.initPickerWithError(stage.Key, fmt.Sprintf("template error: %s", err))
+		}
+		var pickerTimeout time.Duration
+		if m.ctx.Config != nil {
+			pickerTimeout = m.ctx.Config.Timeout.Picker
+		}
+		items, runErr := runPickerSource(rendered, pickerTimeout)
+		if runErr != nil {
+			log.Error("picker source command failed", "key", stage.Key, "command", rendered, "error", runErr)
+			return m.initPickerWithError(stage.Key, fmt.Sprintf("command error: %s", runErr))
+		}
+		if len(items) == 0 {
+			log.Warn("picker source returned no items", "key", stage.Key, "command", rendered)
+			return m.initPickerWithError(stage.Key, "no items returned")
+		}
+		m = m.initPicker(stage.Key, items)
+
+	default:
+		log.Error("bug: unknown stage type", "type", stage.Type)
+		m.accumulated = slices.Clone(m.accumulated[:actionIdx])
+		return m.navigateTo(m.accumulated)
+	}
+
+	return m
+}
+
+// runPickerSource executes a shell command and returns one item per output line.
+// A zero timeout means no deadline is applied.
+// Structured as a standalone function for future conversion to async tea.Cmd.
+func runPickerSource(rendered string, timeout time.Duration) ([]item.Item, error) {
+	ctx := context.Background()
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+
+	var stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, "sh", "-c", rendered)
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, fmt.Errorf("command timed out after %s", timeout)
+		}
+		if stderr.Len() > 0 {
+			return nil, fmt.Errorf("command failed: %w\nstderr: %s", err, stderr.String())
+		}
+		return nil, fmt.Errorf("command failed: %w", err)
+	}
+
+	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+	var items []item.Item
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		it := item.NewItem()
+		it.Type = "pick"
+		it.Display = line
+		items = append(items, it)
+	}
+	return items, nil
+}
+
+func (m Model) initPicker(key string, items []item.Item) Model {
+	listItems := make([]list.Item, len(items))
+	for i, it := range items {
+		listItems[i] = it
+	}
+
+	pl := newFilterList(listItems, m.theme)
+	if m.winHeight > 0 {
+		pl.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
+	}
+
+	m.pickerList = pl
+	m.pickerKey = key
+	m.mode = viewPicker
+	return m
+}
+
+func (m Model) initPickerWithError(key string, errMsg string) Model {
+	return m.initPicker(key, []item.Item{{Type: "error", Display: errMsg}})
+}
+
+// completeStages extracts the action item as selected and removes it from accumulated,
+// leaving stage results in place for FlattenData.
+func (m Model) completeStages() Model {
+	actionIdx := m.findActionIndex()
+	if actionIdx < 0 {
+		return m.recoverFromMissingAction()
+	}
+	action := m.accumulated[actionIdx]
+	m.selected = &action
+	m.accumulated = slices.Delete(slices.Clone(m.accumulated), actionIdx, actionIdx+1)
+	return m
+}
+
+func (m Model) handleNextList(sel item.Item) (Model, tea.Cmd) {
+	m = m.navigateTo(append(slices.Clone(m.accumulated), sel))
+
+	if m.autoSelectSingle && len(m.list.Items()) == 1 {
+		if it, ok := m.list.Items()[0].(item.Item); ok && it.Type == "action" {
+			switch it.Action {
+			case item.ActionExecute:
+				m.selected = &it
+				return m, tea.Quit
+			case item.ActionStaged:
+				m.accumulated = append(slices.Clone(m.accumulated), it)
+				return m.advanceStage(), nil
+			default:
+				log.Error("bug: unknown action type in auto-select", "action", it.Action)
+			}
+		}
+	}
+	return m, nil
 }
 
 func (m Model) handleBack() Model {
@@ -217,14 +553,13 @@ func (m Model) handleBack() Model {
 }
 
 func (m Model) navigateTo(accumulated []item.Item) Model {
+	m.mode = viewList
 	var listItems []list.Item
 
 	gen, err := m.registry.Resolve(accumulated)
 	if err != nil {
 		log.Error("failed to resolve generator", "error", err)
-		errItem := item.NewItem()
-		errItem.Display = fmt.Sprintf("navigation error: %s", err)
-		listItems = []list.Item{errItem}
+		listItems = []list.Item{item.Item{Type: "error", Display: fmt.Sprintf("navigation error: %s", err)}}
 	} else {
 		m.accumulated = accumulated
 		listItems = item.GroupAndOrder(gen(m.accumulated, m.ctx))
@@ -241,16 +576,22 @@ func (m Model) navigateTo(accumulated []item.Item) Model {
 
 func (m Model) headerView() string {
 	content := m.list.Styles.Title.Render(m.list.Title)
-	if m.list.FilterState() == list.Filtering {
-		filterView := m.list.FilterInput.View()
-		body, hadPrompt := strings.CutPrefix(filterView, m.list.FilterInput.Prompt)
-		if hadPrompt {
-			content = m.list.FilterInput.Prompt + m.filterStyle.Render(body)
-		} else {
-			content = m.filterStyle.Render(filterView)
-		}
+	switch {
+	case m.mode == viewList && m.list.FilterState() == list.Filtering:
+		content = m.renderFilterHeader(m.list.FilterInput)
+	case m.mode == viewPicker && m.pickerList.FilterState() == list.Filtering:
+		content = m.renderFilterHeader(m.pickerList.FilterInput)
 	}
 	return m.list.Styles.TitleBar.Render(content)
+}
+
+func (m Model) renderFilterHeader(fi textinput.Model) string {
+	filterView := fi.View()
+	body, hadPrompt := strings.CutPrefix(filterView, fi.Prompt)
+	if hadPrompt {
+		return fi.Prompt + m.filterStyle.Render(body)
+	}
+	return m.filterStyle.Render(filterView)
 }
 
 func (m Model) stackView() string {
@@ -276,9 +617,24 @@ func (m Model) overheadHeight() int {
 	return h
 }
 
+func (m Model) promptView() string {
+	pad := strings.Repeat(" ", horizontalPadding)
+	return pad + m.stageLabel + "\n" + pad + m.stageInput.View()
+}
+
 func (m Model) View() tea.View {
 	header := m.headerView()
 	stack := m.stackView()
-	body := m.list.View()
+
+	var body string
+	switch m.mode {
+	case viewPrompt:
+		body = m.promptView()
+	case viewPicker:
+		body = m.pickerList.View()
+	default:
+		body = m.list.View()
+	}
+
 	return tea.NewView(header + "\n\n" + stack + body)
 }

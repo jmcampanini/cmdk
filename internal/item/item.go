@@ -5,7 +5,23 @@ type ActionType string
 const (
 	ActionNextList ActionType = "next-list"
 	ActionExecute  ActionType = "execute"
+	ActionStaged   ActionType = "staged"
 )
+
+type StageType string
+
+const (
+	StagePrompt StageType = "prompt"
+	StagePicker StageType = "picker"
+)
+
+type Stage struct {
+	Type    StageType
+	Key     string
+	Text    string
+	Default string
+	Source  string
+}
 
 type Item struct {
 	Type    string
@@ -15,6 +31,7 @@ type Item struct {
 	Action  ActionType
 	Cmd     string
 	Icon    string
+	Stages  []Stage
 }
 
 func NewItem() Item {
