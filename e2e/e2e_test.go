@@ -198,6 +198,31 @@ func filterAndExecute(t *testing.T, sess string, query string) {
 	sendKeys(t, sess, "Enter")
 }
 
+func selectDirAction(t *testing.T, sess string, actionName string) {
+	t.Helper()
+	navigateToDirItem(t, sess)
+	sendKeys(t, sess, "Enter")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, actionName)
+	}, defaultTimeout)
+
+	sendKeys(t, sess, "Down")
+	time.Sleep(100 * time.Millisecond)
+	sendKeys(t, sess, "Enter")
+}
+
+func assertMarkerContains(t *testing.T, marker string, expected string) {
+	t.Helper()
+	got, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatalf("failed to read marker: %v", err)
+	}
+	if !strings.Contains(string(got), expected) {
+		t.Errorf("expected %q in marker output, got: %s", expected, got)
+	}
+}
+
 func TestE2E_ItemsVisible(t *testing.T) {
 	sess := startSession(t)
 	defer killSession(t, sess)
@@ -741,4 +766,137 @@ func TestE2E_DisplayPopup(t *testing.T) {
 	exitFilterModeE2E(t, sess)
 	sendKeys(t, sess, "Escape")
 	waitForExit(t, sess)
+}
+
+func TestE2E_PromptStage(t *testing.T) {
+	requireZoxideEntries(t)
+
+	marker := filepath.Join(t.TempDir(), "prompt-result")
+	xdg := writeConfig(t, fmt.Sprintf(`
+[behavior]
+auto_select_single = false
+
+[[actions]]
+name = "xq-prompt-action"
+matches = "dir"
+cmd = "sh -c 'echo {{.branch}} > %s'"
+stages = [
+  { type = "prompt", text = "Branch:", key = "branch" },
+]
+`, marker))
+
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	selectDirAction(t, sess, "xq-prompt-action")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "Branch:")
+	}, defaultTimeout)
+
+	typeText(t, sess, "feature/test")
+	sendKeys(t, sess, "Enter")
+	waitForExit(t, sess)
+
+	assertMarkerContains(t, marker, "feature/test")
+}
+
+func TestE2E_PickerStage(t *testing.T) {
+	requireZoxideEntries(t)
+
+	marker := filepath.Join(t.TempDir(), "picker-result")
+	xdg := writeConfig(t, fmt.Sprintf(`
+[behavior]
+auto_select_single = false
+
+[[actions]]
+name = "xq-picker-action"
+matches = "dir"
+cmd = "sh -c 'echo {{.chosen}} > %s'"
+stages = [
+  { type = "picker", source = "printf 'xq-alpha\\nxq-beta\\nxq-gamma'", key = "chosen" },
+]
+`, marker))
+
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	selectDirAction(t, sess, "xq-picker-action")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "xq-alpha") && strings.Contains(s, "xq-beta")
+	}, defaultTimeout)
+
+	filterAndExecute(t, sess, "xq-alpha")
+	waitForExit(t, sess)
+
+	assertMarkerContains(t, marker, "xq-alpha")
+}
+
+func TestE2E_RootActionWithStages(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "root-stage-result")
+	xdg := writeConfig(t, fmt.Sprintf(`
+[[actions]]
+name = "xq-root-prompt"
+matches = "root"
+cmd = "sh -c 'echo {{.val}} > %s'"
+stages = [
+  { type = "prompt", text = "Value:", key = "val" },
+]
+`, marker))
+
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	filterAndExecute(t, sess, "xq-root")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "Value:")
+	}, defaultTimeout)
+
+	typeText(t, sess, "hello")
+	sendKeys(t, sess, "Enter")
+	waitForExit(t, sess)
+
+	assertMarkerContains(t, marker, "hello")
+}
+
+func TestE2E_EscFromPromptStage(t *testing.T) {
+	requireZoxideEntries(t)
+
+	xdg := writeConfig(t, `
+[behavior]
+auto_select_single = false
+
+[[actions]]
+name = "xq-esc-prompt"
+matches = "dir"
+cmd = "echo {{.val}}"
+stages = [
+  { type = "prompt", text = "Value:", key = "val" },
+]
+`)
+
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	selectDirAction(t, sess, "xq-esc-prompt")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "Value:")
+	}, defaultTimeout)
+
+	sendKeys(t, sess, "Escape")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "xq-esc-prompt") && strings.Contains(s, "New window")
+	}, defaultTimeout)
+
+	if !sessionExists(sess) {
+		t.Fatal("session should still exist after Esc from prompt stage")
+	}
 }
