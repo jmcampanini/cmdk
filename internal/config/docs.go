@@ -28,7 +28,8 @@ func ConfigDocs() []SectionDoc {
 				{Name: "name", Type: "string", Description: "Display name in the launcher.", Validation: "cannot be empty"},
 				{Name: "matches", Type: "string", Description: "Item type this action appears for: \"root\" (top-level) or \"dir\" (after selecting a directory).", Validation: "cannot be empty; must be \"root\" or \"dir\""},
 				{Name: "cmd", Type: "string", Description: "Shell command or Go template to execute after all stages complete.", Validation: "cannot be empty"},
-				{Name: "icon", Type: "string", Description: "Nerdfont icon: alias like :nf-dev-github:, raw glyph, or \\uXXXX escape.", Validation: "if :nf-*: alias, must be in supported set; otherwise must be a single grapheme cluster"},
+				{Name: "icon", Type: "string", Description: "Nerdfont icon: alias like :nf-dev-github:, raw glyph, or \\uXXXX escape. Run \"cmdk docs icons\" to list aliases.", Validation: "if :nf-*: alias, must be in supported set; otherwise must be a single grapheme cluster"},
+			{Name: "stages", Type: "array", Description: "Optional pipeline of data-collection stages to run before executing cmd. See STAGES section."},
 			},
 			Example: "[[actions]]\nname = \"Yazi\"\nmatches = \"root\"\ncmd = \"tmux split-window -h yazi\"\nicon = \":nf-md-folder:\"\n\n[[actions]]\nname = \"New Window\"\nmatches = \"dir\"\ncmd = \"tmux new-window -c {{sq .path}}\"\n\n[[actions]]\nname = \"New Branch\"\nmatches = \"dir\"\ncmd = \"git checkout -b {{.branch}}\"\nstages = [\n  { type = \"prompt\", text = \"Branch name:\", key = \"branch\" },\n]",
 		},
@@ -125,8 +126,8 @@ TEMPLATE VARIABLES
   Available variables (from stack):
       {{.path}}           directory path (for dir-matching actions)
       {{.pane_id}}        tmux pane ID (when --pane-id is set)
-      {{.session}}        tmux session name (for window-matching actions)
-      {{.window_index}}   tmux window index (for window-matching actions)
+      {{.session}}        tmux session name (from window items in the selection stack)
+      {{.window_index}}   tmux window index (from window items in the selection stack)
       {{.<key>}}          stage output keyed by the stage's key field
 
   Available functions:

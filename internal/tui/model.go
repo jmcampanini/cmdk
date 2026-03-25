@@ -253,9 +253,7 @@ func (m Model) updatePrompt(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case "enter":
 		actionIdx := m.findActionIndex()
 		if actionIdx < 0 {
-			log.Error("bug: no ActionStaged item in accumulated stack")
-			m.accumulated = nil
-			return m.navigateTo(nil), nil
+			return m.recoverFromMissingAction(), nil
 		}
 		stage := m.accumulated[actionIdx].Stages[len(m.accumulated)-actionIdx-1]
 		value := m.stageInput.Value()
@@ -263,6 +261,9 @@ func (m Model) updatePrompt(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case "esc":
 		return m.stageEsc()
+
+	case "ctrl+c":
+		return m, tea.Quit
 	}
 
 	var cmd tea.Cmd
@@ -305,9 +306,7 @@ func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) pushStageResult(key string, value string) (tea.Model, tea.Cmd) {
 	actionIdx := m.findActionIndex()
 	if actionIdx < 0 {
-		log.Error("bug: no ActionStaged item in accumulated stack")
-		m.accumulated = nil
-		return m.navigateTo(nil), nil
+		return m.recoverFromMissingAction(), nil
 	}
 	action := m.accumulated[actionIdx]
 	stageIdx := len(m.accumulated) - actionIdx - 1
@@ -328,9 +327,7 @@ func (m Model) pushStageResult(key string, value string) (tea.Model, tea.Cmd) {
 func (m Model) stageEsc() (tea.Model, tea.Cmd) {
 	actionIdx := m.findActionIndex()
 	if actionIdx < 0 {
-		log.Error("bug: no ActionStaged item in accumulated stack")
-		m.accumulated = nil
-		return m.navigateTo(nil), nil
+		return m.recoverFromMissingAction(), nil
 	}
 	stageIdx := len(m.accumulated) - actionIdx - 1
 	if stageIdx == 0 {
@@ -376,19 +373,24 @@ func (m Model) findActionIndex() int {
 	return -1
 }
 
+func (m Model) recoverFromMissingAction() Model {
+	log.Error("bug: no ActionStaged item in accumulated stack")
+	m.accumulated = nil
+	return m.navigateTo(nil)
+}
+
 // advanceStage looks at the current stage index and configures the appropriate view.
 func (m Model) advanceStage() Model {
 	actionIdx := m.findActionIndex()
 	if actionIdx < 0 {
-		log.Error("bug: no ActionStaged item in accumulated stack")
-		m.accumulated = nil
-		return m.navigateTo(nil)
+		return m.recoverFromMissingAction()
 	}
 	action := m.accumulated[actionIdx]
 	stageIdx := len(m.accumulated) - actionIdx - 1
 	if stageIdx >= len(action.Stages) {
 		log.Error("bug: stageIdx out of bounds", "stageIdx", stageIdx, "stages", len(action.Stages))
-		return m
+		m.accumulated = slices.Clone(m.accumulated[:actionIdx])
+		return m.navigateTo(m.accumulated)
 	}
 
 	stage := action.Stages[stageIdx]
@@ -427,7 +429,11 @@ func (m Model) advanceStage() Model {
 			m = m.initPickerWithError(stage.Key, fmt.Sprintf("template error: %s", err))
 			return m
 		}
-		items, runErr := runPickerSource(rendered, m.ctx.Config.Timeout.Picker)
+		var pickerTimeout time.Duration
+		if m.ctx.Config != nil {
+			pickerTimeout = m.ctx.Config.Timeout.Picker
+		}
+		items, runErr := runPickerSource(rendered, pickerTimeout)
 		if runErr != nil {
 			log.Error("picker source command failed", "key", stage.Key, "command", rendered, "error", runErr)
 			m = m.initPickerWithError(stage.Key, fmt.Sprintf("command error: %s", runErr))
@@ -477,6 +483,7 @@ func runPickerSource(rendered string, timeout time.Duration) ([]item.Item, error
 	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
 	var items []item.Item
 	for _, line := range lines {
+		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
@@ -531,9 +538,7 @@ func (m Model) initPickerWithError(key string, errMsg string) Model {
 func (m Model) completeStages() Model {
 	actionIdx := m.findActionIndex()
 	if actionIdx < 0 {
-		log.Error("bug: no ActionStaged item in accumulated stack")
-		m.accumulated = nil
-		return m.navigateTo(nil)
+		return m.recoverFromMissingAction()
 	}
 	action := m.accumulated[actionIdx]
 	m.selected = &action
