@@ -7,21 +7,22 @@ import (
 )
 
 func (a Action) ToItem() item.Item {
-	action := item.ActionExecute
-	var stages []item.Stage
-	if len(a.Stages) > 0 {
-		action = item.ActionStaged
-		stages = make([]item.Stage, len(a.Stages))
-		for j, s := range a.Stages {
-			stages[j] = item.Stage{
-				Type:    item.StageType(s.Type),
-				Key:     s.Key,
-				Text:    s.Text,
-				Default: s.Default,
-				Source:  s.Source,
-			}
+	stages := make([]item.Stage, len(a.Stages))
+	for j, s := range a.Stages {
+		stages[j] = item.Stage{
+			Type:    item.StageType(s.Type),
+			Key:     s.Key,
+			Text:    s.Text,
+			Default: s.Default,
+			Source:  s.Source,
 		}
 	}
+
+	action := item.ActionExecute
+	if len(stages) > 0 {
+		action = item.ActionStaged
+	}
+
 	return item.Item{
 		Type:    "action",
 		Source:  "config",

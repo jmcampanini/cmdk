@@ -255,21 +255,9 @@ func (m Model) updatePrompt(msg tea.Msg) (tea.Model, tea.Cmd) {
 			log.Error("bug: no ActionStaged item in accumulated stack")
 			return m, nil
 		}
-		action := m.accumulated[actionIdx]
-		stageIdx := len(m.accumulated) - actionIdx - 1
-		stage := action.Stages[stageIdx]
-
+		stage := m.accumulated[actionIdx].Stages[len(m.accumulated)-actionIdx-1]
 		value := m.stageInput.Value()
-		resultItem := item.NewItem()
-		resultItem.Type = "stage-result"
-		resultItem.Display = value
-		resultItem.Data[stage.Key] = value
-		m.accumulated = append(slices.Clone(m.accumulated), resultItem)
-
-		if stageIdx+1 >= len(action.Stages) {
-			return m.completeStages(), tea.Quit
-		}
-		return m.advanceStage(), nil
+		return m.pushStageResult(stage.Key, value)
 
 	case "esc":
 		return m.stageEsc()
@@ -289,30 +277,12 @@ func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	if key.String() == "enter" {
-		sel, selOk := m.resolvePickerTarget()
-		if selOk && sel.Type != "error" {
-			actionIdx := m.findActionIndex()
-			if actionIdx < 0 {
-				log.Error("bug: no ActionStaged item in accumulated stack")
-				return m, nil
-			}
-			action := m.accumulated[actionIdx]
-			stageIdx := len(m.accumulated) - actionIdx - 1
-
-			resultItem := item.NewItem()
-			resultItem.Type = "stage-result"
-			resultItem.Display = sel.Display
-			resultItem.Data[m.pickerKey] = sel.Display
-			m.accumulated = append(slices.Clone(m.accumulated), resultItem)
-
-			if stageIdx+1 >= len(action.Stages) {
-				return m.completeStages(), tea.Quit
-			}
-			return m.advanceStage(), nil
+		sel, ok := resolveListTarget(m.pickerList)
+		if ok && sel.Type != "error" {
+			return m.pushStageResult(m.pickerKey, sel.Display)
 		}
 	}
 
-	// Esc exits filter first, then pops back (same as main list).
 	if key.String() == "esc" && m.pickerList.FilterState() == list.Unfiltered {
 		return m.stageEsc()
 	}
@@ -327,6 +297,28 @@ func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.pickerList, cmd = m.pickerList.Update(msg)
 	return m, cmd
+}
+
+// pushStageResult records a stage value and either advances to the next stage or completes.
+func (m Model) pushStageResult(key string, value string) (tea.Model, tea.Cmd) {
+	actionIdx := m.findActionIndex()
+	if actionIdx < 0 {
+		log.Error("bug: no ActionStaged item in accumulated stack")
+		return m, nil
+	}
+	action := m.accumulated[actionIdx]
+	stageIdx := len(m.accumulated) - actionIdx - 1
+
+	resultItem := item.NewItem()
+	resultItem.Type = "stage-result"
+	resultItem.Display = value
+	resultItem.Data[key] = value
+	m.accumulated = append(slices.Clone(m.accumulated), resultItem)
+
+	if stageIdx+1 >= len(action.Stages) {
+		return m.completeStages(), tea.Quit
+	}
+	return m.advanceStage(), nil
 }
 
 // stageEsc handles Esc from prompt or picker stages.
@@ -355,13 +347,13 @@ func (m Model) stageEsc() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) resolvePickerTarget() (item.Item, bool) {
+func resolveListTarget(l list.Model) (item.Item, bool) {
 	switch {
-	case m.pickerList.FilterState() == list.Filtering && len(m.pickerList.VisibleItems()) == 1:
-		sel, ok := m.pickerList.VisibleItems()[0].(item.Item)
+	case l.FilterState() == list.Filtering && len(l.VisibleItems()) == 1:
+		sel, ok := l.VisibleItems()[0].(item.Item)
 		return sel, ok
-	case m.pickerList.FilterState() != list.Filtering:
-		sel, ok := m.pickerList.SelectedItem().(item.Item)
+	case l.FilterState() != list.Filtering:
+		sel, ok := l.SelectedItem().(item.Item)
 		return sel, ok
 	default:
 		return item.Item{}, false
@@ -537,16 +529,7 @@ func (m Model) completeStages() Model {
 // allowing Enter to fall through to the list's built-in filter acceptance.
 // Outside filter mode, the normal list selection is returned.
 func (m Model) resolveEnterTarget() (item.Item, bool) {
-	switch {
-	case m.list.FilterState() == list.Filtering && len(m.list.VisibleItems()) == 1:
-		sel, ok := m.list.VisibleItems()[0].(item.Item)
-		return sel, ok
-	case m.list.FilterState() != list.Filtering:
-		sel, ok := m.list.SelectedItem().(item.Item)
-		return sel, ok
-	default:
-		return item.Item{}, false
-	}
+	return resolveListTarget(m.list)
 }
 
 func (m Model) handleNextList(sel item.Item) (Model, tea.Cmd) {
