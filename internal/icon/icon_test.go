@@ -96,7 +96,7 @@ func TestAll_NoDuplicates(t *testing.T) {
 
 func TestAll_Count(t *testing.T) {
 	all := All()
-	if len(all) != 50 {
-		t.Errorf("got %d entries, want 50", len(all))
+	if len(all) != 51 {
+		t.Errorf("got %d entries, want 51", len(all))
 	}
 }

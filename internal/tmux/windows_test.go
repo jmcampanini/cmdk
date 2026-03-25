@@ -7,7 +7,7 @@ import (
 )
 
 func TestParseWindows_MultiSession(t *testing.T) {
-	output := "dev:1 node\nmain:1 zsh\nmain:2 vim\n"
+	output := "dev:1 node\t0\nmain:1 zsh\t0\nmain:2 vim\t0\n"
 	items := ParseWindows(output)
 
 	if len(items) != 3 {
@@ -44,7 +44,7 @@ func TestParseWindows_MultiSession(t *testing.T) {
 }
 
 func TestParseWindows_SortBySessionThenIndex(t *testing.T) {
-	output := "z:2 bash\na:3 zsh\na:1 vim\nz:1 fish\n"
+	output := "z:2 bash\t0\na:3 zsh\t0\na:1 vim\t0\nz:1 fish\t0\n"
 	items := ParseWindows(output)
 
 	if len(items) != 4 {
@@ -60,7 +60,7 @@ func TestParseWindows_SortBySessionThenIndex(t *testing.T) {
 }
 
 func TestParseWindows_WindowNameWithSpaces(t *testing.T) {
-	output := "work:1 my cool app\n"
+	output := "work:1 my cool app\t0\n"
 	items := ParseWindows(output)
 
 	if len(items) != 1 {
@@ -74,6 +74,39 @@ func TestParseWindows_WindowNameWithSpaces(t *testing.T) {
 	}
 	if items[0].Data["window_index"] != "1" {
 		t.Errorf("window_index = %q, want %q", items[0].Data["window_index"], "1")
+	}
+}
+
+func TestParseWindows_BellFlag(t *testing.T) {
+	output := "main:1 zsh\t1\nmain:2 vim\t0\n"
+	items := ParseWindows(output)
+
+	if len(items) != 2 {
+		t.Fatalf("got %d items, want 2", len(items))
+	}
+	if items[0].Data["bell"] != "1" {
+		t.Errorf("item[0] bell = %q, want \"1\"", items[0].Data["bell"])
+	}
+	if items[0].Display != "tmux: main:1 zsh" {
+		t.Errorf("item[0].Display = %q, want %q", items[0].Display, "tmux: main:1 zsh")
+	}
+	if _, ok := items[1].Data["bell"]; ok {
+		t.Errorf("item[1] should not have bell key, got %q", items[1].Data["bell"])
+	}
+}
+
+func TestParseWindows_BellSortedFirst(t *testing.T) {
+	output := "main:1 zsh\t0\nmain:2 vim\t1\nmain:3 fish\t0\n"
+	items := ParseWindows(output)
+
+	if len(items) != 3 {
+		t.Fatalf("got %d items, want 3", len(items))
+	}
+	if items[0].Display != "tmux: main:2 vim" {
+		t.Errorf("item[0].Display = %q, want bell item first", items[0].Display)
+	}
+	if items[1].Display != "tmux: main:1 zsh" {
+		t.Errorf("item[1].Display = %q, want %q", items[1].Display, "tmux: main:1 zsh")
 	}
 }
 

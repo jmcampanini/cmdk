@@ -25,6 +25,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Display.ShortenHome == nil || *cfg.Display.ShortenHome != "~" {
 		t.Errorf("Display.ShortenHome = %v, want pointer to \"~\"", cfg.Display.ShortenHome)
 	}
+	if !cfg.Behavior.BellToTop {
+		t.Error("Behavior.BellToTop = false, want true")
+	}
 }
 
 func TestValidate_Valid(t *testing.T) {
@@ -789,6 +792,46 @@ func TestLoad_ActionWithUnicodeIcon(t *testing.T) {
 	}
 	if cfg.Actions[0].Icon != "\ue709" {
 		t.Errorf("Icon = %q, want \\ue709", cfg.Actions[0].Icon)
+	}
+}
+
+func TestLoad_BehaviorBellToTopDefault(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[[actions]]
+name = "htop"
+cmd = "htop"
+matches = "root"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.Behavior.BellToTop {
+		t.Error("Behavior.BellToTop = false, want true (default)")
+	}
+}
+
+func TestLoad_BehaviorBellToTopDisabled(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[behavior]
+bell_to_top = false
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Behavior.BellToTop {
+		t.Error("Behavior.BellToTop = true, want false")
 	}
 }
 

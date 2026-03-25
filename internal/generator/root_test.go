@@ -161,7 +161,7 @@ func TestRootGenerator_ErrorItemInDirGroup(t *testing.T) {
 		t.Fatalf("got %d items, want 3", len(items))
 	}
 
-	ordered := item.GroupAndOrder(items)
+	ordered := item.GroupAndOrder(items, false)
 	if len(ordered) != 3 {
 		t.Fatalf("ordered = %d, want 3", len(ordered))
 	}

@@ -56,9 +56,13 @@ func newTestModel(items []list.Item, reg *generator.Registry) Model {
 	return newTestModelWithTheme(items, reg, theme.Light())
 }
 
-func newTestModelWithTheme(items []list.Item, reg *generator.Registry, t theme.Theme) Model {
+func testConfig() *config.Config {
 	cfg := config.DefaultConfig()
-	return NewModel(items, "%1", nil, reg, generator.Context{Config: &cfg}, t)
+	return &cfg
+}
+
+func newTestModelWithTheme(items []list.Item, reg *generator.Registry, t theme.Theme) Model {
+	return NewModel(items, "%1", nil, reg, generator.Context{Config: testConfig()}, t)
 }
 
 func exitFilterMode(t *testing.T, m Model) Model {

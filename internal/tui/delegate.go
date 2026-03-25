@@ -20,6 +20,7 @@ const (
 	iconWindow = "\uf2d0"
 	iconDir    = "\uf07c"
 	iconCmd    = "\uf120"
+	iconBell   = "\U000f009e"
 	itemGap    = "  "
 )
 
@@ -32,6 +33,7 @@ type itemDelegate struct {
 	icons       map[string]iconInfo
 	textFg      color.Color
 	selBg       color.Color
+	bellColor   color.Color
 	filterMatch lipgloss.Style
 }
 
@@ -47,6 +49,7 @@ func newItemDelegate(t theme.Theme) itemDelegate {
 		},
 		textFg:      t.Text,
 		selBg:       t.Surface1,
+		bellColor:   t.Bell,
 		filterMatch: lipgloss.NewStyle().Background(t.MatchHighlight),
 	}
 }
@@ -83,33 +86,62 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, li list.Item)
 		matchedRunes = m.MatchesForItem(index)
 	}
 
+	hasBell := it.Data["bell"] == "1"
+	bellWidth := 0
+	if hasBell {
+		bellWidth = ansi.StringWidth(iconBell) + ansi.StringWidth(itemGap)
+	}
+
 	leftPad := strings.Repeat(" ", horizontalPadding)
 	iconWidth := ansi.StringWidth(info.icon)
-	availWidth := max(m.Width()-ansi.StringWidth(leftPad)-iconWidth-ansi.StringWidth(itemGap), 0)
+	availWidth := max(m.Width()-ansi.StringWidth(leftPad)-iconWidth-ansi.StringWidth(itemGap)-bellWidth, 0)
 	display := ansi.Truncate(it.Display, availWidth, "…")
 
 	s := lipgloss.NewStyle().Inline(true)
+	selected := index == m.Index() && !filtering
 
-	var line string
-	switch {
-	case index == m.Index() && !filtering:
+	var content string
+	if selected {
+		bgOnly := s.Background(d.selBg)
 		iconStr := s.Foreground(info.color).Background(d.selBg).Render(info.icon)
 		textStr := d.renderText(display, matchedRunes, s.Foreground(d.textFg).Background(d.selBg))
-
-		bgOnly := s.Background(d.selBg)
-		content := bgOnly.Render(leftPad) + iconStr + bgOnly.Render(itemGap) + textStr
-		if remaining := m.Width() - ansi.StringWidth(content); remaining > 0 {
-			content += bgOnly.Render(strings.Repeat(" ", remaining))
-		}
-		line = content
-
-	default:
+		content = bgOnly.Render(leftPad) + iconStr + bgOnly.Render(itemGap) + textStr
+	} else {
 		iconStr := s.Foreground(info.color).Render(info.icon)
 		textStr := d.renderText(display, matchedRunes, s.Foreground(d.textFg))
-		line = leftPad + iconStr + itemGap + textStr
+		content = leftPad + iconStr + itemGap + textStr
 	}
 
-	_, _ = fmt.Fprint(w, line)
+	remaining := m.Width() - ansi.StringWidth(content)
+
+	if hasBell {
+		bellStr := d.styledBell(s, selected)
+		if gap := remaining - ansi.StringWidth(iconBell); gap > 0 {
+			content += d.renderFill(s, selected, gap) + bellStr
+		} else {
+			content += bellStr
+		}
+	} else if selected && remaining > 0 {
+		content += d.renderFill(s, selected, remaining)
+	}
+
+	_, _ = fmt.Fprint(w, content)
+}
+
+func (d itemDelegate) styledBell(s lipgloss.Style, selected bool) string {
+	bellStyle := s.Foreground(d.bellColor)
+	if selected {
+		bellStyle = bellStyle.Background(d.selBg)
+	}
+	return bellStyle.Render(iconBell)
+}
+
+func (d itemDelegate) renderFill(s lipgloss.Style, selected bool, width int) string {
+	spaces := strings.Repeat(" ", width)
+	if selected {
+		return s.Background(d.selBg).Render(spaces)
+	}
+	return spaces
 }
 
 func (d itemDelegate) renderText(display string, matchedRunes []int, style lipgloss.Style) string {

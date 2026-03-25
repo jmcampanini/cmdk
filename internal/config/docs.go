@@ -50,8 +50,9 @@ func ConfigDocs() []SectionDoc {
 			Description: "Global behavior settings.",
 			Fields: []FieldDoc{
 				{Name: "auto_select_single", Type: "bool", Description: "Skip the action list when only one action matches. Default: true."},
+				{Name: "bell_to_top", Type: "bool", Description: "Sort tmux windows with bell activity to the top of the list, above all other items. Default: true."},
 			},
-			Example: "[behavior]\nauto_select_single = false",
+			Example: "[behavior]\nauto_select_single = false\nbell_to_top = true",
 		},
 		{
 			Name:        "timeout",
@@ -157,6 +158,13 @@ EXECUTION
 
 func defaultValue(cfg *Config, section, field string) string {
 	switch section {
+	case "behavior":
+		switch field {
+		case "bell_to_top":
+			return fmt.Sprintf("%t", cfg.Behavior.BellToTop)
+		case "auto_select_single":
+			return "true"
+		}
 	case "timeout":
 		switch field {
 		case "fetch":
@@ -175,10 +183,6 @@ func defaultValue(cfg *Config, section, field string) string {
 	case "display":
 		if field == "shorten_home" && cfg.Display.ShortenHome != nil {
 			return fmt.Sprintf("%q", *cfg.Display.ShortenHome)
-		}
-	case "behavior":
-		if field == "auto_select_single" {
-			return "true"
 		}
 	}
 	return ""

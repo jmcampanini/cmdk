@@ -35,6 +35,7 @@ type Action struct {
 
 type Behavior struct {
 	AutoSelectSingle *bool `toml:"auto_select_single"`
+	BellToTop        bool  `toml:"bell_to_top"`
 }
 
 func (b Behavior) ShouldAutoSelectSingle() bool {
@@ -74,9 +75,10 @@ var validStageKey = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 func DefaultConfig() Config {
 	defaultShortenHome := "~"
 	return Config{
-		Timeout: Timeout{Fetch: 2 * time.Second, Picker: 2 * time.Second},
-		Sources: map[string]SourceConfig{"zoxide": {Limit: 0}},
-		Display: Display{ShortenHome: &defaultShortenHome},
+		Behavior: Behavior{BellToTop: true},
+		Timeout:  Timeout{Fetch: 2 * time.Second, Picker: 2 * time.Second},
+		Sources:  map[string]SourceConfig{"zoxide": {Limit: 0}},
+		Display:  Display{ShortenHome: &defaultShortenHome},
 	}
 }
 

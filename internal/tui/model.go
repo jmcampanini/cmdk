@@ -562,7 +562,7 @@ func (m Model) navigateTo(accumulated []item.Item) Model {
 		listItems = []list.Item{item.Item{Type: "error", Display: fmt.Sprintf("navigation error: %s", err)}}
 	} else {
 		m.accumulated = accumulated
-		listItems = item.GroupAndOrder(gen(m.accumulated, m.ctx))
+		listItems = item.GroupAndOrder(gen(m.accumulated, m.ctx), m.ctx.Config.Behavior.BellToTop)
 	}
 
 	m.list.SetItems(listItems)
