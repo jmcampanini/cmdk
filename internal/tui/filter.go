@@ -5,12 +5,29 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/list"
-	"github.com/sahilm/fuzzy"
 )
+
+type scoredRank struct {
+	rank  list.Rank
+	score int
+}
+
+func ranksByScore(results []scoredRank) []list.Rank {
+	slices.SortStableFunc(results, func(a, b scoredRank) int {
+		if a.score != b.score {
+			return b.score - a.score
+		}
+		return a.rank.Index - b.rank.Index
+	})
+	ranks := make([]list.Rank, len(results))
+	for i, r := range results {
+		ranks[i] = r.rank
+	}
+	return ranks
+}
 
 // multiTermFilter splits the search term on whitespace and requires every
 // sub-term to fuzzy-match the target (AND semantics, order-independent).
-// A single term (no spaces) behaves identically to list.DefaultFilter.
 func multiTermFilter(term string, targets []string) []list.Rank {
 	terms := strings.Fields(term)
 	if len(terms) == 0 {
@@ -25,79 +42,67 @@ func multiTermFilter(term string, targets []string) []list.Rank {
 	}
 
 	type candidate struct {
-		minScore       int
+		sumScore       int
 		matchedIndexes []int
 	}
 
-	firstMatches := fuzzy.Find(terms[0], targets)
-	candidates := make(map[int]*candidate, len(firstMatches))
-	for _, m := range firstMatches {
-		candidates[m.Index] = &candidate{
-			minScore:       m.Score,
-			matchedIndexes: slices.Clone(m.MatchedIndexes),
+	candidates := make(map[int]*candidate, len(targets))
+	for i, t := range targets {
+		r := FuzzyMatch(false, t, terms[0])
+		if r.Score > 0 {
+			candidates[i] = &candidate{
+				sumScore:       r.Score,
+				matchedIndexes: r.Positions,
+			}
 		}
 	}
+	if len(candidates) == 0 {
+		return nil
+	}
 
-	for _, t := range terms[1:] {
-		matches := fuzzy.Find(t, targets)
-		matched := make(map[int]fuzzy.Match, len(matches))
-		for _, m := range matches {
-			matched[m.Index] = m
-		}
+	for _, term := range terms[1:] {
 		for idx, c := range candidates {
-			m, ok := matched[idx]
-			if !ok {
+			r := FuzzyMatch(false, targets[idx], term)
+			if r.Score == 0 {
 				delete(candidates, idx)
 				continue
 			}
-			c.matchedIndexes = append(c.matchedIndexes, m.MatchedIndexes...)
-			if m.Score < c.minScore {
-				c.minScore = m.Score
-			}
+			c.sumScore += r.Score
+			c.matchedIndexes = append(c.matchedIndexes, r.Positions...)
 		}
 		if len(candidates) == 0 {
 			return nil
 		}
 	}
 
-	type scored struct {
-		rank  list.Rank
-		score int
-	}
-	results := make([]scored, 0, len(candidates))
+	results := make([]scoredRank, 0, len(candidates))
 	for idx, c := range candidates {
-		results = append(results, scored{
+		results = append(results, scoredRank{
 			rank: list.Rank{
 				Index:          idx,
 				MatchedIndexes: dedupIndexes(c.matchedIndexes),
 			},
-			score: c.minScore,
+			score: c.sumScore,
 		})
 	}
-	slices.SortStableFunc(results, func(a, b scored) int {
-		if a.score != b.score {
-			return b.score - a.score
-		}
-		return a.rank.Index - b.rank.Index
-	})
-
-	ranks := make([]list.Rank, len(results))
-	for i, r := range results {
-		ranks[i] = r.rank
-	}
-	return ranks
+	return ranksByScore(results)
 }
 
 func singleTermFilter(term string, targets []string) []list.Rank {
-	matches := fuzzy.Find(term, targets)
-	result := make([]list.Rank, len(matches))
-	for i, r := range matches {
-		result[i] = list.Rank{
-			Index:          r.Index,
-			MatchedIndexes: r.MatchedIndexes,
+	var results []scoredRank
+	for i, t := range targets {
+		r := FuzzyMatch(false, t, term)
+		if r.Score > 0 {
+			results = append(results, scoredRank{
+				rank: list.Rank{
+					Index:          i,
+					MatchedIndexes: r.Positions,
+				},
+				score: r.Score,
+			})
 		}
 	}
-	return result
+	return ranksByScore(results)
 }
 
 func dedupIndexes(indexes []int) []int {
