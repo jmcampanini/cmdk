@@ -90,9 +90,6 @@ func multiTermFilter(term string, targets []string) []list.Rank {
 
 func singleTermFilter(term string, targets []string) []list.Rank {
 	matches := fuzzy.Find(term, targets)
-	slices.SortStableFunc(matches, func(a, b fuzzy.Match) int {
-		return b.Score - a.Score
-	})
 	result := make([]list.Rank, len(matches))
 	for i, r := range matches {
 		result[i] = list.Rank{

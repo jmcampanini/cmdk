@@ -165,7 +165,6 @@ func TestSingleTermFilter_MatchesBehavior(t *testing.T) {
 	}
 }
 
-// containsAll checks whether all elements of subset appear in set.
 func containsAll(set, subset []int) bool {
 	m := make(map[int]bool, len(set))
 	for _, v := range set {
@@ -191,5 +190,4 @@ func findSubstringIndexes(s, sub string) []int {
 	return result
 }
 
-// Verify the custom filter conforms to the list.Filter signature.
 var _ func(string, []string) []list.Rank = multiTermFilter
