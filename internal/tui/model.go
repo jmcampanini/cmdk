@@ -78,7 +78,7 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 func newFilterList(items []list.Item, t theme.Theme) list.Model {
 	l := list.New(items, newItemDelegate(t), 0, 0)
 	l.Title = "cmdk"
-	l.Filter = list.DefaultFilter
+	l.Filter = multiTermFilter
 	l.SetShowStatusBar(false)
 	l.SetShowPagination(false)
 	l.SetShowTitle(false)
@@ -208,6 +208,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.list.FilterState() == list.Filtering &&
+		strings.TrimSpace(m.list.FilterInput.Value()) == "" {
+		switch msg.String() {
+		case "up", "down":
+			m.list.ResetFilter()
+			return m, nil
+		case "enter":
+			if m.list.FilterInput.Value() != "" {
+				m.list.ResetFilter()
+				return m, nil
+			}
+		}
+	}
+
 	if msg.String() == "enter" {
 		sel, ok := resolveListTarget(m.list)
 		if ok && sel.Type != "error" {
@@ -226,12 +240,7 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	}
-	if (msg.String() == "up" || msg.String() == "down") &&
-		m.list.FilterState() == list.Filtering &&
-		m.list.FilterInput.Value() == "" {
-		m.list.ResetFilter()
-		return m, nil
-	}
+
 	if msg.String() == "esc" && m.list.FilterState() == list.Unfiltered {
 		if len(m.accumulated) > 0 {
 			return m.handleBack(), nil
@@ -282,6 +291,20 @@ func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	if m.pickerList.FilterState() == list.Filtering &&
+		strings.TrimSpace(m.pickerList.FilterInput.Value()) == "" {
+		switch key.String() {
+		case "up", "down":
+			m.pickerList.ResetFilter()
+			return m, nil
+		case "enter":
+			if m.pickerList.FilterInput.Value() != "" {
+				m.pickerList.ResetFilter()
+				return m, nil
+			}
+		}
+	}
+
 	if key.String() == "enter" {
 		sel, ok := resolveListTarget(m.pickerList)
 		if ok && sel.Type != "error" {
@@ -291,13 +314,6 @@ func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if key.String() == "esc" && m.pickerList.FilterState() == list.Unfiltered {
 		return m.stageEsc()
-	}
-
-	if (key.String() == "up" || key.String() == "down") &&
-		m.pickerList.FilterState() == list.Filtering &&
-		m.pickerList.FilterInput.Value() == "" {
-		m.pickerList.ResetFilter()
-		return m, nil
 	}
 
 	var cmd tea.Cmd

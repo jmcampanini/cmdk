@@ -1264,3 +1264,43 @@ func TestCompleteStages_RemovesActionFromAccumulated(t *testing.T) {
 		t.Errorf("data[branch] = %q, want feature/auth", data["branch"])
 	}
 }
+
+func TestFilterWithSpaces_MatchesAcrossSeparators(t *testing.T) {
+	items := []list.Item{
+		item.Item{Type: "dir", Display: "~/dotfiles/main", Action: item.ActionNextList, Data: map[string]string{"path": "~/dotfiles/main"}},
+		item.Item{Type: "dir", Display: "~/projects/foo", Action: item.ActionNextList, Data: map[string]string{"path": "~/projects/foo"}},
+		item.Item{Type: "window", Display: "dev:1 node", Action: item.ActionExecute},
+	}
+	m := newTestModel(items, testRegistry())
+	m.list.SetSize(80, 40)
+
+	if m.list.FilterState() != list.Filtering {
+		t.Skip("could not enter filtering state")
+	}
+
+	// Type the filter query, processing async filter commands after each keystroke.
+	var cmd tea.Cmd
+	for _, ch := range "dotfiles main" {
+		var result tea.Model
+		result, cmd = m.Update(tea.KeyPressMsg{Code: ch, Text: string(ch)})
+		m = result.(Model)
+	}
+	// The last keystroke's cmd runs the filter; feed its result back.
+	if cmd != nil {
+		msg := cmd()
+		result, _ := m.Update(msg)
+		m = result.(Model)
+	}
+
+	visible := m.list.VisibleItems()
+	if len(visible) != 1 {
+		t.Fatalf("expected 1 visible item, got %d", len(visible))
+	}
+	it, ok := visible[0].(item.Item)
+	if !ok {
+		t.Fatal("expected item.Item")
+	}
+	if it.Display != "~/dotfiles/main" {
+		t.Errorf("visible item = %q, want ~/dotfiles/main", it.Display)
+	}
+}
