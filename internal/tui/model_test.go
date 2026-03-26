@@ -190,7 +190,7 @@ func TestEnterDuringFiltering_MultipleItems_NotIntercepted(t *testing.T) {
 	m.list.SetSize(80, 40)
 
 	if m.list.FilterState() != list.Filtering {
-		t.Skip("could not enter filtering state")
+		t.Fatal("could not enter filtering state")
 	}
 
 	result, _ := m.Update(enterMsg)
@@ -206,7 +206,7 @@ func TestEnterDuringFiltering_ZeroItems_NoSelection(t *testing.T) {
 	m.list.SetSize(80, 40)
 
 	if m.list.FilterState() != list.Filtering {
-		t.Skip("could not enter filtering state")
+		t.Skip("zero-item list cannot enter filtering state")
 	}
 	if got := len(m.list.VisibleItems()); got != 0 {
 		t.Fatalf("VisibleItems() = %d, want 0", got)
@@ -231,7 +231,7 @@ func TestEnterDuringFiltering_SingleExecuteItem_AutoSelects(t *testing.T) {
 	m.list.SetSize(80, 40)
 
 	if m.list.FilterState() != list.Filtering {
-		t.Skip("could not enter filtering state")
+		t.Fatal("could not enter filtering state")
 	}
 	if got := len(m.list.VisibleItems()); got != 1 {
 		t.Fatalf("VisibleItems() = %d, want 1", got)
@@ -259,7 +259,7 @@ func TestEnterDuringFiltering_SingleNextListItem_DrillsDown(t *testing.T) {
 	m.list.SetSize(80, 40)
 
 	if m.list.FilterState() != list.Filtering {
-		t.Skip("could not enter filtering state")
+		t.Fatal("could not enter filtering state")
 	}
 	if got := len(m.list.VisibleItems()); got != 1 {
 		t.Fatalf("VisibleItems() = %d, want 1", got)
@@ -579,7 +579,7 @@ func TestDownDuringEmptyFilter_ExitsFilterWithoutMoving(t *testing.T) {
 	m.list.SetSize(80, 40)
 
 	if m.list.FilterState() != list.Filtering {
-		t.Skip("could not enter filtering state")
+		t.Fatal("could not enter filtering state")
 	}
 
 	result, _ := m.Update(downMsg)
@@ -598,7 +598,7 @@ func TestUpDuringEmptyFilter_ExitsFilter(t *testing.T) {
 	m.list.SetSize(80, 40)
 
 	if m.list.FilterState() != list.Filtering {
-		t.Skip("could not enter filtering state")
+		t.Fatal("could not enter filtering state")
 	}
 
 	result, _ := m.Update(upMsg)
@@ -617,7 +617,7 @@ func TestDownDuringNonEmptyFilter_StaysInFilterMode(t *testing.T) {
 	m.list.SetSize(80, 40)
 
 	if m.list.FilterState() != list.Filtering {
-		t.Skip("could not enter filtering state")
+		t.Fatal("could not enter filtering state")
 	}
 
 	result, _ := m.Update(tea.KeyPressMsg{Code: rune('m'), Text: "m"})
@@ -1275,7 +1275,7 @@ func TestFilterWithSpaces_MatchesAcrossSeparators(t *testing.T) {
 	m.list.SetSize(80, 40)
 
 	if m.list.FilterState() != list.Filtering {
-		t.Skip("could not enter filtering state")
+		t.Fatal("could not enter filtering state")
 	}
 
 	// Type the filter query, processing async filter commands after each keystroke.
@@ -1302,5 +1302,56 @@ func TestFilterWithSpaces_MatchesAcrossSeparators(t *testing.T) {
 	}
 	if it.Display != "~/dotfiles/main" {
 		t.Errorf("visible item = %q, want ~/dotfiles/main", it.Display)
+	}
+}
+
+func typeSpaces(t *testing.T, m Model) Model {
+	t.Helper()
+	for _, ch := range "   " {
+		result, _ := m.Update(tea.KeyPressMsg{Code: ch, Text: string(ch)})
+		m = result.(Model)
+	}
+	if m.list.FilterInput.Value() == "" {
+		t.Fatal("expected non-empty filter input after typing spaces")
+	}
+	return m
+}
+
+func TestDownDuringWhitespaceOnlyFilter_ResetsFilter(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	if m.list.FilterState() != list.Filtering {
+		t.Fatal("could not enter filtering state")
+	}
+
+	m = typeSpaces(t, m)
+
+	result, _ := m.Update(downMsg)
+	m = result.(Model)
+
+	if m.list.FilterState() != list.Unfiltered {
+		t.Errorf("FilterState() = %v, want Unfiltered after down on whitespace-only filter", m.list.FilterState())
+	}
+}
+
+func TestEnterDuringWhitespaceOnlyFilter_ResetsFilter(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	if m.list.FilterState() != list.Filtering {
+		t.Fatal("could not enter filtering state")
+	}
+
+	m = typeSpaces(t, m)
+
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.list.FilterState() != list.Unfiltered {
+		t.Errorf("FilterState() = %v, want Unfiltered after enter on whitespace-only filter", m.list.FilterState())
+	}
+	if m.Selected() != nil {
+		t.Error("Selected() should be nil — whitespace-only enter should reset, not select")
 	}
 }

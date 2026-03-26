@@ -14,7 +14,6 @@ import (
 func multiTermFilter(term string, targets []string) []list.Rank {
 	terms := strings.Fields(term)
 	if len(terms) == 0 {
-		// Whitespace-only input: show all items (same as empty filter).
 		ranks := make([]list.Rank, len(targets))
 		for i := range targets {
 			ranks[i] = list.Rank{Index: i}
@@ -89,7 +88,6 @@ func multiTermFilter(term string, targets []string) []list.Rank {
 	return ranks
 }
 
-// singleTermFilter replicates list.DefaultFilter for a single term.
 func singleTermFilter(term string, targets []string) []list.Rank {
 	matches := fuzzy.Find(term, targets)
 	slices.SortStableFunc(matches, func(a, b fuzzy.Match) int {
@@ -105,7 +103,6 @@ func singleTermFilter(term string, targets []string) []list.Rank {
 	return result
 }
 
-// dedupIndexes sorts and removes duplicate indices.
 func dedupIndexes(indexes []int) []int {
 	if len(indexes) == 0 {
 		return nil
