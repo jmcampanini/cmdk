@@ -40,12 +40,13 @@ type itemDelegate struct {
 func newItemDelegate(t theme.Theme) itemDelegate {
 	return itemDelegate{
 		icons: map[string]iconInfo{
-			"window": {iconWindow, t.TypeWindow},
-			"dir":    {iconDir, t.TypeDir},
-			"cmd":    {iconCmd, t.TypeCmd},
-			"action": {iconCmd, t.TypeCmd},
-			"pick":   {iconCmd, t.TypeCmd},
-			"error":  {iconCmd, t.TypeCmd},
+			"window":  {iconWindow, t.TypeWindow},
+			"dir":     {iconDir, t.TypeDir},
+			"cmd":     {iconCmd, t.TypeCmd},
+			"action":  {iconCmd, t.TypeCmd},
+			"pick":    {iconCmd, t.TypeCmd},
+			"error":   {iconCmd, t.TypeCmd},
+			"loading": {iconCmd, t.TypeCmd},
 		},
 		textFg:      t.Text,
 		selBg:       t.Surface1,

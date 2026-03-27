@@ -31,31 +31,43 @@ const (
 )
 
 type Model struct {
-	list            list.Model
-	paneID          string
-	accumulated     []item.Item
-	selected        *item.Item
-	registry        *generator.Registry
-	ctx             generator.Context
-	stackStyle      lipgloss.Style
-	filterStyle     lipgloss.Style
-	winWidth        int
-	winHeight       int
-	mode            viewMode
-	stageInput      textinput.Model
-	stageLabel      string
-	pickerList      list.Model
-	pickerKey       string
-	theme           theme.Theme
+	list             list.Model
+	paneID           string
+	accumulated      []item.Item
+	selected         *item.Item
+	registry         *generator.Registry
+	ctx              generator.Context
+	stackStyle       lipgloss.Style
+	filterStyle      lipgloss.Style
+	winWidth         int
+	winHeight        int
+	mode             viewMode
+	stageInput       textinput.Model
+	stageLabel       string
+	pickerList       list.Model
+	pickerKey        string
+	theme            theme.Theme
 	autoSelectSingle bool
+	baseItems        []item.Item
+	asyncSources     []AsyncSource
+	asyncPending     map[string]bool
+	asyncResults     [][]item.Item
+	bellToTop        bool
 }
 
 const horizontalPadding = 1
 
-func NewModel(items []list.Item, paneID string, accumulated []item.Item, registry *generator.Registry, ctx generator.Context, t theme.Theme) Model {
+func NewModel(items []list.Item, paneID string, accumulated []item.Item, registry *generator.Registry, ctx generator.Context, t theme.Theme, asyncSources []AsyncSource, baseItems []item.Item) Model {
 	autoSelect := true
+	bellToTop := false
 	if ctx.Config != nil {
 		autoSelect = ctx.Config.Behavior.ShouldAutoSelectSingle()
+		bellToTop = ctx.Config.Behavior.BellToTop
+	}
+
+	pending := make(map[string]bool, len(asyncSources))
+	for _, src := range asyncSources {
+		pending[src.Name] = true
 	}
 
 	return Model{
@@ -68,6 +80,11 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 		filterStyle:      lipgloss.NewStyle().Inline(true).Background(t.TextboxBg),
 		theme:            t,
 		autoSelectSingle: autoSelect,
+		baseItems:        baseItems,
+		asyncSources:     asyncSources,
+		asyncPending:     pending,
+		asyncResults:     make([][]item.Item, len(asyncSources)),
+		bellToTop:        bellToTop,
 	}
 }
 
@@ -177,7 +194,14 @@ func (m Model) Selected() *item.Item {
 }
 
 func (m Model) Init() tea.Cmd {
-	return nil
+	if len(m.asyncSources) == 0 {
+		return nil
+	}
+	cmds := make([]tea.Cmd, len(m.asyncSources))
+	for i, src := range m.asyncSources {
+		cmds[i] = fetchSourceCmd(src)
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -189,6 +213,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pickerList.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
 		}
 		return m, nil
+	}
+
+	if result, ok := msg.(sourceResultMsg); ok {
+		return m.handleSourceResult(result)
 	}
 
 	switch m.mode {
@@ -214,7 +242,7 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	if msg.String() == "enter" {
 		sel, ok := resolveListTarget(m.list)
-		if ok && sel.Type != "error" {
+		if ok && sel.Type != "error" && sel.Type != "loading" {
 			switch sel.Action {
 			case item.ActionExecute:
 				m.selected = &sel
@@ -568,17 +596,76 @@ func (m Model) handleBack() Model {
 	return m.navigateTo(slices.Clone(m.accumulated[:len(m.accumulated)-1]))
 }
 
+func (m Model) handleSourceResult(result sourceResultMsg) (tea.Model, tea.Cmd) {
+	srcIdx := slices.IndexFunc(m.asyncSources, func(s AsyncSource) bool {
+		return s.Name == result.Name
+	})
+	if srcIdx < 0 {
+		log.Warn("received result for unknown async source", "name", result.Name)
+		return m, nil
+	}
+
+	src := m.asyncSources[srcIdx]
+	delete(m.asyncPending, src.Name)
+
+	if result.Err != nil {
+		errItem := generator.ErrorItem(generator.Source{Name: src.Name, Type: src.Type}, result.Err)
+		m.asyncResults[srcIdx] = []item.Item{errItem}
+	} else {
+		m.asyncResults[srcIdx] = result.Items
+	}
+
+	if len(m.accumulated) > 0 {
+		return m, nil
+	}
+
+	m.rebuildList()
+	return m, nil
+}
+
+func (m *Model) rebuildList() {
+	listItems := m.buildRootItems()
+	m.list.SetItems(listItems)
+	if state := m.list.FilterState(); state != list.Unfiltered {
+		cursorPos := m.list.FilterInput.Position()
+		m.list.SetFilterText(m.list.FilterInput.Value())
+		if state == list.Filtering {
+			m.list.SetFilterState(list.Filtering)
+		}
+		m.list.FilterInput.SetCursor(cursorPos)
+	}
+}
+
+func (m Model) buildRootItems() []list.Item {
+	var all []item.Item
+	all = append(all, m.baseItems...)
+	for _, items := range m.asyncResults {
+		all = append(all, items...)
+	}
+	for _, src := range m.asyncSources {
+		if m.asyncPending[src.Name] {
+			all = append(all, generator.LoadingItem(generator.Source{Name: src.Name, Type: src.Type}))
+		}
+	}
+	return item.GroupAndOrder(all, m.bellToTop)
+}
+
 func (m Model) navigateTo(accumulated []item.Item) Model {
 	m.mode = viewList
 	var listItems []list.Item
 
-	gen, err := m.registry.Resolve(accumulated)
-	if err != nil {
-		log.Error("failed to resolve generator", "error", err)
-		listItems = []list.Item{item.Item{Type: "error", Display: fmt.Sprintf("navigation error: %s", err)}}
-	} else {
+	if len(accumulated) == 0 && len(m.asyncSources) > 0 {
 		m.accumulated = accumulated
-		listItems = item.GroupAndOrder(gen(m.accumulated, m.ctx), m.ctx.Config.Behavior.BellToTop)
+		listItems = m.buildRootItems()
+	} else {
+		gen, err := m.registry.Resolve(accumulated)
+		if err != nil {
+			log.Error("failed to resolve generator", "error", err)
+			listItems = []list.Item{item.Item{Type: "error", Display: fmt.Sprintf("navigation error: %s", err)}}
+		} else {
+			m.accumulated = accumulated
+			listItems = item.GroupAndOrder(gen(m.accumulated, m.ctx), m.bellToTop)
+		}
 	}
 
 	m.list.SetItems(listItems)

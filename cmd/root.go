@@ -84,8 +84,8 @@ var rootCmd = &cobra.Command{
 		stop()
 
 		sources := []generator.Source{
-			traceSource(tr, "source/windows", generator.Source{Name: "windows", Type: "window", Fetch: tmux.ListWindows}),
-			traceSource(tr, "source/zoxide", generator.Source{Name: "zoxide", Type: "dir", Limit: zoxideCfg.Limit, Fetch: func(ctx context.Context) ([]item.Item, error) {
+			traceSource(tr, "source/windows", generator.Source{Name: "windows", Type: "window", Async: true, Fetch: tmux.ListWindows}),
+			traceSource(tr, "source/zoxide", generator.Source{Name: "zoxide", Type: "dir", Limit: zoxideCfg.Limit, Async: true, Fetch: func(ctx context.Context) ([]item.Item, error) {
 				return zoxide.ListDirs(ctx, zoxideCfg.MinScore, home, shortenHome, rules)
 			}}),
 		}
@@ -97,39 +97,37 @@ var rootCmd = &cobra.Command{
 		sources = append(sources, traceSource(tr, "source/actions", generator.Source{Name: "actions", Type: "action", Fetch: config.MatchingActions(cfg, "root")}))
 
 		reg := generator.NewRegistry()
-		reg.Register("root", generator.NewRootGenerator(cfg.Timeout.Fetch, sources...))
 		reg.Register("dir-actions", generator.NewActionsGenerator())
-		reg.MapType("", "root")
 		reg.MapType("dir", "dir-actions")
 
 		ctx := generator.Context{PaneID: paneID, Config: cfg}
-		gen, err := reg.Resolve(nil)
-		if err != nil {
-			return err
-		}
-		stop = tr.Begin("sources")
-		items := gen(nil, ctx)
-		stop()
-
-		stop = tr.Begin("group+order")
-		listItems := item.GroupAndOrder(items, cfg.Behavior.BellToTop)
-		stop()
-
-		stop = tr.Begin("theme")
-		t, err := theme.Resolve(themeFlag)
-		stop()
-		if err != nil {
-			return err
-		}
-		if themeFlag == "" {
-			log.Debug("theme auto-detected", "theme", t.Name)
-		}
-
-		stop = tr.Begin("model")
-		model := tui.NewModel(listItems, paneID, nil, reg, ctx, t)
-		stop()
 
 		if timingsFlag {
+			reg.Register("root", generator.NewRootGenerator(cfg.Timeout.Fetch, sources...))
+			reg.MapType("", "root")
+			gen, err := reg.Resolve(nil)
+			if err != nil {
+				return err
+			}
+			stop = tr.Begin("sources")
+			items := gen(nil, ctx)
+			stop()
+
+			stop = tr.Begin("group+order")
+			listItems := item.GroupAndOrder(items, cfg.Behavior.BellToTop)
+			stop()
+
+			stop = tr.Begin("theme")
+			t, err := theme.Resolve(themeFlag)
+			stop()
+			if err != nil {
+				return err
+			}
+
+			stop = tr.Begin("model")
+			model := tui.NewModel(listItems, paneID, nil, reg, ctx, t, nil, nil)
+			stop()
+
 			stop = tr.Begin("tea-ready")
 			wrapper := timingsModel{inner: model}
 			p := tea.NewProgram(wrapper, tea.WithoutRenderer(), tea.WithInput(nil))
@@ -143,6 +141,60 @@ var rootCmd = &cobra.Command{
 			}
 			return trace.WriteTable(os.Stdout, tr.Spans())
 		}
+
+		var syncSources, asyncSources []generator.Source
+		for _, src := range sources {
+			if src.Async {
+				asyncSources = append(asyncSources, src)
+			} else {
+				syncSources = append(syncSources, src)
+			}
+		}
+
+		reg.Register("root", generator.NewRootGenerator(cfg.Timeout.Fetch, syncSources...))
+		reg.MapType("", "root")
+		gen, err := reg.Resolve(nil)
+		if err != nil {
+			return err
+		}
+		stop = tr.Begin("sources/sync")
+		syncItems := gen(nil, ctx)
+		stop()
+
+		var initialAll []item.Item
+		initialAll = append(initialAll, syncItems...)
+		for _, src := range asyncSources {
+			initialAll = append(initialAll, generator.LoadingItem(src))
+		}
+
+		stop = tr.Begin("group+order")
+		listItems := item.GroupAndOrder(initialAll, cfg.Behavior.BellToTop)
+		stop()
+
+		stop = tr.Begin("theme")
+		t, err := theme.Resolve(themeFlag)
+		stop()
+		if err != nil {
+			return err
+		}
+		if themeFlag == "" {
+			log.Debug("theme auto-detected", "theme", t.Name)
+		}
+
+		tuiAsync := make([]tui.AsyncSource, len(asyncSources))
+		for i, src := range asyncSources {
+			tuiAsync[i] = tui.AsyncSource{
+				Name:    src.Name,
+				Type:    src.Type,
+				Limit:   src.Limit,
+				Timeout: cfg.Timeout.Fetch,
+				Fetch:   src.Fetch,
+			}
+		}
+
+		stop = tr.Begin("model")
+		model := tui.NewModel(listItems, paneID, nil, reg, ctx, t, tuiAsync, syncItems)
+		stop()
 
 		p := tea.NewProgram(model)
 		finalModel, err := p.Run()
