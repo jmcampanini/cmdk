@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"syscall"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	log "charm.land/log/v2"
@@ -35,7 +34,6 @@ var (
 	themeFlag   string
 	timingsFlag bool
 	timingsJSON bool
-	startTime   int64
 )
 
 var rootCmd = &cobra.Command{
@@ -44,13 +42,13 @@ var rootCmd = &cobra.Command{
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		timingsFlag = timingsFlag || timingsJSON || startTime != 0
+		timingsFlag = timingsFlag || timingsJSON
 
 		tr := trace.Noop()
 		if timingsFlag {
-			processStart, err := resolveProcessStart()
+			processStart, err := trace.ProcessStartTime()
 			if err != nil {
-				return err
+				fmt.Fprintf(os.Stderr, "warning: could not detect process start time: %v\n", err)
 			}
 			tr = trace.New(processStart)
 		}
@@ -182,24 +180,6 @@ func resolveConfigPath() (string, error) {
 	return config.DefaultPath(), nil
 }
 
-func resolveProcessStart() (time.Time, error) {
-	if startTime != 0 {
-		t := time.UnixMilli(startTime)
-		if t.After(time.Now()) {
-			return time.Time{}, fmt.Errorf("--start-time %d is in the future; expected epoch milliseconds", startTime)
-		}
-		if time.Since(t) > 60*time.Second {
-			return time.Time{}, fmt.Errorf("--start-time %d is more than 60s ago; expected epoch milliseconds", startTime)
-		}
-		return t, nil
-	}
-	t, err := trace.ProcessStartTime()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not detect process start time: %v\n", err)
-	}
-	return t, nil
-}
-
 func traceSource(tr trace.Tracer, spanName string, src generator.Source) generator.Source {
 	orig := src.Fetch
 	src.Fetch = func(ctx context.Context) ([]item.Item, error) {
@@ -243,7 +223,6 @@ func init() {
 	rootCmd.Flags().StringVar(&themeFlag, "theme", "", "color theme (light, dark)")
 	rootCmd.Flags().BoolVar(&timingsFlag, "timings", false, "measure and print startup phase durations")
 	rootCmd.Flags().BoolVar(&timingsJSON, "timings-json", false, "output timings as JSON (implies --timings)")
-	rootCmd.Flags().Int64Var(&startTime, "start-time", 0, "process start time as epoch milliseconds (implies --timings)")
 }
 
 func Execute() {
