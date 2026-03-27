@@ -148,3 +148,45 @@ func TestGroupAndOrder_ActionBeforeCmd(t *testing.T) {
 		t.Errorf("types = %v, want %v", got, want)
 	}
 }
+
+func TestGroupAndOrder_LoadingItemInSourceTypeBucket(t *testing.T) {
+	loading := NewItem()
+	loading.Type = "loading"
+	loading.Display = "Loading windows\u2026"
+	loading.Data["source_type"] = "window"
+
+	items := []Item{
+		{Type: "action", Display: "deploy"},
+		{Type: "dir", Display: "~/foo"},
+		loading,
+	}
+
+	got := displays(GroupAndOrder(items, false))
+	want := []string{"deploy", "~/foo", "Loading windows\u2026"}
+
+	if !slices.Equal(got, want) {
+		t.Errorf("displays = %v, want %v", got, want)
+	}
+}
+
+func TestGroupAndOrder_LoadingItemWithoutSourceType(t *testing.T) {
+	loading := NewItem()
+	loading.Type = "loading"
+	loading.Display = "Loading something\u2026"
+
+	items := []Item{
+		{Type: "action", Display: "deploy"},
+		loading,
+	}
+
+	got := types(GroupAndOrder(items, false))
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2", len(got))
+	}
+	if got[0] != "action" {
+		t.Errorf("got[0] = %q, want action", got[0])
+	}
+	if got[1] != "loading" {
+		t.Errorf("got[1] = %q, want loading", got[1])
+	}
+}

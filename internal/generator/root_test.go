@@ -307,6 +307,45 @@ func TestRootGenerator_ZeroLimitReturnsAll(t *testing.T) {
 	}
 }
 
+func TestErrorItem_Fields(t *testing.T) {
+	src := Source{Name: "zoxide", Type: "dir"}
+	errItem := ErrorItem(src, errors.New("not found"))
+
+	if errItem.Type != "dir" {
+		t.Errorf("Type = %q, want dir", errItem.Type)
+	}
+	if errItem.Source != "zoxide" {
+		t.Errorf("Source = %q, want zoxide", errItem.Source)
+	}
+	if errItem.Display != "zoxide error: not found" {
+		t.Errorf("Display = %q", errItem.Display)
+	}
+	if errItem.Action != "" {
+		t.Errorf("Action = %q, want empty", errItem.Action)
+	}
+}
+
+func TestLoadingItem_Fields(t *testing.T) {
+	src := Source{Name: "windows", Type: "window"}
+	loading := LoadingItem(src)
+
+	if loading.Type != "loading" {
+		t.Errorf("Type = %q, want loading", loading.Type)
+	}
+	if loading.Source != "windows" {
+		t.Errorf("Source = %q, want windows", loading.Source)
+	}
+	if loading.Display != "Loading windows\u2026" {
+		t.Errorf("Display = %q", loading.Display)
+	}
+	if loading.Action != "" {
+		t.Errorf("Action = %q, want empty", loading.Action)
+	}
+	if loading.Data["source_type"] != "window" {
+		t.Errorf("Data[source_type] = %q, want window", loading.Data["source_type"])
+	}
+}
+
 func TestRootGenerator_LimitCapsScoreFilteredResults(t *testing.T) {
 	src := Source{Name: "zoxide", Type: "dir", Limit: 3, Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{

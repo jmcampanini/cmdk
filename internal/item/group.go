@@ -12,7 +12,13 @@ func GroupAndOrder(items []Item, bellToTop bool) []list.Item {
 			bellItems = append(bellItems, it)
 			continue
 		}
-		buckets[it.Type] = append(buckets[it.Type], it)
+		bucketKey := it.Type
+		if bucketKey == "loading" {
+			if st := it.Data["source_type"]; st != "" {
+				bucketKey = st
+			}
+		}
+		buckets[bucketKey] = append(buckets[bucketKey], it)
 	}
 
 	result := make([]list.Item, 0, len(items))

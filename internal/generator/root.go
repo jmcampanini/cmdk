@@ -15,6 +15,7 @@ type Source struct {
 	Name  string
 	Type  string
 	Limit int
+	Async bool
 	Fetch func(context.Context) ([]item.Item, error)
 }
 
@@ -56,7 +57,7 @@ func NewRootGenerator(timeout time.Duration, sources ...Source) GeneratorFunc {
 		var all []item.Item
 		for i, src := range sources {
 			if errs[i] != nil {
-				all = append(all, errorItem(src, errs[i]))
+				all = append(all, ErrorItem(src, errs[i]))
 				continue
 			}
 			all = append(all, results[i]...)
@@ -65,10 +66,19 @@ func NewRootGenerator(timeout time.Duration, sources ...Source) GeneratorFunc {
 	}
 }
 
-func errorItem(src Source, err error) item.Item {
+func ErrorItem(src Source, err error) item.Item {
 	errItem := item.NewItem()
 	errItem.Type = src.Type
 	errItem.Source = src.Name
 	errItem.Display = fmt.Sprintf("%s error: %s", src.Name, err)
 	return errItem
+}
+
+func LoadingItem(src Source) item.Item {
+	it := item.NewItem()
+	it.Type = "loading"
+	it.Source = src.Name
+	it.Display = fmt.Sprintf("Loading %s\u2026", src.Name)
+	it.Data["source_type"] = src.Type
+	return it
 }
