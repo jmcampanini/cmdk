@@ -44,7 +44,6 @@ Flags:
   -c, --config string    path to config file (also validates; exits 1 on error)
   -h, --help             help for cmdk
       --pane-id string   tmux pane ID
-      --start-time int   process start time as epoch milliseconds (implies --timings)
       --theme string     color theme (light, dark)
       --timings          measure and print startup phase durations
       --timings-json     output timings as JSON (implies --timings)
