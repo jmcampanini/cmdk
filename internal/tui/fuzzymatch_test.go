@@ -168,3 +168,11 @@ func TestFuzzyMatch_WideGapBacktrace(t *testing.T) {
 		}
 	}
 }
+
+func TestCharClassOrdering(t *testing.T) {
+	for _, wc := range []charClass{charDelimiter, charLower, charUpper, charLetter, charNumber} {
+		if wc <= charNonWord {
+			t.Errorf("charClass %d must be > charNonWord (%d) for computeBonus", wc, charNonWord)
+		}
+	}
+}

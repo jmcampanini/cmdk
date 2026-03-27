@@ -11,7 +11,7 @@ const (
 
 	bonusBoundary          int16 = 8
 	bonusBoundaryWhite     int16 = 8 // path scheme: whitespace same as boundary
-	bonusBoundaryDelimiter int16 = 9 // path scheme: slash gets extra bonus
+	bonusBoundaryDelimiter int16 = 9 // path scheme: delimiters (/ : ; |) get extra bonus
 	bonusNonWord           int16 = 8
 	bonusCamel123          int16 = 7
 	bonusConsecutive       int16 = 4
@@ -20,7 +20,7 @@ const (
 
 type charClass int
 
-// Order matters: computeBonus uses > charNonWord to identify word characters.
+// Order matters: computeBonus uses > charNonWord to select boundary-eligible characters.
 const (
 	charWhite     charClass = iota
 	charNonWord
@@ -316,7 +316,7 @@ func FuzzyMatch(caseSensitive bool, input string, pattern string) FuzzyResult {
 		return FuzzyResult{}
 	}
 
-	// Phase 4: backtrace to find matched positions.
+	// Backtrace to find matched positions.
 	// Walk backwards from the best score in the last row. At each cell,
 	// C[row+j] > 0 means the DP chose "match" here; accept it and step
 	// diagonally. Otherwise the cell was a gap; step left.

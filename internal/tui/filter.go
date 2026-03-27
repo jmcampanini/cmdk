@@ -30,6 +30,8 @@ func ranksByScore(results []scoredRank) []list.Rank {
 // sub-term to fuzzy-match the target (AND semantics, order-independent).
 func multiTermFilter(term string, targets []string) []list.Rank {
 	terms := strings.Fields(term)
+	slices.Sort(terms)
+	terms = slices.Compact(terms)
 	if len(terms) == 0 {
 		ranks := make([]list.Rank, len(targets))
 		for i := range targets {
