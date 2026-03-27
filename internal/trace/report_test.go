@@ -47,6 +47,23 @@ func TestWriteTable_Empty(t *testing.T) {
 	}
 }
 
+func TestWriteJSON_Empty(t *testing.T) {
+	var buf bytes.Buffer
+	if err := WriteJSON(&buf, nil); err != nil {
+		t.Fatalf("WriteJSON error: %v", err)
+	}
+	var report jsonReport
+	if err := json.Unmarshal(buf.Bytes(), &report); err != nil {
+		t.Fatalf("JSON parse error: %v\nraw: %s", err, buf.String())
+	}
+	if len(report.Phases) != 0 {
+		t.Errorf("got %d phases, want 0", len(report.Phases))
+	}
+	if report.TotalMS != 0 {
+		t.Errorf("TotalMS = %v, want 0", report.TotalMS)
+	}
+}
+
 func TestWriteJSON(t *testing.T) {
 	var buf bytes.Buffer
 	if err := WriteJSON(&buf, makeSpans()); err != nil {

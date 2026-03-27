@@ -51,6 +51,12 @@ var rootCmd = &cobra.Command{
 			var processStart time.Time
 			if startTime != 0 {
 				processStart = time.UnixMilli(startTime)
+				if processStart.After(time.Now()) {
+					return fmt.Errorf("--start-time %d is in the future; expected epoch milliseconds", startTime)
+				}
+				if time.Since(processStart) > 60*time.Second {
+					return fmt.Errorf("--start-time %d is more than 60s ago; expected epoch milliseconds", startTime)
+				}
 			}
 			tr = trace.New(processStart)
 		}

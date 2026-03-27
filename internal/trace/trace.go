@@ -31,11 +31,14 @@ func New(processStart time.Time) Tracer {
 
 func (t *realTracer) Begin(name string) func() {
 	start := time.Now()
+	var once sync.Once
 	return func() {
-		span := Span{Name: name, Start: start, End: time.Now()}
-		t.mu.Lock()
-		t.spans = append(t.spans, span)
-		t.mu.Unlock()
+		once.Do(func() {
+			span := Span{Name: name, Start: start, End: time.Now()}
+			t.mu.Lock()
+			t.spans = append(t.spans, span)
+			t.mu.Unlock()
+		})
 	}
 }
 

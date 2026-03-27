@@ -95,6 +95,26 @@ func TestRealTracer_NoShellToProcessWhenZero(t *testing.T) {
 	}
 }
 
+func TestRealTracer_ProcessStartWithNoSpans(t *testing.T) {
+	tr := New(time.Now())
+	spans := tr.Spans()
+	if len(spans) != 0 {
+		t.Fatalf("got %d spans, want 0", len(spans))
+	}
+}
+
+func TestRealTracer_DoubleStopIsIdempotent(t *testing.T) {
+	tr := New(time.Time{})
+	stop := tr.Begin("phase")
+	stop()
+	stop()
+
+	spans := tr.Spans()
+	if len(spans) != 1 {
+		t.Fatalf("got %d spans, want 1 (double-stop should be idempotent)", len(spans))
+	}
+}
+
 func TestNoopTracer(t *testing.T) {
 	tr := Noop()
 	stop := tr.Begin("anything")
