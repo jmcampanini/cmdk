@@ -25,7 +25,7 @@ import (
 type viewMode int
 
 const (
-	viewList   viewMode = iota
+	viewList viewMode = iota
 	viewPrompt
 	viewPicker
 )
@@ -49,8 +49,8 @@ type Model struct {
 	theme            theme.Theme
 	autoSelectSingle bool
 	baseItems        []item.Item
-	asyncSources []AsyncSource
-	asyncResults [][]item.Item
+	asyncSources     []AsyncSource
+	asyncResults     [][]item.Item
 	bellToTop        bool
 }
 
@@ -605,7 +605,11 @@ func (m Model) handleSourceResult(result sourceResultMsg) (tea.Model, tea.Cmd) {
 		errItem := generator.ErrorItem(generator.Source{Name: src.Name, Type: src.Type}, result.Err)
 		m.asyncResults[srcIdx] = []item.Item{errItem}
 	} else {
-		m.asyncResults[srcIdx] = result.Items
+		items := result.Items
+		if items == nil {
+			items = []item.Item{}
+		}
+		m.asyncResults[srcIdx] = items
 	}
 
 	if len(m.accumulated) > 0 {
