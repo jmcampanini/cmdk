@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"syscall"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	log "charm.land/log/v2"
@@ -35,7 +34,6 @@ var (
 	themeFlag   string
 	timingsFlag bool
 	timingsJSON bool
-	startTime   int64
 )
 
 var rootCmd = &cobra.Command{
@@ -44,19 +42,13 @@ var rootCmd = &cobra.Command{
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		timingsFlag = timingsFlag || timingsJSON || startTime != 0
+		timingsFlag = timingsFlag || timingsJSON
 
 		tr := trace.Noop()
 		if timingsFlag {
-			var processStart time.Time
-			if startTime != 0 {
-				processStart = time.UnixMilli(startTime)
-				if processStart.After(time.Now()) {
-					return fmt.Errorf("--start-time %d is in the future; expected epoch milliseconds", startTime)
-				}
-				if time.Since(processStart) > 60*time.Second {
-					return fmt.Errorf("--start-time %d is more than 60s ago; expected epoch milliseconds", startTime)
-				}
+			processStart, err := trace.ProcessStartTime()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "warning: could not detect process start time: %v\n", err)
 			}
 			tr = trace.New(processStart)
 		}
@@ -231,7 +223,6 @@ func init() {
 	rootCmd.Flags().StringVar(&themeFlag, "theme", "", "color theme (light, dark)")
 	rootCmd.Flags().BoolVar(&timingsFlag, "timings", false, "measure and print startup phase durations")
 	rootCmd.Flags().BoolVar(&timingsJSON, "timings-json", false, "output timings as JSON (implies --timings)")
-	rootCmd.Flags().Int64Var(&startTime, "start-time", 0, "process start time as epoch milliseconds (implies --timings)")
 }
 
 func Execute() {
