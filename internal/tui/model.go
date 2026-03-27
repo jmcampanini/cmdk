@@ -49,9 +49,8 @@ type Model struct {
 	theme            theme.Theme
 	autoSelectSingle bool
 	baseItems        []item.Item
-	asyncSources     []AsyncSource
-	asyncPending     map[string]bool
-	asyncResults     [][]item.Item
+	asyncSources []AsyncSource
+	asyncResults [][]item.Item
 	bellToTop        bool
 }
 
@@ -63,11 +62,6 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 	if ctx.Config != nil {
 		autoSelect = ctx.Config.Behavior.ShouldAutoSelectSingle()
 		bellToTop = ctx.Config.Behavior.BellToTop
-	}
-
-	pending := make(map[string]bool, len(asyncSources))
-	for _, src := range asyncSources {
-		pending[src.Name] = true
 	}
 
 	return Model{
@@ -82,7 +76,6 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 		autoSelectSingle: autoSelect,
 		baseItems:        baseItems,
 		asyncSources:     asyncSources,
-		asyncPending:     pending,
 		asyncResults:     make([][]item.Item, len(asyncSources)),
 		bellToTop:        bellToTop,
 	}
@@ -606,9 +599,9 @@ func (m Model) handleSourceResult(result sourceResultMsg) (tea.Model, tea.Cmd) {
 	}
 
 	src := m.asyncSources[srcIdx]
-	delete(m.asyncPending, src.Name)
 
 	if result.Err != nil {
+		log.Error("async source failed", "source", src.Name, "error", result.Err)
 		errItem := generator.ErrorItem(generator.Source{Name: src.Name, Type: src.Type}, result.Err)
 		m.asyncResults[srcIdx] = []item.Item{errItem}
 	} else {
@@ -642,8 +635,8 @@ func (m Model) buildRootItems() []list.Item {
 	for _, items := range m.asyncResults {
 		all = append(all, items...)
 	}
-	for _, src := range m.asyncSources {
-		if m.asyncPending[src.Name] {
+	for i, src := range m.asyncSources {
+		if m.asyncResults[i] == nil {
 			all = append(all, generator.LoadingItem(generator.Source{Name: src.Name, Type: src.Type}))
 		}
 	}

@@ -28,6 +28,10 @@ type sourceResultMsg struct {
 
 func fetchSourceCmd(src AsyncSource) tea.Cmd {
 	return func() tea.Msg {
+		if src.Fetch == nil {
+			return sourceResultMsg{Name: src.Name, Err: fmt.Errorf("no fetch function")}
+		}
+
 		timeout := src.Timeout
 		if timeout <= 0 {
 			timeout = 2 * time.Second
