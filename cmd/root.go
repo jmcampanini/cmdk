@@ -48,15 +48,9 @@ var rootCmd = &cobra.Command{
 
 		tr := trace.Noop()
 		if timingsFlag {
-			var processStart time.Time
-			if startTime != 0 {
-				processStart = time.UnixMilli(startTime)
-				if processStart.After(time.Now()) {
-					return fmt.Errorf("--start-time %d is in the future; expected epoch milliseconds", startTime)
-				}
-				if time.Since(processStart) > 60*time.Second {
-					return fmt.Errorf("--start-time %d is more than 60s ago; expected epoch milliseconds", startTime)
-				}
+			processStart, err := resolveProcessStart()
+			if err != nil {
+				return err
 			}
 			tr = trace.New(processStart)
 		}
@@ -186,6 +180,24 @@ func resolveConfigPath() (string, error) {
 		return configPath, nil
 	}
 	return config.DefaultPath(), nil
+}
+
+func resolveProcessStart() (time.Time, error) {
+	if startTime != 0 {
+		t := time.UnixMilli(startTime)
+		if t.After(time.Now()) {
+			return time.Time{}, fmt.Errorf("--start-time %d is in the future; expected epoch milliseconds", startTime)
+		}
+		if time.Since(t) > 60*time.Second {
+			return time.Time{}, fmt.Errorf("--start-time %d is more than 60s ago; expected epoch milliseconds", startTime)
+		}
+		return t, nil
+	}
+	t, err := trace.ProcessStartTime()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not detect process start time: %v\n", err)
+	}
+	return t, nil
 }
 
 func traceSource(tr trace.Tracer, spanName string, src generator.Source) generator.Source {
