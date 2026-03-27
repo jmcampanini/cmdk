@@ -208,18 +208,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if m.list.FilterState() == list.Filtering &&
-		strings.TrimSpace(m.list.FilterInput.Value()) == "" {
-		switch msg.String() {
-		case "up", "down":
-			m.list.ResetFilter()
-			return m, nil
-		case "enter":
-			if m.list.FilterInput.Value() != "" {
-				m.list.ResetFilter()
-				return m, nil
-			}
-		}
+	if resetWhitespaceFilter(&m.list, msg.String()) {
+		return m, nil
 	}
 
 	if msg.String() == "enter" {
@@ -291,18 +281,8 @@ func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	if m.pickerList.FilterState() == list.Filtering &&
-		strings.TrimSpace(m.pickerList.FilterInput.Value()) == "" {
-		switch key.String() {
-		case "up", "down":
-			m.pickerList.ResetFilter()
-			return m, nil
-		case "enter":
-			if m.pickerList.FilterInput.Value() != "" {
-				m.pickerList.ResetFilter()
-				return m, nil
-			}
-		}
+	if resetWhitespaceFilter(&m.pickerList, key.String()) {
+		return m, nil
 	}
 
 	if key.String() == "enter" {
@@ -366,6 +346,26 @@ func (m Model) stageEsc() (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// resetWhitespaceFilter resets a whitespace-only filter on navigation keys.
+// Enter only resets when spaces were actually typed (non-empty value) so that
+// a bare enter on an empty filter still falls through to the default handler.
+func resetWhitespaceFilter(l *list.Model, key string) bool {
+	if l.FilterState() != list.Filtering || strings.TrimSpace(l.FilterInput.Value()) != "" {
+		return false
+	}
+	switch key {
+	case "up", "down":
+		l.ResetFilter()
+		return true
+	case "enter":
+		if l.FilterInput.Value() != "" {
+			l.ResetFilter()
+			return true
+		}
+	}
+	return false
 }
 
 func resolveListTarget(l list.Model) (item.Item, bool) {
