@@ -78,7 +78,7 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 func newFilterList(items []list.Item, t theme.Theme) list.Model {
 	l := list.New(items, newItemDelegate(t), 0, 0)
 	l.Title = "cmdk"
-	l.Filter = list.DefaultFilter
+	l.Filter = multiTermFilter
 	l.SetShowStatusBar(false)
 	l.SetShowPagination(false)
 	l.SetShowTitle(false)
@@ -208,6 +208,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if resetWhitespaceFilter(&m.list, msg.String()) {
+		return m, nil
+	}
+
 	if msg.String() == "enter" {
 		sel, ok := resolveListTarget(m.list)
 		if ok && sel.Type != "error" {
@@ -226,12 +230,7 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	}
-	if (msg.String() == "up" || msg.String() == "down") &&
-		m.list.FilterState() == list.Filtering &&
-		m.list.FilterInput.Value() == "" {
-		m.list.ResetFilter()
-		return m, nil
-	}
+
 	if msg.String() == "esc" && m.list.FilterState() == list.Unfiltered {
 		if len(m.accumulated) > 0 {
 			return m.handleBack(), nil
@@ -282,6 +281,10 @@ func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	if resetWhitespaceFilter(&m.pickerList, key.String()) {
+		return m, nil
+	}
+
 	if key.String() == "enter" {
 		sel, ok := resolveListTarget(m.pickerList)
 		if ok && sel.Type != "error" {
@@ -291,13 +294,6 @@ func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if key.String() == "esc" && m.pickerList.FilterState() == list.Unfiltered {
 		return m.stageEsc()
-	}
-
-	if (key.String() == "up" || key.String() == "down") &&
-		m.pickerList.FilterState() == list.Filtering &&
-		m.pickerList.FilterInput.Value() == "" {
-		m.pickerList.ResetFilter()
-		return m, nil
 	}
 
 	var cmd tea.Cmd
@@ -350,6 +346,26 @@ func (m Model) stageEsc() (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// resetWhitespaceFilter resets a whitespace-only filter on navigation keys.
+// Enter only resets when spaces were actually typed (non-empty value) so that
+// a bare enter on an empty filter still falls through to the default handler.
+func resetWhitespaceFilter(l *list.Model, key string) bool {
+	if l.FilterState() != list.Filtering || strings.TrimSpace(l.FilterInput.Value()) != "" {
+		return false
+	}
+	switch key {
+	case "up", "down":
+		l.ResetFilter()
+		return true
+	case "enter":
+		if l.FilterInput.Value() != "" {
+			l.ResetFilter()
+			return true
+		}
+	}
+	return false
 }
 
 func resolveListTarget(l list.Model) (item.Item, bool) {
