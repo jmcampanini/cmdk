@@ -8,14 +8,18 @@ import (
 )
 
 type scoredRank struct {
-	rank  list.Rank
-	score int
+	rank      list.Rank
+	score     int
+	targetLen int
 }
 
 func ranksByScore(results []scoredRank) []list.Rank {
 	slices.SortStableFunc(results, func(a, b scoredRank) int {
 		if a.score != b.score {
 			return b.score - a.score
+		}
+		if a.targetLen != b.targetLen {
+			return a.targetLen - b.targetLen
 		}
 		return a.rank.Index - b.rank.Index
 	})
@@ -84,7 +88,8 @@ func multiTermFilter(term string, targets []string) []list.Rank {
 				Index:          idx,
 				MatchedIndexes: dedupIndexes(c.matchedIndexes),
 			},
-			score: c.sumScore,
+			score:     c.sumScore,
+			targetLen: len(targets[idx]),
 		})
 	}
 	return ranksByScore(results)
@@ -100,7 +105,8 @@ func singleTermFilter(term string, targets []string) []list.Rank {
 					Index:          i,
 					MatchedIndexes: r.Positions,
 				},
-				score: r.Score,
+				score:     r.Score,
+				targetLen: len(t),
 			})
 		}
 	}
