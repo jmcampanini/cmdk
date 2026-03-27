@@ -20,6 +20,7 @@ const (
 
 type charClass int
 
+// Order matters: computeBonus uses > charNonWord to identify word characters.
 const (
 	charWhite     charClass = iota
 	charNonWord
@@ -28,11 +29,12 @@ const (
 	charUpper
 	charLetter
 	charNumber
+	charClassCount
 )
 
 var (
 	asciiClasses [128]charClass
-	bonusMatrix  [7][7]int16
+	bonusMatrix  [charClassCount][charClassCount]int16
 )
 
 func init() {
@@ -54,8 +56,8 @@ func init() {
 		}
 	}
 
-	for i := range 7 {
-		for j := range 7 {
+	for i := range charClassCount {
+		for j := range charClassCount {
 			bonusMatrix[i][j] = computeBonus(charClass(i), charClass(j))
 		}
 	}
@@ -115,13 +117,11 @@ func bonusAt(runes []rune, idx int) int16 {
 
 // FuzzyResult holds the outcome of a fuzzy match.
 type FuzzyResult struct {
-	Start     int
-	End       int
 	Score     int
 	Positions []int
 }
 
-// FuzzyMatch runs an fzf V2-style Smith-Waterman DP to find the optimal
+// FuzzyMatch runs an fzf V2-style scoring DP to find the optimal
 // fuzzy match of pattern within input. Returns a zero-score result if no match.
 func FuzzyMatch(caseSensitive bool, input string, pattern string) FuzzyResult {
 	if pattern == "" {
@@ -195,15 +195,13 @@ func FuzzyMatch(caseSensitive bool, input string, pattern string) FuzzyResult {
 			return FuzzyResult{}
 		}
 		return FuzzyResult{
-			Start:     bestPos,
-			End:       bestPos + 1,
 			Score:     int(bestScore),
 			Positions: []int{bestPos},
 		}
 	}
 
-	// Phase 2 + 3: DP matrix.
-	// H[i*width + j] = best score matching pattern[0..i] ending at input[minIdx+j]
+	// DP scoring matrix.
+	// H[i*width + j] = best score for matching pattern[0..i] within input[minIdx..minIdx+j]
 	// C[i*width + j] = consecutive match count ending at (i, j)
 	H := make([]int16, M*width)
 	C := make([]int16, M*width)
@@ -269,7 +267,11 @@ func FuzzyMatch(caseSensitive bool, input string, pattern string) FuzzyResult {
 				consecutive := C[row-width+j-1] + 1
 
 				if consecutive > 1 {
-					fb := B[j-int(consecutive)+1]
+					fbIdx := j - int(consecutive) + 1
+					if fbIdx < 0 {
+						fbIdx = 0
+					}
+					fb := B[fbIdx]
 					if b >= bonusBoundary && b > fb {
 						consecutive = 1
 					} else {
@@ -321,6 +323,9 @@ func FuzzyMatch(caseSensitive bool, input string, pattern string) FuzzyResult {
 	// When gap decay zeroes out scores, the C-based walk may fail to place
 	// all pattern chars; fall back to the greedy firstOccurrence positions.
 	positions := make([]int, M)
+	for k := range positions {
+		positions[k] = -1
+	}
 	i := M - 1
 	j := maxPos
 	for i >= 0 && j >= 0 {
@@ -333,16 +338,14 @@ func FuzzyMatch(caseSensitive bool, input string, pattern string) FuzzyResult {
 			j--
 		}
 	}
-	if i >= 0 {
-		copy(positions, firstOccurrence)
+	for _, p := range positions {
+		if p < 0 {
+			copy(positions, firstOccurrence)
+			break
+		}
 	}
 
-	startPos := positions[0]
-	endPos := positions[M-1] + 1
-
 	return FuzzyResult{
-		Start:     startPos,
-		End:       endPos,
 		Score:     int(maxScore),
 		Positions: positions,
 	}
