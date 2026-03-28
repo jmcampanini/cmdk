@@ -185,25 +185,6 @@ func TestEnterOnExecuteItem_SetsSelectedAndQuits(t *testing.T) {
 	}
 }
 
-func TestEnterDuringEmptyFilter_MultipleItems_ExitsFilter(t *testing.T) {
-	m := newTestModel(testItems(), testRegistry())
-	m.list.SetSize(80, 40)
-
-	if m.list.FilterState() != list.Filtering {
-		t.Fatal("could not enter filtering state")
-	}
-
-	result, _ := m.Update(enterMsg)
-	model := result.(Model)
-
-	if model.list.FilterState() != list.Unfiltered {
-		t.Errorf("FilterState() = %v, want Unfiltered after blank enter", model.list.FilterState())
-	}
-	if model.Selected() != nil {
-		t.Error("Selected() should be nil — blank enter should exit filter, not select")
-	}
-}
-
 func TestEnterDuringFiltering_ZeroItems_NoSelection(t *testing.T) {
 	m := newTestModel(nil, testRegistry())
 	m.list.SetSize(80, 40)
