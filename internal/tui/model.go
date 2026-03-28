@@ -64,8 +64,10 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 		beh = ctx.Config.Behavior
 	}
 
+	wrapList := beh.ShouldWrapList()
+
 	return Model{
-		list:             newFilterList(items, t, beh.ShouldWrapList()),
+		list:             newFilterList(items, t, wrapList),
 		paneID:           paneID,
 		accumulated:      accumulated,
 		registry:         registry,
@@ -78,7 +80,7 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 		asyncSources:     asyncSources,
 		asyncResults:     make([][]item.Item, len(asyncSources)),
 		bellToTop:        beh.BellToTop,
-		wrapList:         beh.ShouldWrapList(),
+		wrapList:         wrapList,
 	}
 }
 
