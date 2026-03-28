@@ -185,7 +185,7 @@ func TestEnterOnExecuteItem_SetsSelectedAndQuits(t *testing.T) {
 	}
 }
 
-func TestEnterDuringFiltering_MultipleItems_NotIntercepted(t *testing.T) {
+func TestEnterDuringEmptyFilter_MultipleItems_ExitsFilter(t *testing.T) {
 	m := newTestModel(testItems(), testRegistry())
 	m.list.SetSize(80, 40)
 
@@ -196,8 +196,11 @@ func TestEnterDuringFiltering_MultipleItems_NotIntercepted(t *testing.T) {
 	result, _ := m.Update(enterMsg)
 	model := result.(Model)
 
+	if model.list.FilterState() != list.Unfiltered {
+		t.Errorf("FilterState() = %v, want Unfiltered after blank enter", model.list.FilterState())
+	}
 	if model.Selected() != nil {
-		t.Error("Selected() should be nil during filtering — Enter should be forwarded to list")
+		t.Error("Selected() should be nil — blank enter should exit filter, not select")
 	}
 }
 
@@ -978,6 +981,32 @@ func TestPickerStage_EntersPickerMode(t *testing.T) {
 	}
 }
 
+func TestPickerStage_BlankEnterExitsFilter(t *testing.T) {
+	m := newTestModel(pickerItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+
+	m = selectStagedItem(t, m)
+	if m.mode != viewPicker {
+		t.Fatal("expected viewPicker")
+	}
+	if m.pickerList.FilterState() != list.Filtering {
+		t.Fatal("picker should start in filtering state")
+	}
+
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.pickerList.FilterState() != list.Unfiltered {
+		t.Errorf("FilterState() = %v, want Unfiltered after blank enter in picker", m.pickerList.FilterState())
+	}
+	if m.mode != viewPicker {
+		t.Errorf("mode = %d, want viewPicker — should stay in picker after exiting filter", m.mode)
+	}
+	if cmd != nil {
+		t.Error("blank enter in picker filter should not produce a command")
+	}
+}
+
 func TestPickerStage_SelectAndExecute(t *testing.T) {
 	m := newTestModel(pickerItems(), testRegistry())
 	m = setWindowSize(t, m, 80, 40)
@@ -1377,7 +1406,7 @@ func TestEnterDuringWhitespaceOnlyFilter_ResetsFilter(t *testing.T) {
 
 	m = typeSpaces(t, m)
 
-	result, _ := m.Update(enterMsg)
+	result, cmd := m.Update(enterMsg)
 	m = result.(Model)
 
 	if m.list.FilterState() != list.Unfiltered {
@@ -1385,5 +1414,8 @@ func TestEnterDuringWhitespaceOnlyFilter_ResetsFilter(t *testing.T) {
 	}
 	if m.Selected() != nil {
 		t.Error("Selected() should be nil — whitespace-only enter should reset, not select")
+	}
+	if cmd != nil {
+		t.Error("whitespace-only enter should not produce a command")
 	}
 }

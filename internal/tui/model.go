@@ -369,8 +369,8 @@ func (m Model) stageEsc() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// resetWhitespaceFilter resets the filter on navigation keys when the
-// effective filter text is empty (blank or whitespace-only).
+// resetWhitespaceFilter resets the filter on up/down/enter when the
+// effective filter text is empty or whitespace-only.
 func resetWhitespaceFilter(l *list.Model, key string) bool {
 	if l.FilterState() != list.Filtering || strings.TrimSpace(l.FilterInput.Value()) != "" {
 		return false
