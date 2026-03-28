@@ -51,8 +51,9 @@ func ConfigDocs() []SectionDoc {
 			Fields: []FieldDoc{
 				{Name: "auto_select_single", Type: "bool", Description: "Skip the action list when only one action matches. Default: true."},
 				{Name: "bell_to_top", Type: "bool", Description: "Sort tmux windows with bell activity to the top of the list, above all other items. Default: true."},
+				{Name: "wrap_list", Type: "bool", Description: "Wrap cursor to the opposite end when navigating past the first or last item. Default: true."},
 			},
-			Example: "[behavior]\nauto_select_single = false\nbell_to_top = true",
+			Example: "[behavior]\nauto_select_single = false\nbell_to_top = true\nwrap_list = true",
 		},
 		{
 			Name:        "timeout",
@@ -160,10 +161,12 @@ func defaultValue(cfg *Config, section, field string) string {
 	switch section {
 	case "behavior":
 		switch field {
+		case "auto_select_single":
+			return fmt.Sprintf("%t", cfg.Behavior.ShouldAutoSelectSingle())
 		case "bell_to_top":
 			return fmt.Sprintf("%t", cfg.Behavior.BellToTop)
-		case "auto_select_single":
-			return "true"
+		case "wrap_list":
+			return fmt.Sprintf("%t", cfg.Behavior.ShouldWrapList())
 		}
 	case "timeout":
 		switch field {
