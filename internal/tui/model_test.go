@@ -233,6 +233,11 @@ func TestEnterDuringFiltering_SingleExecuteItem_AutoSelects(t *testing.T) {
 	if m.list.FilterState() != list.Filtering {
 		t.Fatal("could not enter filtering state")
 	}
+
+	// Type a filter term so blank-enter-exits doesn't trigger.
+	result, _ := m.Update(tea.KeyPressMsg{Code: rune('o'), Text: "o"})
+	m = result.(Model)
+
 	if got := len(m.list.VisibleItems()); got != 1 {
 		t.Fatalf("VisibleItems() = %d, want 1", got)
 	}
@@ -261,11 +266,16 @@ func TestEnterDuringFiltering_SingleNextListItem_DrillsDown(t *testing.T) {
 	if m.list.FilterState() != list.Filtering {
 		t.Fatal("could not enter filtering state")
 	}
+
+	// Type a filter term so blank-enter-exits doesn't trigger.
+	result, _ := m.Update(tea.KeyPressMsg{Code: rune('f'), Text: "f"})
+	m = result.(Model)
+
 	if got := len(m.list.VisibleItems()); got != 1 {
 		t.Fatalf("VisibleItems() = %d, want 1", got)
 	}
 
-	result, _ := m.Update(enterMsg)
+	result, _ = m.Update(enterMsg)
 	model := result.(Model)
 
 	if len(model.Accumulated()) != 1 {
@@ -590,6 +600,28 @@ func TestDownDuringEmptyFilter_ExitsFilterWithoutMoving(t *testing.T) {
 	}
 	if m.list.Index() != 0 {
 		t.Errorf("Index() = %d, want 0 (Down should only exit filter, not move cursor)", m.list.Index())
+	}
+}
+
+func TestEnterDuringEmptyFilter_ExitsFilterWithoutSelecting(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	if m.list.FilterState() != list.Filtering {
+		t.Fatal("could not enter filtering state")
+	}
+
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.list.FilterState() != list.Unfiltered {
+		t.Errorf("FilterState() = %v, want %v", m.list.FilterState(), list.Unfiltered)
+	}
+	if m.list.Index() != 0 {
+		t.Errorf("Index() = %d, want 0 (Enter should only exit filter, not move cursor)", m.list.Index())
+	}
+	if m.Selected() != nil {
+		t.Error("Selected() should be nil — blank enter should exit filter, not select")
 	}
 }
 
