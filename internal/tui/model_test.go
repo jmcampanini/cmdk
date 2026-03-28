@@ -185,22 +185,6 @@ func TestEnterOnExecuteItem_SetsSelectedAndQuits(t *testing.T) {
 	}
 }
 
-func TestEnterDuringFiltering_MultipleItems_NotIntercepted(t *testing.T) {
-	m := newTestModel(testItems(), testRegistry())
-	m.list.SetSize(80, 40)
-
-	if m.list.FilterState() != list.Filtering {
-		t.Fatal("could not enter filtering state")
-	}
-
-	result, _ := m.Update(enterMsg)
-	model := result.(Model)
-
-	if model.Selected() != nil {
-		t.Error("Selected() should be nil during filtering — Enter should be forwarded to list")
-	}
-}
-
 func TestEnterDuringFiltering_ZeroItems_NoSelection(t *testing.T) {
 	m := newTestModel(nil, testRegistry())
 	m.list.SetSize(80, 40)
@@ -233,6 +217,11 @@ func TestEnterDuringFiltering_SingleExecuteItem_AutoSelects(t *testing.T) {
 	if m.list.FilterState() != list.Filtering {
 		t.Fatal("could not enter filtering state")
 	}
+
+	// Type a filter term so blank-enter-exits doesn't trigger.
+	result, _ := m.Update(tea.KeyPressMsg{Code: rune('o'), Text: "o"})
+	m = result.(Model)
+
 	if got := len(m.list.VisibleItems()); got != 1 {
 		t.Fatalf("VisibleItems() = %d, want 1", got)
 	}
@@ -261,11 +250,16 @@ func TestEnterDuringFiltering_SingleNextListItem_DrillsDown(t *testing.T) {
 	if m.list.FilterState() != list.Filtering {
 		t.Fatal("could not enter filtering state")
 	}
+
+	// Type a filter term so blank-enter-exits doesn't trigger.
+	result, _ := m.Update(tea.KeyPressMsg{Code: rune('f'), Text: "f"})
+	m = result.(Model)
+
 	if got := len(m.list.VisibleItems()); got != 1 {
 		t.Fatalf("VisibleItems() = %d, want 1", got)
 	}
 
-	result, _ := m.Update(enterMsg)
+	result, _ = m.Update(enterMsg)
 	model := result.(Model)
 
 	if len(model.Accumulated()) != 1 {
@@ -590,6 +584,28 @@ func TestDownDuringEmptyFilter_ExitsFilterWithoutMoving(t *testing.T) {
 	}
 	if m.list.Index() != 0 {
 		t.Errorf("Index() = %d, want 0 (Down should only exit filter, not move cursor)", m.list.Index())
+	}
+}
+
+func TestEnterDuringEmptyFilter_ExitsFilterWithoutSelecting(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	if m.list.FilterState() != list.Filtering {
+		t.Fatal("could not enter filtering state")
+	}
+
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.list.FilterState() != list.Unfiltered {
+		t.Errorf("FilterState() = %v, want %v", m.list.FilterState(), list.Unfiltered)
+	}
+	if m.list.Index() != 0 {
+		t.Errorf("Index() = %d, want 0 (Enter should only exit filter, not move cursor)", m.list.Index())
+	}
+	if m.Selected() != nil {
+		t.Error("Selected() should be nil — blank enter should exit filter, not select")
 	}
 }
 
@@ -943,6 +959,32 @@ func TestPickerStage_EntersPickerMode(t *testing.T) {
 	}
 	if len(m.pickerList.Items()) != 3 {
 		t.Errorf("picker items = %d, want 3", len(m.pickerList.Items()))
+	}
+}
+
+func TestPickerStage_BlankEnterExitsFilter(t *testing.T) {
+	m := newTestModel(pickerItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+
+	m = selectStagedItem(t, m)
+	if m.mode != viewPicker {
+		t.Fatal("expected viewPicker")
+	}
+	if m.pickerList.FilterState() != list.Filtering {
+		t.Fatal("picker should start in filtering state")
+	}
+
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.pickerList.FilterState() != list.Unfiltered {
+		t.Errorf("FilterState() = %v, want Unfiltered after blank enter in picker", m.pickerList.FilterState())
+	}
+	if m.mode != viewPicker {
+		t.Errorf("mode = %d, want viewPicker — should stay in picker after exiting filter", m.mode)
+	}
+	if cmd != nil {
+		t.Error("blank enter in picker filter should not produce a command")
 	}
 }
 
@@ -1435,7 +1477,7 @@ func TestEnterDuringWhitespaceOnlyFilter_ResetsFilter(t *testing.T) {
 
 	m = typeSpaces(t, m)
 
-	result, _ := m.Update(enterMsg)
+	result, cmd := m.Update(enterMsg)
 	m = result.(Model)
 
 	if m.list.FilterState() != list.Unfiltered {
@@ -1443,5 +1485,8 @@ func TestEnterDuringWhitespaceOnlyFilter_ResetsFilter(t *testing.T) {
 	}
 	if m.Selected() != nil {
 		t.Error("Selected() should be nil — whitespace-only enter should reset, not select")
+	}
+	if cmd != nil {
+		t.Error("whitespace-only enter should not produce a command")
 	}
 }

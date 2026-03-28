@@ -373,22 +373,16 @@ func (m Model) stageEsc() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// resetWhitespaceFilter resets a whitespace-only filter on navigation keys.
-// Enter only resets when spaces were actually typed (non-empty value) so that
-// a bare enter on an empty filter still falls through to the default handler.
+// resetWhitespaceFilter resets the filter on up/down/enter when the
+// effective filter text is empty or whitespace-only.
 func resetWhitespaceFilter(l *list.Model, key string) bool {
 	if l.FilterState() != list.Filtering || strings.TrimSpace(l.FilterInput.Value()) != "" {
 		return false
 	}
 	switch key {
-	case "up", "down":
+	case "up", "down", "enter":
 		l.ResetFilter()
 		return true
-	case "enter":
-		if l.FilterInput.Value() != "" {
-			l.ResetFilter()
-			return true
-		}
 	}
 	return false
 }
@@ -613,11 +607,9 @@ func (m Model) handleSourceResult(result sourceResultMsg) (tea.Model, tea.Cmd) {
 		m.asyncResults[srcIdx] = []item.Item{}
 	}
 
-	if len(m.accumulated) > 0 {
-		return m, nil
+	if len(m.accumulated) == 0 {
+		m.rebuildList()
 	}
-
-	m.rebuildList()
 	return m, nil
 }
 
