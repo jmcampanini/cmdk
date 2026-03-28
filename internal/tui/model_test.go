@@ -1377,6 +1377,96 @@ func TestDownDuringWhitespaceOnlyFilter_ResetsFilter(t *testing.T) {
 	}
 }
 
+func TestWrapList_DownPastLastWrapsToFirst(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+	m.list.SetSize(80, 40)
+	m = exitFilterMode(t, m)
+
+	if m.list.Index() != 0 {
+		t.Fatalf("expected initial index 0, got %d", m.list.Index())
+	}
+
+	// Move to last item (index 2 for 3 items).
+	for i := 0; i < len(m.list.Items())-1; i++ {
+		result, _ := m.Update(downMsg)
+		m = result.(Model)
+	}
+	if m.list.Index() != 2 {
+		t.Fatalf("expected index 2 at bottom, got %d", m.list.Index())
+	}
+
+	// One more down should wrap to 0.
+	result, _ := m.Update(downMsg)
+	m = result.(Model)
+	if m.list.Index() != 0 {
+		t.Errorf("expected wrap to index 0, got %d", m.list.Index())
+	}
+}
+
+func TestWrapList_UpPastFirstWrapsToLast(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+	m.list.SetSize(80, 40)
+	m = exitFilterMode(t, m)
+
+	if m.list.Index() != 0 {
+		t.Fatalf("expected initial index 0, got %d", m.list.Index())
+	}
+
+	// Up from index 0 should wrap to last item.
+	result, _ := m.Update(upMsg)
+	m = result.(Model)
+	lastIdx := len(m.list.Items()) - 1
+	if m.list.Index() != lastIdx {
+		t.Errorf("expected wrap to index %d, got %d", lastIdx, m.list.Index())
+	}
+}
+
+func TestWrapListDisabled_DownAtBottomStays(t *testing.T) {
+	cfg := testConfig()
+	v := false
+	cfg.Behavior.WrapList = &v
+	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{Config: cfg}, theme.Light(), nil, nil)
+	m.list.SetSize(80, 40)
+	m = exitFilterMode(t, m)
+
+	// Move to last item.
+	for i := 0; i < len(m.list.Items())-1; i++ {
+		result, _ := m.Update(downMsg)
+		m = result.(Model)
+	}
+	lastIdx := len(m.list.Items()) - 1
+	if m.list.Index() != lastIdx {
+		t.Fatalf("expected index %d at bottom, got %d", lastIdx, m.list.Index())
+	}
+
+	// Down at bottom should stay at last item (no wrap).
+	result, _ := m.Update(downMsg)
+	m = result.(Model)
+	if m.list.Index() != lastIdx {
+		t.Errorf("expected cursor to stay at %d, got %d (wrapped when it should not)", lastIdx, m.list.Index())
+	}
+}
+
+func TestWrapListDisabled_UpAtTopStays(t *testing.T) {
+	cfg := testConfig()
+	v := false
+	cfg.Behavior.WrapList = &v
+	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{Config: cfg}, theme.Light(), nil, nil)
+	m.list.SetSize(80, 40)
+	m = exitFilterMode(t, m)
+
+	if m.list.Index() != 0 {
+		t.Fatalf("expected initial index 0, got %d", m.list.Index())
+	}
+
+	// Up at top should stay at first item (no wrap).
+	result, _ := m.Update(upMsg)
+	m = result.(Model)
+	if m.list.Index() != 0 {
+		t.Errorf("expected cursor to stay at 0, got %d (wrapped when it should not)", m.list.Index())
+	}
+}
+
 func TestEnterDuringWhitespaceOnlyFilter_ResetsFilter(t *testing.T) {
 	m := newTestModel(testItems(), testRegistry())
 	m.list.SetSize(80, 40)

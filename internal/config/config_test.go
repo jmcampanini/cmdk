@@ -357,6 +357,29 @@ func TestValidate_StageKeyStartsWithDigit(t *testing.T) {
 	}
 }
 
+func TestBehavior_ShouldWrapList_DefaultTrue(t *testing.T) {
+	b := Behavior{}
+	if !b.ShouldWrapList() {
+		t.Error("ShouldWrapList() = false, want true when nil")
+	}
+}
+
+func TestBehavior_ShouldWrapList_ExplicitTrue(t *testing.T) {
+	v := true
+	b := Behavior{WrapList: &v}
+	if !b.ShouldWrapList() {
+		t.Error("ShouldWrapList() = false, want true")
+	}
+}
+
+func TestBehavior_ShouldWrapList_ExplicitFalse(t *testing.T) {
+	v := false
+	b := Behavior{WrapList: &v}
+	if b.ShouldWrapList() {
+		t.Error("ShouldWrapList() = true, want false")
+	}
+}
+
 func TestBehavior_ShouldAutoSelectSingle_DefaultTrue(t *testing.T) {
 	b := Behavior{}
 	if !b.ShouldAutoSelectSingle() {
@@ -792,6 +815,46 @@ func TestLoad_ActionWithUnicodeIcon(t *testing.T) {
 	}
 	if cfg.Actions[0].Icon != "\ue709" {
 		t.Errorf("Icon = %q, want \\ue709", cfg.Actions[0].Icon)
+	}
+}
+
+func TestLoad_BehaviorWrapListDefault(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[[actions]]
+name = "htop"
+cmd = "htop"
+matches = "root"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.Behavior.ShouldWrapList() {
+		t.Error("ShouldWrapList() = false, want true (default)")
+	}
+}
+
+func TestLoad_BehaviorWrapListDisabled(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[behavior]
+wrap_list = false
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Behavior.ShouldWrapList() {
+		t.Error("ShouldWrapList() = true, want false")
 	}
 }
 

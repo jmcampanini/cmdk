@@ -16,6 +16,7 @@ import (
 	log "charm.land/log/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/jmcampanini/cmdk/internal/config"
 	"github.com/jmcampanini/cmdk/internal/execute"
 	"github.com/jmcampanini/cmdk/internal/generator"
 	"github.com/jmcampanini/cmdk/internal/item"
@@ -52,20 +53,21 @@ type Model struct {
 	asyncSources     []AsyncSource
 	asyncResults     [][]item.Item
 	bellToTop        bool
+	wrapList         bool
 }
 
 const horizontalPadding = 1
 
 func NewModel(items []list.Item, paneID string, accumulated []item.Item, registry *generator.Registry, ctx generator.Context, t theme.Theme, asyncSources []AsyncSource, baseItems []item.Item) Model {
-	autoSelect := true
-	bellToTop := false
+	var beh config.Behavior
 	if ctx.Config != nil {
-		autoSelect = ctx.Config.Behavior.ShouldAutoSelectSingle()
-		bellToTop = ctx.Config.Behavior.BellToTop
+		beh = ctx.Config.Behavior
 	}
 
+	wrapList := beh.ShouldWrapList()
+
 	return Model{
-		list:             newFilterList(items, t),
+		list:             newFilterList(items, t, wrapList),
 		paneID:           paneID,
 		accumulated:      accumulated,
 		registry:         registry,
@@ -73,11 +75,12 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 		stackStyle:       lipgloss.NewStyle().Foreground(t.Overlay0),
 		filterStyle:      lipgloss.NewStyle().Inline(true).Background(t.TextboxBg),
 		theme:            t,
-		autoSelectSingle: autoSelect,
+		autoSelectSingle: beh.ShouldAutoSelectSingle(),
 		baseItems:        baseItems,
 		asyncSources:     asyncSources,
 		asyncResults:     make([][]item.Item, len(asyncSources)),
-		bellToTop:        bellToTop,
+		bellToTop:        beh.BellToTop,
+		wrapList:         wrapList,
 	}
 }
 
@@ -85,10 +88,11 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 // tea.Cmd from the '/' key is intentionally discarded -- it returns
 // textinput.Blink which is unused because Cursor.Blink is set to false
 // in applyListStyles.
-func newFilterList(items []list.Item, t theme.Theme) list.Model {
+func newFilterList(items []list.Item, t theme.Theme, wrapList bool) list.Model {
 	l := list.New(items, newItemDelegate(t), 0, 0)
 	l.Title = "cmdk"
 	l.Filter = multiTermFilter
+	l.InfiniteScrolling = wrapList
 	l.SetShowStatusBar(false)
 	l.SetShowPagination(false)
 	l.SetShowTitle(false)
@@ -531,7 +535,7 @@ func (m Model) initPicker(key string, items []item.Item) Model {
 		listItems[i] = it
 	}
 
-	pl := newFilterList(listItems, m.theme)
+	pl := newFilterList(listItems, m.theme, m.wrapList)
 	if m.winHeight > 0 {
 		pl.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
 	}
