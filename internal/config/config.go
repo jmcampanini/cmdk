@@ -36,10 +36,15 @@ type Action struct {
 type Behavior struct {
 	AutoSelectSingle *bool `toml:"auto_select_single"`
 	BellToTop        bool  `toml:"bell_to_top"`
+	WrapList         *bool `toml:"wrap_list"`
 }
 
 func (b Behavior) ShouldAutoSelectSingle() bool {
 	return b.AutoSelectSingle == nil || *b.AutoSelectSingle
+}
+
+func (b Behavior) ShouldWrapList() bool {
+	return b.WrapList == nil || *b.WrapList
 }
 
 type Timeout struct {
