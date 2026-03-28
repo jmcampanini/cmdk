@@ -53,7 +53,7 @@ func ConfigDocs() []SectionDoc {
 				{Name: "bell_to_top", Type: "bool", Description: "Sort tmux windows with bell activity to the top of the list, above all other items. Default: true."},
 				{Name: "wrap_list", Type: "bool", Description: "Wrap cursor to the opposite end when navigating past the first or last item. Default: true."},
 			},
-			Example: "[behavior]\nauto_select_single = false\nbell_to_top = true\nwrap_list = true",
+			Example: "[behavior]\nauto_select_single = false\nbell_to_top = true\nwrap_list = false",
 		},
 		{
 			Name:        "timeout",
