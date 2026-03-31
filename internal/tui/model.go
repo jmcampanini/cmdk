@@ -517,6 +517,7 @@ func runPickerSource(rendered string, timeout time.Duration, stage item.Stage) (
 
 	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
 	var items []item.Item
+	var warnedDisplay, warnedPass bool
 	for _, line := range lines {
 		if delim != "" {
 			line = strings.TrimRight(line, "\r")
@@ -529,6 +530,15 @@ func runPickerSource(rendered string, timeout time.Duration, stage item.Stage) (
 		it := item.NewItem()
 		it.Type = "pick"
 		if delim != "" {
+			nFields := len(strings.Split(line, delim))
+			if stage.Display > nFields && !warnedDisplay {
+				log.Warn("display index exceeds field count, using whole line", "index", stage.Display, "fields", nFields)
+				warnedDisplay = true
+			}
+			if stage.Pass > nFields && !warnedPass {
+				log.Warn("pass index exceeds field count, using whole line", "index", stage.Pass, "fields", nFields)
+				warnedPass = true
+			}
 			it.Display = extractField(line, delim, stage.Display)
 			it.Value = extractField(line, delim, stage.Pass)
 		} else {
