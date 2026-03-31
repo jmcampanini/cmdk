@@ -206,6 +206,72 @@ func TestValidate_StagePickerForbidsDefault(t *testing.T) {
 	}
 }
 
+func TestValidate_StagePickerWithFieldConfig(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "picker", Key: "dir", Source: "zoxide", Delimiter: "|", Display: 1, Pass: 2}},
+	}}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_StagePickerNegativeDisplay(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "picker", Key: "dir", Source: "zoxide", Display: -1}},
+	}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for negative display")
+	}
+}
+
+func TestValidate_StagePickerNegativePass(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "picker", Key: "dir", Source: "zoxide", Pass: -1}},
+	}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for negative pass")
+	}
+}
+
+func TestValidate_StagePromptForbidsDelimiter(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "x", Text: "Name:", Delimiter: "|"}},
+	}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for prompt stage with delimiter")
+	}
+}
+
+func TestValidate_StagePromptForbidsDisplay(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "x", Text: "Name:", Display: 1}},
+	}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for prompt stage with display")
+	}
+}
+
+func TestValidate_StagePromptForbidsPass(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "x", Text: "Name:", Pass: 1}},
+	}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for prompt stage with pass")
+	}
+}
+
 func TestValidate_StageInvalidType(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Actions = []Action{{

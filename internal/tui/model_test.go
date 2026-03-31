@@ -1490,3 +1490,79 @@ func TestEnterDuringWhitespaceOnlyFilter_ResetsFilter(t *testing.T) {
 		t.Error("whitespace-only enter should not produce a command")
 	}
 }
+
+func fieldSplitPickerItems() []list.Item {
+	return []list.Item{
+		item.Item{
+			Type:    "action",
+			Display: "Pick User",
+			Action:  item.ActionStaged,
+			Cmd:     "echo {{.user}}",
+			Stages: []item.Stage{
+				{Type: item.StagePicker, Key: "user", Source: "printf 'Alice|alice@co\\nBob|bob@co'", Delimiter: "|", Display: 1, Pass: 2},
+			},
+		},
+	}
+}
+
+func TestPickerStage_FieldSplit_DisplayShowsField(t *testing.T) {
+	m := newTestModel(fieldSplitPickerItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+
+	m = selectStagedItem(t, m)
+
+	if m.mode != viewPicker {
+		t.Errorf("mode = %d, want viewPicker", m.mode)
+	}
+	items := m.pickerList.Items()
+	if len(items) != 2 {
+		t.Fatalf("picker items = %d, want 2", len(items))
+	}
+	first := items[0].(item.Item)
+	if first.Display != "Alice" {
+		t.Errorf("Display = %q, want Alice", first.Display)
+	}
+	if first.Value != "alice@co" {
+		t.Errorf("Value = %q, want alice@co", first.Value)
+	}
+}
+
+func TestPickerStage_FieldSplit_PassValueFlowsToData(t *testing.T) {
+	m := newTestModel(fieldSplitPickerItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+
+	m = selectStagedItem(t, m)
+
+	result, _ := m.Update(escMsg)
+	m = result.(Model)
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.Selected() == nil {
+		t.Fatal("Selected() should be set after picker selection")
+	}
+	if cmd == nil {
+		t.Error("expected Quit command")
+	}
+	data := execute.FlattenData(m.Accumulated())
+	if data["user"] != "alice@co" {
+		t.Errorf("data[user] = %q, want alice@co (pass field, not display)", data["user"])
+	}
+}
+
+func TestPickerStage_NoFieldConfig_BackwardCompat(t *testing.T) {
+	m := newTestModel(pickerItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+
+	m = selectStagedItem(t, m)
+
+	result, _ := m.Update(escMsg)
+	m = result.(Model)
+	result, _ = m.Update(enterMsg)
+	m = result.(Model)
+
+	data := execute.FlattenData(m.Accumulated())
+	if data["file"] != "alpha" {
+		t.Errorf("data[file] = %q, want alpha (full line, backward compat)", data["file"])
+	}
+}

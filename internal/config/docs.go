@@ -42,8 +42,11 @@ func ConfigDocs() []SectionDoc {
 				{Name: "text", Type: "string", Description: "Prompt label (Go template). Only for type = \"prompt\".", Validation: "required for prompt; forbidden for picker"},
 				{Name: "default", Type: "string", Description: "Default value pre-filled in prompt (Go template). Only for type = \"prompt\"."},
 				{Name: "source", Type: "string", Description: "Shell command run via sh -c that produces newline-separated entries (Go template). Only for type = \"picker\".", Validation: "required for picker; forbidden for prompt"},
+				{Name: "delimiter", Type: "string", Description: "Field delimiter for splitting source lines into parts. Only for type = \"picker\". Defaults to \"|\" when display or pass is set.", Validation: "forbidden for prompt"},
+				{Name: "display", Type: "int", Description: "1-based field index to display and match against. 0 = whole line (default). Only for type = \"picker\".", Validation: "forbidden for prompt; cannot be negative"},
+				{Name: "pass", Type: "int", Description: "1-based field index to pass as the stage result value. 0 = whole line (default). Only for type = \"picker\".", Validation: "forbidden for prompt; cannot be negative"},
 			},
-			Example: "stages = [\n  { type = \"prompt\", text = \"Branch name:\", key = \"branch\", default = \"feature/\" },\n  { type = \"picker\", source = \"find {{.path}} -type f\", key = \"file\" },\n]",
+			Example: "stages = [\n  { type = \"prompt\", text = \"Branch name:\", key = \"branch\", default = \"feature/\" },\n  { type = \"picker\", source = \"find {{.path}} -type f\", key = \"file\" },\n  { type = \"picker\", source = \"printf 'Alice|alice@co\\nBob|bob@co'\", key = \"user\", delimiter = \"|\", display = 1, pass = 2 },\n]",
 		},
 		{
 			Name:        "behavior",

@@ -10,11 +10,14 @@ func (a Action) ToItem() item.Item {
 	stages := make([]item.Stage, len(a.Stages))
 	for i, s := range a.Stages {
 		stages[i] = item.Stage{
-			Type:    item.StageType(s.Type),
-			Key:     s.Key,
-			Text:    s.Text,
-			Default: s.Default,
-			Source:  s.Source,
+			Type:      item.StageType(s.Type),
+			Key:       s.Key,
+			Text:      s.Text,
+			Default:   s.Default,
+			Source:    s.Source,
+			Delimiter: s.Delimiter,
+			Display:   s.Display,
+			Pass:      s.Pass,
 		}
 	}
 

@@ -16,17 +16,33 @@ const (
 )
 
 type Stage struct {
-	Type    StageType
-	Key     string
-	Text    string
-	Default string
-	Source  string
+	Type      StageType
+	Key       string
+	Text      string
+	Default   string
+	Source    string
+	Delimiter string
+	Display   int
+	Pass      int
+}
+
+// EffectiveDelimiter returns the delimiter to use for field splitting.
+// Returns "" when no splitting is configured (Delimiter, Display, and Pass are all zero-value).
+func (s Stage) EffectiveDelimiter() string {
+	if s.Delimiter != "" {
+		return s.Delimiter
+	}
+	if s.Display != 0 || s.Pass != 0 {
+		return "|"
+	}
+	return ""
 }
 
 type Item struct {
 	Type    string
 	Source  string
 	Display string
+	Value   string
 	Data    map[string]string
 	Action  ActionType
 	Cmd     string
