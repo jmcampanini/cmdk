@@ -88,3 +88,24 @@ func TestStageType_Constants(t *testing.T) {
 		t.Errorf("StagePicker = %q, want picker", StagePicker)
 	}
 }
+
+func TestStage_EffectiveDelimiter(t *testing.T) {
+	tests := []struct {
+		name  string
+		stage Stage
+		want  string
+	}{
+		{"no fields configured", Stage{}, ""},
+		{"explicit delimiter", Stage{Delimiter: ":"}, ":"},
+		{"display only defaults to pipe", Stage{Display: 1}, "|"},
+		{"pass only defaults to pipe", Stage{Pass: 2}, "|"},
+		{"delimiter overrides default", Stage{Delimiter: "::", Display: 1, Pass: 2}, "::"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.stage.EffectiveDelimiter(); got != tt.want {
+				t.Errorf("EffectiveDelimiter() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
