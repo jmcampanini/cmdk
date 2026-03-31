@@ -214,6 +214,35 @@ func TestMatchingActions_StageConversion(t *testing.T) {
 	}
 }
 
+func TestMatchingActions_StageConversion_FieldConfig(t *testing.T) {
+	cfg := &Config{
+		Actions: []Action{
+			{
+				Name: "Fields", Cmd: "echo", Matches: "root",
+				Stages: []StageConfig{
+					{Type: "picker", Key: "user", Source: "printf 'a|b'", Delimiter: "|", Display: 1, Pass: 2},
+				},
+			},
+		},
+	}
+	fn := MatchingActions(cfg, "root")
+	items, err := fn(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	s := items[0].Stages[0]
+	if s.Delimiter != "|" {
+		t.Errorf("Delimiter = %q, want |", s.Delimiter)
+	}
+	if s.Display != 1 {
+		t.Errorf("Display = %d, want 1", s.Display)
+	}
+	if s.Pass != 2 {
+		t.Errorf("Pass = %d, want 2", s.Pass)
+	}
+}
+
 func TestMatchingActions_NoStagesGivesActionExecute(t *testing.T) {
 	cfg := &Config{
 		Actions: []Action{

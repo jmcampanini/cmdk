@@ -284,7 +284,7 @@ func (m Model) updatePrompt(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		stage := m.accumulated[actionIdx].Stages[len(m.accumulated)-actionIdx-1]
 		value := m.stageInput.Value()
-		return m.pushStageResult(stage.Key, value)
+		return m.pushStageResult(stage.Key, value, value)
 
 	case "esc":
 		return m.stageEsc()
@@ -313,7 +313,7 @@ func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if key.String() == "enter" {
 		sel, ok := resolveListTarget(m.pickerList)
 		if ok && sel.Type != "error" {
-			return m.pushStageResult(m.pickerKey, sel.Display)
+			return m.pushStageResult(m.pickerKey, sel.Display, sel.Value)
 		}
 	}
 
@@ -327,7 +327,7 @@ func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // pushStageResult records a stage value and either advances to the next stage or completes.
-func (m Model) pushStageResult(key string, value string) (tea.Model, tea.Cmd) {
+func (m Model) pushStageResult(key string, display string, value string) (tea.Model, tea.Cmd) {
 	actionIdx := m.findActionIndex()
 	if actionIdx < 0 {
 		return m.recoverFromMissingAction(), nil
@@ -337,7 +337,7 @@ func (m Model) pushStageResult(key string, value string) (tea.Model, tea.Cmd) {
 
 	resultItem := item.NewItem()
 	resultItem.Type = "stage-result"
-	resultItem.Display = value
+	resultItem.Display = display
 	resultItem.Data[key] = value
 	m.accumulated = append(slices.Clone(m.accumulated), resultItem)
 
@@ -469,7 +469,7 @@ func (m Model) advanceStage() Model {
 		if m.ctx.Config != nil {
 			pickerTimeout = m.ctx.Config.Timeout.Picker
 		}
-		items, runErr := runPickerSource(rendered, pickerTimeout)
+		items, runErr := runPickerSource(rendered, pickerTimeout, stage)
 		if runErr != nil {
 			log.Error("picker source command failed", "key", stage.Key, "command", rendered, "error", runErr)
 			return m.initPickerWithError(stage.Key, fmt.Sprintf("command error: %s", runErr))
@@ -491,8 +491,7 @@ func (m Model) advanceStage() Model {
 
 // runPickerSource executes a shell command and returns one item per output line.
 // A zero timeout means no deadline is applied.
-// Structured as a standalone function for future conversion to async tea.Cmd.
-func runPickerSource(rendered string, timeout time.Duration) ([]item.Item, error) {
+func runPickerSource(rendered string, timeout time.Duration, stage item.Stage) ([]item.Item, error) {
 	ctx := context.Background()
 	if timeout > 0 {
 		var cancel context.CancelFunc
@@ -514,16 +513,38 @@ func runPickerSource(rendered string, timeout time.Duration) ([]item.Item, error
 		return nil, fmt.Errorf("command failed: %w", err)
 	}
 
+	delim := stage.EffectiveDelimiter()
+
 	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
 	var items []item.Item
+	var warnedDisplay, warnedPass bool
 	for _, line := range lines {
-		line = strings.TrimSpace(line)
+		if delim != "" {
+			line = strings.TrimRight(line, "\r")
+		} else {
+			line = strings.TrimSpace(line)
+		}
 		if line == "" {
 			continue
 		}
 		it := item.NewItem()
 		it.Type = "pick"
-		it.Display = line
+		if delim != "" {
+			nFields := len(strings.Split(line, delim))
+			if stage.Display > nFields && !warnedDisplay {
+				log.Warn("display index exceeds field count, using whole line", "index", stage.Display, "fields", nFields)
+				warnedDisplay = true
+			}
+			if stage.Pass > nFields && !warnedPass {
+				log.Warn("pass index exceeds field count, using whole line", "index", stage.Pass, "fields", nFields)
+				warnedPass = true
+			}
+			it.Display = extractField(line, delim, stage.Display)
+			it.Value = extractField(line, delim, stage.Pass)
+		} else {
+			it.Display = line
+			it.Value = line
+		}
 		items = append(items, it)
 	}
 	return items, nil

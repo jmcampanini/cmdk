@@ -18,11 +18,14 @@ import (
 )
 
 type StageConfig struct {
-	Type    string `toml:"type"`
-	Key     string `toml:"key"`
-	Text    string `toml:"text"`
-	Default string `toml:"default"`
-	Source  string `toml:"source"`
+	Type      string `toml:"type"`
+	Key       string `toml:"key"`
+	Text      string `toml:"text"`
+	Default   string `toml:"default"`
+	Source    string `toml:"source"`
+	Delimiter string `toml:"delimiter"`
+	Display   int    `toml:"display"`
+	Pass      int    `toml:"pass"`
 }
 
 type Action struct {
@@ -175,6 +178,15 @@ func validateStages(actionIdx int, stages []StageConfig) error {
 			if s.Source != "" {
 				return fmt.Errorf("%s.source must not be set for prompt stage", prefix)
 			}
+			if s.Delimiter != "" {
+				return fmt.Errorf("%s.delimiter must not be set for prompt stage", prefix)
+			}
+			if s.Display != 0 {
+				return fmt.Errorf("%s.display must not be set for prompt stage", prefix)
+			}
+			if s.Pass != 0 {
+				return fmt.Errorf("%s.pass must not be set for prompt stage", prefix)
+			}
 		case "picker":
 			if s.Source == "" {
 				return fmt.Errorf("%s.source cannot be empty for picker stage", prefix)
@@ -184,6 +196,12 @@ func validateStages(actionIdx int, stages []StageConfig) error {
 			}
 			if s.Default != "" {
 				return fmt.Errorf("%s.default must not be set for picker stage", prefix)
+			}
+			if s.Display < 0 {
+				return fmt.Errorf("%s.display cannot be negative", prefix)
+			}
+			if s.Pass < 0 {
+				return fmt.Errorf("%s.pass cannot be negative", prefix)
 			}
 		default:
 			return fmt.Errorf("%s.type %q is not valid (valid: prompt, picker)", prefix, s.Type)
