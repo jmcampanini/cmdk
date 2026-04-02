@@ -40,6 +40,7 @@ type Behavior struct {
 	AutoSelectSingle *bool `toml:"auto_select_single"`
 	BellToTop        bool  `toml:"bell_to_top"`
 	WrapList         *bool `toml:"wrap_list"`
+	StartInFilter    *bool `toml:"start_in_filter"`
 }
 
 func (b Behavior) ShouldAutoSelectSingle() bool {
@@ -48,6 +49,10 @@ func (b Behavior) ShouldAutoSelectSingle() bool {
 
 func (b Behavior) ShouldWrapList() bool {
 	return b.WrapList == nil || *b.WrapList
+}
+
+func (b Behavior) ShouldStartInFilter() bool {
+	return b.StartInFilter == nil || *b.StartInFilter
 }
 
 type Timeout struct {
