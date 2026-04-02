@@ -446,6 +446,29 @@ func TestBehavior_ShouldWrapList_ExplicitFalse(t *testing.T) {
 	}
 }
 
+func TestBehavior_ShouldStartInFilter_DefaultTrue(t *testing.T) {
+	b := Behavior{}
+	if !b.ShouldStartInFilter() {
+		t.Error("ShouldStartInFilter() = false, want true when nil")
+	}
+}
+
+func TestBehavior_ShouldStartInFilter_ExplicitTrue(t *testing.T) {
+	v := true
+	b := Behavior{StartInFilter: &v}
+	if !b.ShouldStartInFilter() {
+		t.Error("ShouldStartInFilter() = false, want true")
+	}
+}
+
+func TestBehavior_ShouldStartInFilter_ExplicitFalse(t *testing.T) {
+	v := false
+	b := Behavior{StartInFilter: &v}
+	if b.ShouldStartInFilter() {
+		t.Error("ShouldStartInFilter() = true, want false")
+	}
+}
+
 func TestBehavior_ShouldAutoSelectSingle_DefaultTrue(t *testing.T) {
 	b := Behavior{}
 	if !b.ShouldAutoSelectSingle() {

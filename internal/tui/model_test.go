@@ -65,6 +65,10 @@ func newTestModelWithTheme(items []list.Item, reg *generator.Registry, t theme.T
 	return NewModel(items, "%1", nil, reg, generator.Context{Config: testConfig()}, t, nil, nil)
 }
 
+func newTestModelWithConfig(items []list.Item, reg *generator.Registry, cfg *config.Config) Model {
+	return NewModel(items, "%1", nil, reg, generator.Context{Config: cfg}, theme.Light(), nil, nil)
+}
+
 func exitFilterMode(t *testing.T, m Model) Model {
 	t.Helper()
 	result, _ := m.Update(escMsg)
@@ -319,6 +323,10 @@ func TestEscapeFromDrillDown_PopsBack(t *testing.T) {
 		t.Fatalf("after drill-down: Accumulated() len = %d, want 1", len(m.Accumulated()))
 	}
 
+	// First Escape exits filter mode (drill-down re-enters filter).
+	m = exitFilterMode(t, m)
+
+	// Second Escape pops back to the root list.
 	result, cmd := m.Update(escMsg)
 	m = result.(Model)
 
@@ -338,6 +346,9 @@ func TestDrillDownThenExecute_SetsSelectedAndQuits(t *testing.T) {
 	m.list.SetSize(80, 40)
 
 	m = drillDownToDirItem(t, m)
+
+	// Drill-down re-enters filter mode; exit before selecting.
+	m = exitFilterMode(t, m)
 
 	result, cmd := m.Update(enterMsg)
 	m = result.(Model)
@@ -557,6 +568,10 @@ func TestView_StackDisappearsAfterBack(t *testing.T) {
 	m = setWindowSize(t, m, 80, 40)
 	m = drillDownToDirItem(t, m)
 
+	// First Escape exits filter mode (drill-down re-enters filter).
+	m = exitFilterMode(t, m)
+
+	// Second Escape pops back.
 	result, _ := m.Update(escMsg)
 	m = result.(Model)
 
@@ -1425,7 +1440,7 @@ func TestWrapListDisabled_DownAtBottomStays(t *testing.T) {
 	cfg := testConfig()
 	v := false
 	cfg.Behavior.WrapList = &v
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{Config: cfg}, theme.Light(), nil, nil)
+	m := newTestModelWithConfig(testItems(), testRegistry(), cfg)
 	m.list.SetSize(80, 40)
 	m = exitFilterMode(t, m)
 
@@ -1451,7 +1466,7 @@ func TestWrapListDisabled_UpAtTopStays(t *testing.T) {
 	cfg := testConfig()
 	v := false
 	cfg.Behavior.WrapList = &v
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{Config: cfg}, theme.Light(), nil, nil)
+	m := newTestModelWithConfig(testItems(), testRegistry(), cfg)
 	m.list.SetSize(80, 40)
 	m = exitFilterMode(t, m)
 
@@ -1564,5 +1579,81 @@ func TestPickerStage_NoFieldConfig_BackwardCompat(t *testing.T) {
 	data := execute.FlattenData(m.Accumulated())
 	if data["file"] != "alpha" {
 		t.Errorf("data[file] = %q, want alpha (full line, backward compat)", data["file"])
+	}
+}
+
+func TestStartInFilterFalse_StartsBrowseMode(t *testing.T) {
+	cfg := testConfig()
+	v := false
+	cfg.Behavior.StartInFilter = &v
+	m := newTestModelWithConfig(testItems(), testRegistry(), cfg)
+	m.list.SetSize(80, 40)
+
+	if m.list.FilterState() != list.Unfiltered {
+		t.Errorf("FilterState() = %v, want Unfiltered when start_in_filter = false", m.list.FilterState())
+	}
+}
+
+func TestStartInFilterFalse_SlashEntersFilterMode(t *testing.T) {
+	cfg := testConfig()
+	v := false
+	cfg.Behavior.StartInFilter = &v
+	m := newTestModelWithConfig(testItems(), testRegistry(), cfg)
+	m.list.SetSize(80, 40)
+
+	result, _ := m.Update(tea.KeyPressMsg{Code: rune('/')})
+	m = result.(Model)
+
+	if m.list.FilterState() != list.Filtering {
+		t.Errorf("FilterState() = %v, want Filtering after pressing /", m.list.FilterState())
+	}
+}
+
+func TestStartInFilterFalse_PickerStartsBrowseMode(t *testing.T) {
+	cfg := testConfig()
+	v := false
+	cfg.Behavior.StartInFilter = &v
+	m := newTestModelWithConfig(pickerItems(), testRegistry(), cfg)
+	m.list.SetSize(80, 40)
+
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.mode != viewPicker {
+		t.Fatalf("mode = %d, want viewPicker (%d)", m.mode, viewPicker)
+	}
+	if m.pickerList.FilterState() != list.Unfiltered {
+		t.Errorf("picker FilterState() = %v, want Unfiltered when start_in_filter = false", m.pickerList.FilterState())
+	}
+}
+
+func TestStartInFilterTrue_DrillDownReentersFilterMode(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	m = drillDownToDirItem(t, m)
+
+	if m.list.FilterState() != list.Filtering {
+		t.Errorf("FilterState() = %v, want Filtering after drill-down with start_in_filter = true", m.list.FilterState())
+	}
+}
+
+func TestStartInFilterFalse_DrillDownStaysBrowseMode(t *testing.T) {
+	cfg := testConfig()
+	v := false
+	cfg.Behavior.StartInFilter = &v
+	m := newTestModelWithConfig(testItems(), testRegistry(), cfg)
+	m.list.SetSize(80, 40)
+
+	// Navigate to the dir item (index 2) — already in browse mode, no need to exit filter.
+	result, _ := m.Update(downMsg)
+	m = result.(Model)
+	result, _ = m.Update(downMsg)
+	m = result.(Model)
+	result, _ = m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.list.FilterState() != list.Unfiltered {
+		t.Errorf("FilterState() = %v, want Unfiltered after drill-down with start_in_filter = false", m.list.FilterState())
 	}
 }
