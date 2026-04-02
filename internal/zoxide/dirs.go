@@ -30,7 +30,7 @@ func splitScorePath(line string) (float64, string, bool) {
 	return score, path, true
 }
 
-func ParseDirs(output string, minScore float64, home, shortenHome string, rules []pathfmt.Rule) []item.Item {
+func ParseDirs(output string, minScore float64, home, shortenHome string, rules []pathfmt.Rule, trunc pathfmt.Truncation) []item.Item {
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) == 1 && lines[0] == "" {
 		return nil
@@ -62,7 +62,7 @@ func ParseDirs(output string, minScore float64, home, shortenHome string, rules 
 		it := item.NewItem()
 		it.Type = "dir"
 		it.Source = "zoxide"
-		it.Display = pathfmt.DisplayPath(path, home, shortenHome, rules)
+		it.Display = pathfmt.DisplayPath(path, home, shortenHome, rules, trunc)
 		it.Action = item.ActionNextList
 		it.Data["path"] = path
 
@@ -84,7 +84,7 @@ func ParseDirs(output string, minScore float64, home, shortenHome string, rules 
 	return items
 }
 
-func ListDirs(ctx context.Context, minScore float64, home, shortenHome string, rules []pathfmt.Rule) ([]item.Item, error) {
+func ListDirs(ctx context.Context, minScore float64, home, shortenHome string, rules []pathfmt.Rule, trunc pathfmt.Truncation) ([]item.Item, error) {
 	out, err := exec.CommandContext(ctx, "zoxide", "query", "--list", "--score").Output()
 	if err != nil {
 		if ctx.Err() != nil {
@@ -92,5 +92,5 @@ func ListDirs(ctx context.Context, minScore float64, home, shortenHome string, r
 		}
 		return nil, err
 	}
-	return ParseDirs(string(out), minScore, home, shortenHome, rules), nil
+	return ParseDirs(string(out), minScore, home, shortenHome, rules, trunc), nil
 }

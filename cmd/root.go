@@ -76,6 +76,7 @@ var rootCmd = &cobra.Command{
 		}
 		zoxideCfg := cfg.Sources["zoxide"]
 		shortenHome := *cfg.Display.ShortenHome
+		trunc := pathfmt.Truncation{Length: cfg.Display.TruncationLength, Symbol: cfg.Display.TruncationSymbol}
 		rules := pathfmt.CompileRules(cfg.Display.Rules)
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -86,7 +87,7 @@ var rootCmd = &cobra.Command{
 		sources := []generator.Source{
 			traceSource(tr, "source/windows", generator.Source{Name: "windows", Type: "window", Async: true, Fetch: tmux.ListWindows}),
 			traceSource(tr, "source/zoxide", generator.Source{Name: "zoxide", Type: "dir", Limit: zoxideCfg.Limit, Async: true, Fetch: func(ctx context.Context) ([]item.Item, error) {
-				return zoxide.ListDirs(ctx, zoxideCfg.MinScore, home, shortenHome, rules)
+				return zoxide.ListDirs(ctx, zoxideCfg.MinScore, home, shortenHome, rules, trunc)
 			}}),
 		}
 		if cfgErr != nil {

@@ -794,6 +794,63 @@ func TestValidate_EmptyDisplayRuleKey(t *testing.T) {
 	}
 }
 
+func TestLoad_DisplayTruncation(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[display]
+truncation_length = 3
+truncation_symbol = "…"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Display.TruncationLength != 3 {
+		t.Errorf("TruncationLength = %d, want 3", cfg.Display.TruncationLength)
+	}
+	if cfg.Display.TruncationSymbol != "…" {
+		t.Errorf("TruncationSymbol = %q, want %q", cfg.Display.TruncationSymbol, "…")
+	}
+}
+
+func TestLoad_DisplayTruncationDefaults(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[display]
+shorten_home = "~"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Display.TruncationLength != 0 {
+		t.Errorf("TruncationLength = %d, want 0 (default)", cfg.Display.TruncationLength)
+	}
+	if cfg.Display.TruncationSymbol != "" {
+		t.Errorf("TruncationSymbol = %q, want empty (default)", cfg.Display.TruncationSymbol)
+	}
+}
+
+func TestValidate_NegativeTruncationLength(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Display.TruncationLength = -1
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for negative truncation_length")
+	}
+	if !strings.Contains(err.Error(), "truncation_length") {
+		t.Errorf("error = %q, want mention of truncation_length", err.Error())
+	}
+}
+
 func TestValidate_ValidIconAlias(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Actions = []Action{{Name: "GitHub", Cmd: "open gh", Matches: "root", Icon: ":nf-dev-github:"}}

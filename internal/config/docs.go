@@ -81,9 +81,11 @@ func ConfigDocs() []SectionDoc {
 			Description: "Path display formatting.",
 			Fields: []FieldDoc{
 				{Name: "shorten_home", Type: "string", Description: "Replace $HOME prefix in display paths; empty string disables."},
+				{Name: "truncation_length", Type: "int", Description: "Number of rightmost path segments to display. 0 = show full path.", Validation: "cannot be negative"},
+				{Name: "truncation_symbol", Type: "string", Description: "String prepended (with an implied trailing /) when truncation occurs. For example, \"…\" produces \"…/foo/bar\"."},
 				{Name: "rules", Type: "map[string]string", Description: "Literal substring replacements applied to display paths. Keys are substrings to match, values are replacements.", Validation: "match key cannot be empty"},
 			},
-			Example: "[display]\nshorten_home = \"~\"\n\n[display.rules]\n\"github.com\" = \"gh\"",
+			Example: "[display]\nshorten_home = \"~\"\ntruncation_length = 3\ntruncation_symbol = \"…\"\n\n[display.rules]\n\"github.com\" = \"gh\"",
 		},
 	}
 }
@@ -187,8 +189,17 @@ func defaultValue(cfg *Config, section, field string) string {
 			return fmt.Sprintf("%g", zoxide.MinScore)
 		}
 	case "display":
-		if field == "shorten_home" && cfg.Display.ShortenHome != nil {
-			return fmt.Sprintf("%q", *cfg.Display.ShortenHome)
+		switch field {
+		case "shorten_home":
+			if cfg.Display.ShortenHome != nil {
+				return fmt.Sprintf("%q", *cfg.Display.ShortenHome)
+			}
+		case "truncation_length":
+			return fmt.Sprintf("%d", cfg.Display.TruncationLength)
+		case "truncation_symbol":
+			if cfg.Display.TruncationSymbol != "" {
+				return fmt.Sprintf("%q", cfg.Display.TruncationSymbol)
+			}
 		}
 	}
 	return ""

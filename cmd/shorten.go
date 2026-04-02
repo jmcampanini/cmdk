@@ -43,17 +43,29 @@ var shortenCmd = &cobra.Command{
 			return fmt.Errorf("loading config: %w", err)
 		}
 		shortenHome := *cfg.Display.ShortenHome
+		trunc := pathfmt.Truncation{Length: cfg.Display.TruncationLength, Symbol: cfg.Display.TruncationSymbol}
+		if cmd.Flags().Changed("truncate") {
+			trunc.Length, _ = cmd.Flags().GetInt("truncate")
+			if trunc.Length < 0 {
+				return fmt.Errorf("--truncate cannot be negative")
+			}
+		}
+		if cmd.Flags().Changed("truncate-symbol") {
+			trunc.Symbol, _ = cmd.Flags().GetString("truncate-symbol")
+		}
 		rules := pathfmt.CompileRules(cfg.Display.Rules)
 		home, err := os.UserHomeDir()
 		if err != nil && shortenHome != "" {
 			return fmt.Errorf("cannot shorten home prefix: %w", err)
 		}
 
-		fmt.Println(pathfmt.DisplayPath(path, home, shortenHome, rules))
+		fmt.Println(pathfmt.DisplayPath(path, home, shortenHome, rules, trunc))
 		return nil
 	},
 }
 
 func init() {
+	shortenCmd.Flags().Int("truncate", 0, "number of rightmost path segments to display (overrides config)")
+	shortenCmd.Flags().String("truncate-symbol", "", "string prepended (with implied trailing /) when truncation occurs (overrides config)")
 	rootCmd.AddCommand(shortenCmd)
 }
