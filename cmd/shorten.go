@@ -45,13 +45,21 @@ var shortenCmd = &cobra.Command{
 		shortenHome := *cfg.Display.ShortenHome
 		trunc := pathfmt.Truncation{Length: cfg.Display.TruncationLength, Symbol: cfg.Display.TruncationSymbol}
 		if cmd.Flags().Changed("truncate") {
-			trunc.Length, _ = cmd.Flags().GetInt("truncate")
-			if trunc.Length < 0 {
+			v, err := cmd.Flags().GetInt("truncate")
+			if err != nil {
+				return fmt.Errorf("reading --truncate flag: %w", err)
+			}
+			if v < 0 {
 				return fmt.Errorf("--truncate cannot be negative")
 			}
+			trunc.Length = v
 		}
 		if cmd.Flags().Changed("truncate-symbol") {
-			trunc.Symbol, _ = cmd.Flags().GetString("truncate-symbol")
+			v, err := cmd.Flags().GetString("truncate-symbol")
+			if err != nil {
+				return fmt.Errorf("reading --truncate-symbol flag: %w", err)
+			}
+			trunc.Symbol = v
 		}
 		rules := pathfmt.CompileRules(cfg.Display.Rules)
 		home, err := os.UserHomeDir()
@@ -65,7 +73,7 @@ var shortenCmd = &cobra.Command{
 }
 
 func init() {
-	shortenCmd.Flags().Int("truncate", 0, "number of rightmost path segments to display (overrides config)")
+	shortenCmd.Flags().Int("truncate", 0, "number of rightmost path segments to display; 0 disables (overrides config)")
 	shortenCmd.Flags().String("truncate-symbol", "", "string prepended (with implied trailing /) when truncation occurs (overrides config)")
 	rootCmd.AddCommand(shortenCmd)
 }

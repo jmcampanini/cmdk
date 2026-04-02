@@ -81,8 +81,8 @@ func ConfigDocs() []SectionDoc {
 			Description: "Path display formatting.",
 			Fields: []FieldDoc{
 				{Name: "shorten_home", Type: "string", Description: "Replace $HOME prefix in display paths; empty string disables."},
-				{Name: "truncation_length", Type: "int", Description: "Number of rightmost path segments to display. 0 = show full path.", Validation: "cannot be negative"},
-				{Name: "truncation_symbol", Type: "string", Description: "String prepended (with an implied trailing /) when truncation occurs. For example, \"…\" produces \"…/foo/bar\"."},
+				{Name: "truncation_length", Type: "int", Description: "Number of rightmost path segments to display; 0 disables. Paths with this many or fewer segments are left unchanged. Applied after home shortening and rules.", Validation: "cannot be negative"},
+				{Name: "truncation_symbol", Type: "string", Description: "String prepended (with an implied trailing /) when truncation occurs. Empty string means no prefix. For example, \"…\" produces \"…/foo/bar\"."},
 				{Name: "rules", Type: "map[string]string", Description: "Literal substring replacements applied to display paths. Keys are substrings to match, values are replacements.", Validation: "match key cannot be empty"},
 			},
 			Example: "[display]\nshorten_home = \"~\"\ntruncation_length = 3\ntruncation_symbol = \"…\"\n\n[display.rules]\n\"github.com\" = \"gh\"",
