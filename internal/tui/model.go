@@ -87,9 +87,6 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 	}
 }
 
-// tea.Cmd from the '/' key is intentionally discarded -- it returns
-// textinput.Blink which is unused because Cursor.Blink is set to false
-// in applyListStyles.
 func newFilterList(items []list.Item, t theme.Theme, wrapList bool, startInFilter bool) list.Model {
 	l := list.New(items, newItemDelegate(t), 0, 0)
 	l.Title = "cmdk"
@@ -103,10 +100,18 @@ func newFilterList(items []list.Item, t theme.Theme, wrapList bool, startInFilte
 
 	l.SetSize(1, 1)
 	if startInFilter {
-		l, _ = l.Update(tea.KeyPressMsg{Code: rune('/')})
-		if l.FilterState() != list.Filtering {
-			log.Warn("failed to enter filter mode during list init; falling back to browse mode")
-		}
+		l = enterFilterMode(l)
+	}
+	return l
+}
+
+// enterFilterMode sends the '/' key to activate the list's built-in filter.
+// The returned tea.Cmd (textinput.Blink) is intentionally discarded because
+// Cursor.Blink is set to false in applyListStyles.
+func enterFilterMode(l list.Model) list.Model {
+	l, _ = l.Update(tea.KeyPressMsg{Code: rune('/')})
+	if l.FilterState() != list.Filtering {
+		log.Warn("failed to enter filter mode; the list likely has no items", "items", len(l.Items()))
 	}
 	return l
 }
@@ -685,6 +690,9 @@ func (m Model) navigateTo(accumulated []item.Item) Model {
 	m.list.SetItems(listItems)
 	m.list.ResetSelected()
 	m.list.ResetFilter()
+	if m.startInFilter {
+		m.list = enterFilterMode(m.list)
+	}
 	if m.winHeight > 0 {
 		m.list.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
 	}
