@@ -1566,3 +1566,48 @@ func TestPickerStage_NoFieldConfig_BackwardCompat(t *testing.T) {
 		t.Errorf("data[file] = %q, want alpha (full line, backward compat)", data["file"])
 	}
 }
+
+func TestStartInFilterFalse_StartsBrowseMode(t *testing.T) {
+	cfg := testConfig()
+	v := false
+	cfg.Behavior.StartInFilter = &v
+	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{Config: cfg}, theme.Light(), nil, nil)
+	m.list.SetSize(80, 40)
+
+	if m.list.FilterState() != list.Unfiltered {
+		t.Errorf("FilterState() = %v, want Unfiltered when start_in_filter = false", m.list.FilterState())
+	}
+}
+
+func TestStartInFilterFalse_SlashEntersFilterMode(t *testing.T) {
+	cfg := testConfig()
+	v := false
+	cfg.Behavior.StartInFilter = &v
+	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{Config: cfg}, theme.Light(), nil, nil)
+	m.list.SetSize(80, 40)
+
+	result, _ := m.Update(tea.KeyPressMsg{Code: rune('/')})
+	m = result.(Model)
+
+	if m.list.FilterState() != list.Filtering {
+		t.Errorf("FilterState() = %v, want Filtering after pressing /", m.list.FilterState())
+	}
+}
+
+func TestStartInFilterFalse_PickerStartsBrowseMode(t *testing.T) {
+	cfg := testConfig()
+	v := false
+	cfg.Behavior.StartInFilter = &v
+	m := NewModel(pickerItems(), "%1", nil, testRegistry(), generator.Context{Config: cfg}, theme.Light(), nil, nil)
+	m.list.SetSize(80, 40)
+
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.mode != viewPicker {
+		t.Fatalf("mode = %d, want viewPicker (%d)", m.mode, viewPicker)
+	}
+	if m.pickerList.FilterState() != list.Unfiltered {
+		t.Errorf("picker FilterState() = %v, want Unfiltered when start_in_filter = false", m.pickerList.FilterState())
+	}
+}

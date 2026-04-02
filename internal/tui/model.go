@@ -54,6 +54,7 @@ type Model struct {
 	asyncResults     [][]item.Item
 	bellToTop        bool
 	wrapList         bool
+	startInFilter    bool
 }
 
 const horizontalPadding = 1
@@ -65,9 +66,10 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 	}
 
 	wrapList := beh.ShouldWrapList()
+	startInFilter := beh.ShouldStartInFilter()
 
 	return Model{
-		list:             newFilterList(items, t, wrapList),
+		list:             newFilterList(items, t, wrapList, startInFilter),
 		paneID:           paneID,
 		accumulated:      accumulated,
 		registry:         registry,
@@ -81,14 +83,14 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 		asyncResults:     make([][]item.Item, len(asyncSources)),
 		bellToTop:        beh.BellToTop,
 		wrapList:         wrapList,
+		startInFilter:    startInFilter,
 	}
 }
 
-// newFilterList creates a styled list that starts in filter mode.
 // tea.Cmd from the '/' key is intentionally discarded -- it returns
 // textinput.Blink which is unused because Cursor.Blink is set to false
 // in applyListStyles.
-func newFilterList(items []list.Item, t theme.Theme, wrapList bool) list.Model {
+func newFilterList(items []list.Item, t theme.Theme, wrapList bool, startInFilter bool) list.Model {
 	l := list.New(items, newItemDelegate(t), 0, 0)
 	l.Title = "cmdk"
 	l.Filter = multiTermFilter
@@ -100,9 +102,11 @@ func newFilterList(items []list.Item, t theme.Theme, wrapList bool) list.Model {
 	applyListStyles(&l, t)
 
 	l.SetSize(1, 1)
-	l, _ = l.Update(tea.KeyPressMsg{Code: rune('/')})
-	if l.FilterState() != list.Filtering {
-		log.Warn("failed to enter filter mode during list init; falling back to browse mode")
+	if startInFilter {
+		l, _ = l.Update(tea.KeyPressMsg{Code: rune('/')})
+		if l.FilterState() != list.Filtering {
+			log.Warn("failed to enter filter mode during list init; falling back to browse mode")
+		}
 	}
 	return l
 }
@@ -556,7 +560,7 @@ func (m Model) initPicker(key string, items []item.Item) Model {
 		listItems[i] = it
 	}
 
-	pl := newFilterList(listItems, m.theme, m.wrapList)
+	pl := newFilterList(listItems, m.theme, m.wrapList, m.startInFilter)
 	if m.winHeight > 0 {
 		pl.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
 	}
