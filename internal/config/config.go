@@ -66,8 +66,10 @@ type SourceConfig struct {
 }
 
 type Display struct {
-	ShortenHome *string           `toml:"shorten_home"`
-	Rules       map[string]string `toml:"rules"`
+	ShortenHome      *string           `toml:"shorten_home"`
+	TruncationLength int               `toml:"truncation_length"`
+	TruncationSymbol string            `toml:"truncation_symbol"`
+	Rules            map[string]string `toml:"rules"`
 }
 
 type Config struct {
@@ -112,6 +114,9 @@ func (c Config) Validate() error {
 	}
 	if err := validateActions(c.Actions); err != nil {
 		return err
+	}
+	if c.Display.TruncationLength < 0 {
+		return errors.New("display.truncation_length cannot be negative")
 	}
 	for match := range c.Display.Rules {
 		if match == "" {

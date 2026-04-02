@@ -10,6 +10,11 @@ type Rule struct {
 	Replace string
 }
 
+type Truncation struct {
+	Length int
+	Symbol string
+}
+
 func CompileRules(rules map[string]string) []Rule {
 	compiled := make([]Rule, 0, len(rules))
 	for match, replace := range rules {
@@ -24,12 +29,27 @@ func CompileRules(rules map[string]string) []Rule {
 	return compiled
 }
 
-func DisplayPath(path, home, shortenHome string, rules []Rule) string {
+func DisplayPath(path, home, shortenHome string, rules []Rule, trunc Truncation) string {
 	path = replaceHome(path, home, shortenHome)
 	for _, r := range rules {
 		path = strings.Replace(path, r.Match, r.Replace, 1)
 	}
-	return path
+	return truncateParts(path, trunc)
+}
+
+func truncateParts(path string, trunc Truncation) string {
+	if trunc.Length <= 0 {
+		return path
+	}
+	parts := strings.FieldsFunc(path, func(r rune) bool { return r == '/' })
+	if len(parts) <= trunc.Length {
+		return path
+	}
+	tail := strings.Join(parts[len(parts)-trunc.Length:], "/")
+	if trunc.Symbol != "" {
+		return trunc.Symbol + "/" + tail
+	}
+	return tail
 }
 
 func replaceHome(path, home, shortenHome string) string {

@@ -838,6 +838,57 @@ stages = [
 	assertMarkerContains(t, marker, "hello")
 }
 
+func TestE2E_ShortenTruncateFlag(t *testing.T) {
+	out, err := exec.Command(binaryPath, "shorten", "--truncate", "2", "/usr/local/bin/foo").CombinedOutput()
+	if err != nil {
+		t.Fatalf("shorten failed: %v\n%s", err, out)
+	}
+	got := strings.TrimSpace(string(out))
+	if got != "bin/foo" {
+		t.Errorf("got %q, want %q", got, "bin/foo")
+	}
+}
+
+func TestE2E_ShortenTruncateWithSymbolFlag(t *testing.T) {
+	out, err := exec.Command(binaryPath, "shorten", "--truncate", "2", "--truncate-symbol", "…", "/usr/local/bin/foo").CombinedOutput()
+	if err != nil {
+		t.Fatalf("shorten failed: %v\n%s", err, out)
+	}
+	got := strings.TrimSpace(string(out))
+	if got != "…/bin/foo" {
+		t.Errorf("got %q, want %q", got, "…/bin/foo")
+	}
+}
+
+func TestE2E_ShortenTruncateFlagOverridesConfig(t *testing.T) {
+	xdg := writeConfig(t, `
+[display]
+truncation_length = 3
+truncation_symbol = "…"
+`)
+	cmd := exec.Command(binaryPath, "shorten", "--truncate", "1", "/a/b/c/d")
+	cmd.Env = append(os.Environ(), "XDG_CONFIG_HOME="+xdg)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("shorten failed: %v\n%s", err, out)
+	}
+	got := strings.TrimSpace(string(out))
+	if got != "…/d" {
+		t.Errorf("got %q, want %q (flag overrides length, config symbol falls through)", got, "…/d")
+	}
+}
+
+func TestE2E_ShortenNoTruncateFlag(t *testing.T) {
+	out, err := exec.Command(binaryPath, "shorten", "/usr/local/bin/foo").CombinedOutput()
+	if err != nil {
+		t.Fatalf("shorten failed: %v\n%s", err, out)
+	}
+	got := strings.TrimSpace(string(out))
+	if got != "/usr/local/bin/foo" {
+		t.Errorf("got %q, want full path unchanged", got)
+	}
+}
+
 func TestE2E_EscFromPromptStage(t *testing.T) {
 	requireZoxideEntries(t)
 

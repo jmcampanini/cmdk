@@ -15,7 +15,7 @@ ZSH_COMPLETIONS_DIR := $(BREW_PREFIX)/share/zsh/site-functions
 
 all: build ## Default target
 
-build: check ## Build the binary
+build: clean check ## Build the binary
 	mkdir -p $(BUILD_DIR)
 	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) .
 
@@ -27,9 +27,10 @@ lint: ## Run golangci-lint
 test: ## Run tests
 	go test ./...
 
-clean: ## Remove build artifacts and test cache
+clean: ## Remove build artifacts, test cache, and lint cache
 	go clean
 	go clean -testcache
+	golangci-lint cache clean
 	rm -rf $(BUILD_DIR)
 
 install-completions: build ## Install shell completions
