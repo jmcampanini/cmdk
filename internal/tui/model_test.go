@@ -65,6 +65,10 @@ func newTestModelWithTheme(items []list.Item, reg *generator.Registry, t theme.T
 	return NewModel(items, "%1", nil, reg, generator.Context{Config: testConfig()}, t, nil, nil)
 }
 
+func newTestModelWithConfig(items []list.Item, reg *generator.Registry, cfg *config.Config) Model {
+	return NewModel(items, "%1", nil, reg, generator.Context{Config: cfg}, theme.Light(), nil, nil)
+}
+
 func exitFilterMode(t *testing.T, m Model) Model {
 	t.Helper()
 	result, _ := m.Update(escMsg)
@@ -1436,7 +1440,7 @@ func TestWrapListDisabled_DownAtBottomStays(t *testing.T) {
 	cfg := testConfig()
 	v := false
 	cfg.Behavior.WrapList = &v
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{Config: cfg}, theme.Light(), nil, nil)
+	m := newTestModelWithConfig(testItems(), testRegistry(), cfg)
 	m.list.SetSize(80, 40)
 	m = exitFilterMode(t, m)
 
@@ -1462,7 +1466,7 @@ func TestWrapListDisabled_UpAtTopStays(t *testing.T) {
 	cfg := testConfig()
 	v := false
 	cfg.Behavior.WrapList = &v
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{Config: cfg}, theme.Light(), nil, nil)
+	m := newTestModelWithConfig(testItems(), testRegistry(), cfg)
 	m.list.SetSize(80, 40)
 	m = exitFilterMode(t, m)
 
@@ -1582,7 +1586,7 @@ func TestStartInFilterFalse_StartsBrowseMode(t *testing.T) {
 	cfg := testConfig()
 	v := false
 	cfg.Behavior.StartInFilter = &v
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{Config: cfg}, theme.Light(), nil, nil)
+	m := newTestModelWithConfig(testItems(), testRegistry(), cfg)
 	m.list.SetSize(80, 40)
 
 	if m.list.FilterState() != list.Unfiltered {
@@ -1594,7 +1598,7 @@ func TestStartInFilterFalse_SlashEntersFilterMode(t *testing.T) {
 	cfg := testConfig()
 	v := false
 	cfg.Behavior.StartInFilter = &v
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{Config: cfg}, theme.Light(), nil, nil)
+	m := newTestModelWithConfig(testItems(), testRegistry(), cfg)
 	m.list.SetSize(80, 40)
 
 	result, _ := m.Update(tea.KeyPressMsg{Code: rune('/')})
@@ -1609,7 +1613,7 @@ func TestStartInFilterFalse_PickerStartsBrowseMode(t *testing.T) {
 	cfg := testConfig()
 	v := false
 	cfg.Behavior.StartInFilter = &v
-	m := NewModel(pickerItems(), "%1", nil, testRegistry(), generator.Context{Config: cfg}, theme.Light(), nil, nil)
+	m := newTestModelWithConfig(pickerItems(), testRegistry(), cfg)
 	m.list.SetSize(80, 40)
 
 	result, _ := m.Update(enterMsg)
@@ -1638,7 +1642,7 @@ func TestStartInFilterFalse_DrillDownStaysBrowseMode(t *testing.T) {
 	cfg := testConfig()
 	v := false
 	cfg.Behavior.StartInFilter = &v
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{Config: cfg}, theme.Light(), nil, nil)
+	m := newTestModelWithConfig(testItems(), testRegistry(), cfg)
 	m.list.SetSize(80, 40)
 
 	// Navigate to the dir item (index 2) — already in browse mode, no need to exit filter.

@@ -207,7 +207,7 @@ func selectDirAction(t *testing.T, sess string, actionName string) {
 		return strings.Contains(s, actionName)
 	}, defaultTimeout)
 
-	sendKeys(t, sess, "/")
+	// Drill-down re-enters filter mode (start_in_filter default), so no '/' needed.
 	filterAndExecute(t, sess, actionName)
 }
 
@@ -344,6 +344,10 @@ auto_select_single = false
 		return strings.Contains(s, "New window")
 	}, defaultTimeout)
 
+	// First Escape exits filter mode (drill-down re-enters filter).
+	exitFilterModeE2E(t, sess)
+
+	// Second Escape navigates back to root.
 	sendKeys(t, sess, "Escape")
 
 	waitForContent(t, sess, func(s string) bool {
@@ -869,4 +873,26 @@ stages = [
 	if !sessionExists(sess) {
 		t.Fatal("session should still exist after Esc from prompt stage")
 	}
+}
+
+func TestE2E_StartInFilterFalse_BrowseMode(t *testing.T) {
+	xdg := writeConfig(t, `
+[behavior]
+start_in_filter = false
+`)
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+
+	// In browse mode, the status bar shows "/ filter" hint instead of "esc cancel".
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "/ filter")
+	}, defaultTimeout)
+
+	// Pressing / should enter filter mode.
+	sendKeys(t, sess, "/")
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "esc cancel")
+	}, defaultTimeout)
 }
