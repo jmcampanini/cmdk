@@ -256,6 +256,8 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if msg.String() == "enter" {
 		sel, ok := resolveListTarget(m.list)
 		if ok && sel.Type != "error" && sel.Type != "loading" {
+			// Reconstruct the accumulated stack as if the user drilled down,
+			// so template variables (e.g. {{.path}}) resolve correctly.
 			if sel.InlineParent != nil {
 				m.accumulated = append(slices.Clone(m.accumulated), *sel.InlineParent)
 				sel.Display = sel.Value
