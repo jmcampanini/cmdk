@@ -28,6 +28,9 @@ func TestDefaultConfig(t *testing.T) {
 	if !cfg.Behavior.BellToTop {
 		t.Error("Behavior.BellToTop = false, want true")
 	}
+	if cfg.Behavior.InlineActions {
+		t.Error("Behavior.InlineActions = true, want false")
+	}
 }
 
 func TestValidate_Valid(t *testing.T) {
