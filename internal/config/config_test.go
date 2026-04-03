@@ -494,9 +494,16 @@ func TestLoad_MalformedTOML(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := Load(path)
+	cfg, err := Load(path)
 	if err == nil {
 		t.Fatal("expected error for malformed TOML")
+	}
+	defaults := DefaultConfig()
+	if cfg.Timeout.Fetch != defaults.Timeout.Fetch {
+		t.Errorf("Timeout.Fetch = %s, want %s (default)", cfg.Timeout.Fetch, defaults.Timeout.Fetch)
+	}
+	if cfg.Behavior.WrapList != defaults.Behavior.WrapList {
+		t.Errorf("Behavior.WrapList = %v, want %v (default)", cfg.Behavior.WrapList, defaults.Behavior.WrapList)
 	}
 }
 
@@ -929,6 +936,25 @@ wrap_list = false
 	}
 	if cfg.Behavior.WrapList {
 		t.Error("Behavior.WrapList = true, want false")
+	}
+}
+
+func TestLoad_BehaviorStartInFilterDisabled(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[behavior]
+start_in_filter = false
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Behavior.StartInFilter {
+		t.Error("Behavior.StartInFilter = true, want false")
 	}
 }
 
