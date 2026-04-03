@@ -76,6 +76,9 @@ var reservedKeys = []string{"path", "pane_id", "session", "window_index"}
 
 var validStageKey = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
+// DefaultConfig returns a Config with production defaults. Load decodes TOML
+// on top of this struct, so fields set here act as defaults for anything the
+// user's config file does not mention.
 func DefaultConfig() Config {
 	return Config{
 		Behavior: Behavior{
