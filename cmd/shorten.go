@@ -42,7 +42,7 @@ var shortenCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("loading config: %w", err)
 		}
-		shortenHome := *cfg.Display.ShortenHome
+		shortenHome := cfg.Display.ShortenHome
 		trunc := pathfmt.Truncation{Length: cfg.Display.TruncationLength, Symbol: cfg.Display.TruncationSymbol}
 		if cmd.Flags().Changed("truncate") {
 			v, err := cmd.Flags().GetInt("truncate")

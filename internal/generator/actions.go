@@ -38,15 +38,13 @@ func NewActionsGenerator() GeneratorFunc {
 			})
 		}
 
-		if ctx.Config != nil {
-			for _, a := range ctx.Config.Actions {
-				if a.Matches != matchType {
-					continue
-				}
-				it := a.ToItem()
-				it.Data = maps.Clone(data)
-				items = append(items, it)
+		for _, a := range ctx.Config.Actions {
+			if a.Matches != matchType {
+				continue
 			}
+			it := a.ToItem()
+			it.Data = maps.Clone(data)
+			items = append(items, it)
 		}
 
 		return items

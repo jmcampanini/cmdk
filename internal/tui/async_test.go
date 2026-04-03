@@ -15,9 +15,8 @@ import (
 	"github.com/jmcampanini/cmdk/internal/theme"
 )
 
-func asyncTestConfig() *config.Config {
-	cfg := config.DefaultConfig()
-	return &cfg
+func asyncTestConfig() config.Config {
+	return config.DefaultConfig()
 }
 
 func newAsyncTestModel(syncItems []item.Item, asyncSources []AsyncSource) Model {

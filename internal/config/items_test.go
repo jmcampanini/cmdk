@@ -8,7 +8,7 @@ import (
 )
 
 func TestMatchingActions_EmptyConfig(t *testing.T) {
-	fn := MatchingActions(&Config{}, "root")
+	fn := MatchingActions(Config{}, "root")
 	items, err := fn(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -19,7 +19,7 @@ func TestMatchingActions_EmptyConfig(t *testing.T) {
 }
 
 func TestMatchingActions_CorrectFields(t *testing.T) {
-	cfg := &Config{
+	cfg := Config{
 		Actions: []Action{
 			{Name: "htop", Cmd: "htop", Matches: "root"},
 		},
@@ -51,7 +51,7 @@ func TestMatchingActions_CorrectFields(t *testing.T) {
 }
 
 func TestMatchingActions_PreservesOrder(t *testing.T) {
-	cfg := &Config{
+	cfg := Config{
 		Actions: []Action{
 			{Name: "alpha", Cmd: "echo alpha", Matches: "root"},
 			{Name: "beta", Cmd: "echo beta", Matches: "root"},
@@ -75,7 +75,7 @@ func TestMatchingActions_PreservesOrder(t *testing.T) {
 }
 
 func TestMatchingActions_IconPassedThrough(t *testing.T) {
-	cfg := &Config{
+	cfg := Config{
 		Actions: []Action{
 			{Name: "GitHub", Cmd: "open gh", Matches: "root", Icon: "\ue709"},
 		},
@@ -91,7 +91,7 @@ func TestMatchingActions_IconPassedThrough(t *testing.T) {
 }
 
 func TestMatchingActions_NoIcon(t *testing.T) {
-	cfg := &Config{
+	cfg := Config{
 		Actions: []Action{
 			{Name: "htop", Cmd: "htop", Matches: "root"},
 		},
@@ -107,7 +107,7 @@ func TestMatchingActions_NoIcon(t *testing.T) {
 }
 
 func TestMatchingActions_FiltersByMatchType(t *testing.T) {
-	cfg := &Config{
+	cfg := Config{
 		Actions: []Action{
 			{Name: "htop", Cmd: "htop", Matches: "root"},
 			{Name: "Yazi", Cmd: "yazi", Matches: "dir"},
@@ -144,7 +144,7 @@ func TestMatchingActions_FiltersByMatchType(t *testing.T) {
 }
 
 func TestMatchingActions_ActionStagedForActionsWithStages(t *testing.T) {
-	cfg := &Config{
+	cfg := Config{
 		Actions: []Action{
 			{
 				Name: "New session", Cmd: "tmux new-session", Matches: "root",
@@ -168,7 +168,7 @@ func TestMatchingActions_ActionStagedForActionsWithStages(t *testing.T) {
 }
 
 func TestMatchingActions_StageConversion(t *testing.T) {
-	cfg := &Config{
+	cfg := Config{
 		Actions: []Action{
 			{
 				Name: "Multi", Cmd: "echo", Matches: "root",
@@ -215,7 +215,7 @@ func TestMatchingActions_StageConversion(t *testing.T) {
 }
 
 func TestMatchingActions_StageConversion_FieldConfig(t *testing.T) {
-	cfg := &Config{
+	cfg := Config{
 		Actions: []Action{
 			{
 				Name: "Fields", Cmd: "echo", Matches: "root",
@@ -244,7 +244,7 @@ func TestMatchingActions_StageConversion_FieldConfig(t *testing.T) {
 }
 
 func TestMatchingActions_NoStagesGivesActionExecute(t *testing.T) {
-	cfg := &Config{
+	cfg := Config{
 		Actions: []Action{
 			{Name: "htop", Cmd: "htop", Matches: "root"},
 		},

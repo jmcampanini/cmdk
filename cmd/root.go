@@ -75,7 +75,7 @@ var rootCmd = &cobra.Command{
 			return cfgErr
 		}
 		zoxideCfg := cfg.Sources["zoxide"]
-		shortenHome := *cfg.Display.ShortenHome
+		shortenHome := cfg.Display.ShortenHome
 		trunc := pathfmt.Truncation{Length: cfg.Display.TruncationLength, Symbol: cfg.Display.TruncationSymbol}
 		rules := pathfmt.CompileRules(cfg.Display.Rules)
 		home, err := os.UserHomeDir()

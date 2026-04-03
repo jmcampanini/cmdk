@@ -71,8 +71,8 @@ func TestRenderHelp_ContainsLiveDefaults(t *testing.T) {
 	if !strings.Contains(output, defaults.Timeout.Fetch.String()) {
 		t.Errorf("RenderHelp() should contain default timeout %q", defaults.Timeout.Fetch)
 	}
-	if !strings.Contains(output, *defaults.Display.ShortenHome) {
-		t.Errorf("RenderHelp() should contain default shorten_home %q", *defaults.Display.ShortenHome)
+	if !strings.Contains(output, defaults.Display.ShortenHome) {
+		t.Errorf("RenderHelp() should contain default shorten_home %q", defaults.Display.ShortenHome)
 	}
 }
 

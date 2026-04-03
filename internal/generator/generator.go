@@ -11,7 +11,7 @@ type GeneratorFunc func(accumulated []item.Item, ctx Context) []item.Item
 
 type Context struct {
 	PaneID string
-	Config *config.Config
+	Config config.Config
 }
 
 type Registry struct {

@@ -37,23 +37,11 @@ type Action struct {
 }
 
 type Behavior struct {
-	AutoSelectSingle *bool `toml:"auto_select_single"`
-	BellToTop        bool  `toml:"bell_to_top"`
-	WrapList         *bool `toml:"wrap_list"`
-	StartInFilter    *bool `toml:"start_in_filter"`
-	InlineActions    bool  `toml:"inline_actions"`
-}
-
-func (b Behavior) ShouldAutoSelectSingle() bool {
-	return b.AutoSelectSingle == nil || *b.AutoSelectSingle
-}
-
-func (b Behavior) ShouldWrapList() bool {
-	return b.WrapList == nil || *b.WrapList
-}
-
-func (b Behavior) ShouldStartInFilter() bool {
-	return b.StartInFilter == nil || *b.StartInFilter
+	AutoSelectSingle bool `toml:"auto_select_single"`
+	BellToTop        bool `toml:"bell_to_top"`
+	WrapList         bool `toml:"wrap_list"`
+	StartInFilter    bool `toml:"start_in_filter"`
+	InlineActions    bool `toml:"inline_actions"`
 }
 
 type Timeout struct {
@@ -67,7 +55,7 @@ type SourceConfig struct {
 }
 
 type Display struct {
-	ShortenHome      *string           `toml:"shorten_home"`
+	ShortenHome      string            `toml:"shorten_home"`
 	TruncationLength int               `toml:"truncation_length"`
 	TruncationSymbol string            `toml:"truncation_symbol"`
 	Rules            map[string]string `toml:"rules"`
@@ -88,13 +76,20 @@ var reservedKeys = []string{"path", "pane_id", "session", "window_index"}
 
 var validStageKey = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
+// DefaultConfig returns a Config with production defaults. Load decodes TOML
+// on top of this struct, so fields set here act as defaults for anything the
+// user's config file does not mention.
 func DefaultConfig() Config {
-	defaultShortenHome := "~"
 	return Config{
-		Behavior: Behavior{BellToTop: true},
-		Timeout:  Timeout{Fetch: 2 * time.Second, Picker: 2 * time.Second},
-		Sources:  map[string]SourceConfig{"zoxide": {Limit: 0}},
-		Display:  Display{ShortenHome: &defaultShortenHome},
+		Behavior: Behavior{
+			AutoSelectSingle: true,
+			BellToTop:        true,
+			WrapList:         true,
+			StartInFilter:    true,
+		},
+		Timeout: Timeout{Fetch: 2 * time.Second, Picker: 2 * time.Second},
+		Sources: map[string]SourceConfig{"zoxide": {Limit: 0}},
+		Display: Display{ShortenHome: "~"},
 	}
 }
 
@@ -234,21 +229,19 @@ func (c *Config) resolveIcons() error {
 	return nil
 }
 
-// Load always returns a valid *Config, even when err is non-nil (defaults are used as fallback).
-func Load(path string) (*Config, error) {
+// Load always returns a valid Config, even when err is non-nil (defaults are used as fallback).
+func Load(path string) (Config, error) {
 	cfg := DefaultConfig()
 
 	_, err := toml.DecodeFile(path, &cfg)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return newDefaultConfig(), nil
+			return DefaultConfig(), nil
 		}
-		return newDefaultConfig(), err
+		return DefaultConfig(), err
 	}
 
 	defaults := DefaultConfig()
-
-	// Backfill default source entries that the TOML file didn't mention.
 	for name, sc := range defaults.Sources {
 		if _, ok := cfg.Sources[name]; !ok {
 			cfg.Sources[name] = sc
@@ -256,17 +249,12 @@ func Load(path string) (*Config, error) {
 	}
 
 	if err := cfg.Validate(); err != nil {
-		return newDefaultConfig(), err
+		return DefaultConfig(), err
 	}
 	if err := cfg.resolveIcons(); err != nil {
-		return newDefaultConfig(), err
+		return DefaultConfig(), err
 	}
-	return &cfg, nil
-}
-
-func newDefaultConfig() *Config {
-	cfg := DefaultConfig()
-	return &cfg
+	return cfg, nil
 }
 
 func DefaultPath() string {

@@ -57,16 +57,15 @@ func newTestModel(items []list.Item, reg *generator.Registry) Model {
 	return newTestModelWithTheme(items, reg, theme.Light())
 }
 
-func testConfig() *config.Config {
-	cfg := config.DefaultConfig()
-	return &cfg
+func testConfig() config.Config {
+	return config.DefaultConfig()
 }
 
 func newTestModelWithTheme(items []list.Item, reg *generator.Registry, t theme.Theme) Model {
 	return NewModel(items, "%1", nil, reg, generator.Context{Config: testConfig()}, t, nil, nil)
 }
 
-func newTestModelWithConfig(items []list.Item, reg *generator.Registry, cfg *config.Config) Model {
+func newTestModelWithConfig(items []list.Item, reg *generator.Registry, cfg config.Config) Model {
 	return NewModel(items, "%1", nil, reg, generator.Context{Config: cfg}, theme.Light(), nil, nil)
 }
 
@@ -1439,8 +1438,7 @@ func TestWrapList_UpPastFirstWrapsToLast(t *testing.T) {
 
 func TestWrapListDisabled_DownAtBottomStays(t *testing.T) {
 	cfg := testConfig()
-	v := false
-	cfg.Behavior.WrapList = &v
+	cfg.Behavior.WrapList = false
 	m := newTestModelWithConfig(testItems(), testRegistry(), cfg)
 	m.list.SetSize(80, 40)
 	m = exitFilterMode(t, m)
@@ -1465,8 +1463,7 @@ func TestWrapListDisabled_DownAtBottomStays(t *testing.T) {
 
 func TestWrapListDisabled_UpAtTopStays(t *testing.T) {
 	cfg := testConfig()
-	v := false
-	cfg.Behavior.WrapList = &v
+	cfg.Behavior.WrapList = false
 	m := newTestModelWithConfig(testItems(), testRegistry(), cfg)
 	m.list.SetSize(80, 40)
 	m = exitFilterMode(t, m)
@@ -1585,8 +1582,7 @@ func TestPickerStage_NoFieldConfig_BackwardCompat(t *testing.T) {
 
 func TestStartInFilterFalse_StartsBrowseMode(t *testing.T) {
 	cfg := testConfig()
-	v := false
-	cfg.Behavior.StartInFilter = &v
+	cfg.Behavior.StartInFilter = false
 	m := newTestModelWithConfig(testItems(), testRegistry(), cfg)
 	m.list.SetSize(80, 40)
 
@@ -1597,8 +1593,7 @@ func TestStartInFilterFalse_StartsBrowseMode(t *testing.T) {
 
 func TestStartInFilterFalse_SlashEntersFilterMode(t *testing.T) {
 	cfg := testConfig()
-	v := false
-	cfg.Behavior.StartInFilter = &v
+	cfg.Behavior.StartInFilter = false
 	m := newTestModelWithConfig(testItems(), testRegistry(), cfg)
 	m.list.SetSize(80, 40)
 
@@ -1612,8 +1607,7 @@ func TestStartInFilterFalse_SlashEntersFilterMode(t *testing.T) {
 
 func TestStartInFilterFalse_PickerStartsBrowseMode(t *testing.T) {
 	cfg := testConfig()
-	v := false
-	cfg.Behavior.StartInFilter = &v
+	cfg.Behavior.StartInFilter = false
 	m := newTestModelWithConfig(pickerItems(), testRegistry(), cfg)
 	m.list.SetSize(80, 40)
 
@@ -1641,8 +1635,7 @@ func TestStartInFilterTrue_DrillDownReentersFilterMode(t *testing.T) {
 
 func TestStartInFilterFalse_DrillDownStaysBrowseMode(t *testing.T) {
 	cfg := testConfig()
-	v := false
-	cfg.Behavior.StartInFilter = &v
+	cfg.Behavior.StartInFilter = false
 	m := newTestModelWithConfig(testItems(), testRegistry(), cfg)
 	m.list.SetSize(80, 40)
 
@@ -1683,8 +1676,7 @@ func newInlineTestModel(t *testing.T) Model {
 	t.Helper()
 	cfg := testConfig()
 	cfg.Behavior.InlineActions = true
-	noFilter := false
-	cfg.Behavior.StartInFilter = &noFilter
+	cfg.Behavior.StartInFilter = false
 
 	reg := inlineTestRegistry()
 
@@ -1818,8 +1810,7 @@ func TestInline_SelectStagedPushesParent(t *testing.T) {
 
 	cfg := testConfig()
 	cfg.Behavior.InlineActions = true
-	noFilter := false
-	cfg.Behavior.StartInFilter = &noFilter
+	cfg.Behavior.StartInFilter = false
 
 	baseItems := []item.Item{
 		{Type: "dir", Display: "~/proj", Action: item.ActionNextList, Data: map[string]string{"path": "/proj"}},
@@ -1849,8 +1840,7 @@ func TestInline_SelectStagedPushesParent(t *testing.T) {
 func TestInline_AsyncRebuildExpands(t *testing.T) {
 	cfg := testConfig()
 	cfg.Behavior.InlineActions = true
-	noFilter := false
-	cfg.Behavior.StartInFilter = &noFilter
+	cfg.Behavior.StartInFilter = false
 
 	reg := inlineTestRegistry()
 

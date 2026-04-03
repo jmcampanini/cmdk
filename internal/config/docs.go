@@ -108,7 +108,7 @@ func RenderHelp() string {
 		fmt.Fprintf(&b, "  %s\n\n", section.Description)
 
 		for _, field := range section.Fields {
-			def := defaultValue(&defaults, section.Name, field.Name)
+			def := defaultValue(defaults, section.Name, field.Name)
 			if def != "" {
 				fmt.Fprintf(&b, "  %-14s %s (default: %s)\n", field.Name, field.Type, def)
 			} else {
@@ -164,18 +164,18 @@ EXECUTION
 	return b.String()
 }
 
-func defaultValue(cfg *Config, section, field string) string {
+func defaultValue(cfg Config, section, field string) string {
 	switch section {
 	case "behavior":
 		switch field {
 		case "auto_select_single":
-			return fmt.Sprintf("%t", cfg.Behavior.ShouldAutoSelectSingle())
+			return fmt.Sprintf("%t", cfg.Behavior.AutoSelectSingle)
 		case "bell_to_top":
 			return fmt.Sprintf("%t", cfg.Behavior.BellToTop)
 		case "wrap_list":
-			return fmt.Sprintf("%t", cfg.Behavior.ShouldWrapList())
+			return fmt.Sprintf("%t", cfg.Behavior.WrapList)
 		case "start_in_filter":
-			return fmt.Sprintf("%t", cfg.Behavior.ShouldStartInFilter())
+			return fmt.Sprintf("%t", cfg.Behavior.StartInFilter)
 		case "inline_actions":
 			return fmt.Sprintf("%t", cfg.Behavior.InlineActions)
 		}
@@ -197,9 +197,7 @@ func defaultValue(cfg *Config, section, field string) string {
 	case "display":
 		switch field {
 		case "shorten_home":
-			if cfg.Display.ShortenHome != nil {
-				return fmt.Sprintf("%q", *cfg.Display.ShortenHome)
-			}
+			return fmt.Sprintf("%q", cfg.Display.ShortenHome)
 		case "truncation_length":
 			return fmt.Sprintf("%d", cfg.Display.TruncationLength)
 		case "truncation_symbol":
