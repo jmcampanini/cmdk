@@ -41,6 +41,7 @@ type Behavior struct {
 	BellToTop        bool  `toml:"bell_to_top"`
 	WrapList         *bool `toml:"wrap_list"`
 	StartInFilter    *bool `toml:"start_in_filter"`
+	InlineActions    bool  `toml:"inline_actions"`
 }
 
 func (b Behavior) ShouldAutoSelectSingle() bool {

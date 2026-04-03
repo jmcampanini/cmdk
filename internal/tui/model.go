@@ -55,6 +55,7 @@ type Model struct {
 	bellToTop        bool
 	wrapList         bool
 	startInFilter    bool
+	inline           bool
 }
 
 const horizontalPadding = 1
@@ -67,8 +68,9 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 
 	wrapList := beh.ShouldWrapList()
 	startInFilter := beh.ShouldStartInFilter()
+	inline := beh.InlineActions
 
-	return Model{
+	m := Model{
 		list:             newFilterList(items, t, wrapList, startInFilter),
 		paneID:           paneID,
 		accumulated:      accumulated,
@@ -84,7 +86,12 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 		bellToTop:        beh.BellToTop,
 		wrapList:         wrapList,
 		startInFilter:    startInFilter,
+		inline:           inline,
 	}
+	if inline && baseItems != nil {
+		m.list.SetItems(m.buildRootItems())
+	}
+	return m
 }
 
 func newFilterList(items []list.Item, t theme.Theme, wrapList bool, startInFilter bool) list.Model {
@@ -249,6 +256,12 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if msg.String() == "enter" {
 		sel, ok := resolveListTarget(m.list)
 		if ok && sel.Type != "error" && sel.Type != "loading" {
+			if sel.InlineParent != nil {
+				m.accumulated = append(slices.Clone(m.accumulated), *sel.InlineParent)
+				sel.Display = sel.Value
+				sel.InlineParent = nil
+			}
+
 			switch sel.Action {
 			case item.ActionExecute:
 				m.selected = &sel
@@ -665,6 +678,9 @@ func (m Model) buildRootItems() []list.Item {
 		} else {
 			all = append(all, generator.LoadingItem(generator.Source{Name: src.Name, Type: src.Type}))
 		}
+	}
+	if m.inline {
+		all = expandInline(all, m.registry, m.ctx)
 	}
 	return item.GroupAndOrder(all, m.bellToTop)
 }

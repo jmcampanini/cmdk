@@ -56,8 +56,9 @@ func ConfigDocs() []SectionDoc {
 				{Name: "bell_to_top", Type: "bool", Description: "Sort tmux windows with bell activity to the top of the list, above all other items. Default: true."},
 				{Name: "wrap_list", Type: "bool", Description: "Wrap cursor to the opposite end when navigating past the first or last item. Default: true."},
 				{Name: "start_in_filter", Type: "bool", Description: "Open lists in filter mode, ready for typing. When false, lists open in browse mode; press / to filter. Default: true."},
+				{Name: "inline_actions", Type: "bool", Description: "Expand directory actions inline in the root list instead of requiring drill-down. Each directory gets one entry per action, displayed as \"path » action\". Default: false."},
 			},
-			Example: "[behavior]\nauto_select_single = false\nbell_to_top = true\nwrap_list = false\nstart_in_filter = true",
+			Example: "[behavior]\nauto_select_single = false\nbell_to_top = true\nwrap_list = false\nstart_in_filter = true\ninline_actions = false",
 		},
 		{
 			Name:        "timeout",
@@ -175,6 +176,8 @@ func defaultValue(cfg *Config, section, field string) string {
 			return fmt.Sprintf("%t", cfg.Behavior.ShouldWrapList())
 		case "start_in_filter":
 			return fmt.Sprintf("%t", cfg.Behavior.ShouldStartInFilter())
+		case "inline_actions":
+			return fmt.Sprintf("%t", cfg.Behavior.InlineActions)
 		}
 	case "timeout":
 		switch field {

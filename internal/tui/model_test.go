@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"image/color"
 	"reflect"
 	"strings"
@@ -1655,5 +1656,253 @@ func TestStartInFilterFalse_DrillDownStaysBrowseMode(t *testing.T) {
 
 	if m.list.FilterState() != list.Unfiltered {
 		t.Errorf("FilterState() = %v, want Unfiltered after drill-down with start_in_filter = false", m.list.FilterState())
+	}
+}
+
+func inlineTestRegistry() *generator.Registry {
+	reg := generator.NewRegistry()
+	reg.Register("dir-actions", func(accumulated []item.Item, ctx generator.Context) []item.Item {
+		if len(accumulated) == 0 {
+			return nil
+		}
+		last := accumulated[len(accumulated)-1]
+		return []item.Item{
+			{Type: "action", Display: "New window", Action: item.ActionExecute,
+				Cmd: "tmux new-window -c {{sq .path}}", Data: map[string]string{"path": last.Data["path"]},
+				Icon: "\uf2d0"},
+			{Type: "action", Display: "Browse", Action: item.ActionExecute,
+				Cmd: "yazi {{sq .path}}", Data: map[string]string{"path": last.Data["path"]},
+				Icon: "\uf07c"},
+		}
+	})
+	reg.MapType("dir", "dir-actions")
+	return reg
+}
+
+func newInlineTestModel(t *testing.T) Model {
+	t.Helper()
+	cfg := testConfig()
+	cfg.Behavior.InlineActions = true
+	noFilter := false
+	cfg.Behavior.StartInFilter = &noFilter
+
+	reg := inlineTestRegistry()
+
+	baseItems := []item.Item{
+		{Type: "action", Display: "htop", Action: item.ActionExecute, Cmd: "htop"},
+		{Type: "dir", Display: "~/projects/foo", Action: item.ActionNextList, Data: map[string]string{"path": "/home/user/projects/foo"}},
+		{Type: "dir", Display: "~/code/bar", Action: item.ActionNextList, Data: map[string]string{"path": "/home/user/code/bar"}},
+		{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute},
+	}
+	listItems := item.GroupAndOrder(baseItems, false)
+
+	m := NewModel(listItems, "%1", nil, reg, generator.Context{Config: cfg}, theme.Light(), nil, baseItems)
+	m.list.SetSize(80, 40)
+	return m
+}
+
+func TestInline_StartupExpandsItems(t *testing.T) {
+	m := newInlineTestModel(t)
+
+	// 1 root action (htop) + 2 dirs × 2 actions each + 1 window = 6
+	items := m.list.Items()
+	if len(items) != 6 {
+		var displays []string
+		for _, li := range items {
+			if it, ok := li.(item.Item); ok {
+				displays = append(displays, it.Display)
+			}
+		}
+		t.Fatalf("got %d items %v, want 6", len(items), displays)
+	}
+
+	// Check that dir items were expanded, not kept as-is
+	for _, li := range items {
+		it := li.(item.Item)
+		if it.Type == "dir" && it.Action == item.ActionNextList {
+			t.Errorf("found unexpanded dir item: %q", it.Display)
+		}
+	}
+}
+
+func TestInline_DisplayFormat(t *testing.T) {
+	m := newInlineTestModel(t)
+
+	var found bool
+	for _, li := range m.list.Items() {
+		it := li.(item.Item)
+		if it.Display == "~/projects/foo » New window" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected to find item with display '~/projects/foo » New window'")
+	}
+}
+
+func TestInline_SelectExecutePushesParent(t *testing.T) {
+	m := newInlineTestModel(t)
+
+	// Find the inline item for "~/projects/foo » New window"
+	for i, li := range m.list.Items() {
+		it := li.(item.Item)
+		if it.Display == "~/projects/foo » New window" {
+			m.list.Select(i)
+			break
+		}
+	}
+
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if cmd == nil {
+		t.Fatal("expected tea.Quit command")
+	}
+	if m.selected == nil {
+		t.Fatal("selected is nil")
+	}
+	if m.selected.Display != "New window" {
+		t.Errorf("selected.Display = %q, want New window", m.selected.Display)
+	}
+	if len(m.accumulated) != 1 {
+		t.Fatalf("accumulated len = %d, want 1", len(m.accumulated))
+	}
+	if m.accumulated[0].Display != "~/projects/foo" {
+		t.Errorf("accumulated[0].Display = %q, want ~/projects/foo", m.accumulated[0].Display)
+	}
+	if m.accumulated[0].Data["path"] != "/home/user/projects/foo" {
+		t.Errorf("accumulated[0].Data[path] = %q", m.accumulated[0].Data["path"])
+	}
+}
+
+func TestInline_SelectExecuteRendersCmd(t *testing.T) {
+	m := newInlineTestModel(t)
+
+	for i, li := range m.list.Items() {
+		it := li.(item.Item)
+		if it.Display == "~/projects/foo » New window" {
+			m.list.Select(i)
+			break
+		}
+	}
+
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+
+	all := append(m.accumulated, *m.selected)
+	data := execute.FlattenData(all)
+	rendered, err := execute.RenderCmd(m.selected.Cmd, data)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if rendered != "tmux new-window -c '/home/user/projects/foo'" {
+		t.Errorf("rendered = %q", rendered)
+	}
+}
+
+func TestInline_SelectStagedPushesParent(t *testing.T) {
+	reg := generator.NewRegistry()
+	reg.Register("dir-actions", func(accumulated []item.Item, ctx generator.Context) []item.Item {
+		if len(accumulated) == 0 {
+			return nil
+		}
+		last := accumulated[len(accumulated)-1]
+		return []item.Item{
+			{Type: "action", Display: "New branch", Action: item.ActionStaged,
+				Cmd: "git checkout -b {{.branch}}", Data: map[string]string{"path": last.Data["path"]},
+				Stages: []item.Stage{{Type: item.StagePrompt, Key: "branch", Text: "Branch name:"}}},
+		}
+	})
+	reg.MapType("dir", "dir-actions")
+
+	cfg := testConfig()
+	cfg.Behavior.InlineActions = true
+	noFilter := false
+	cfg.Behavior.StartInFilter = &noFilter
+
+	baseItems := []item.Item{
+		{Type: "dir", Display: "~/proj", Action: item.ActionNextList, Data: map[string]string{"path": "/proj"}},
+	}
+	listItems := item.GroupAndOrder(baseItems, false)
+	m := NewModel(listItems, "%1", nil, reg, generator.Context{Config: cfg}, theme.Light(), nil, baseItems)
+	m.list.SetSize(80, 40)
+
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.mode != viewPrompt {
+		t.Fatalf("mode = %d, want viewPrompt", m.mode)
+	}
+	// accumulated should have [parent_dir, staged_action]
+	if len(m.accumulated) != 2 {
+		t.Fatalf("accumulated len = %d, want 2", len(m.accumulated))
+	}
+	if m.accumulated[0].Display != "~/proj" {
+		t.Errorf("accumulated[0].Display = %q, want ~/proj", m.accumulated[0].Display)
+	}
+	if m.accumulated[1].Display != "New branch" {
+		t.Errorf("accumulated[1].Display = %q, want New branch", m.accumulated[1].Display)
+	}
+}
+
+func TestInline_AsyncRebuildExpands(t *testing.T) {
+	cfg := testConfig()
+	cfg.Behavior.InlineActions = true
+	noFilter := false
+	cfg.Behavior.StartInFilter = &noFilter
+
+	reg := inlineTestRegistry()
+
+	syncItems := []item.Item{
+		{Type: "action", Display: "htop", Action: item.ActionExecute, Cmd: "htop"},
+	}
+	asyncSources := []AsyncSource{
+		{Name: "zoxide", Type: "dir", Fetch: func(_ context.Context) ([]item.Item, error) {
+			return []item.Item{
+				{Type: "dir", Display: "~/async-dir", Action: item.ActionNextList, Data: map[string]string{"path": "/async"}},
+			}, nil
+		}},
+	}
+
+	var initialAll []item.Item
+	initialAll = append(initialAll, syncItems...)
+	for _, src := range asyncSources {
+		initialAll = append(initialAll, generator.LoadingItem(generator.Source{Name: src.Name, Type: src.Type}))
+	}
+	listItems := item.GroupAndOrder(initialAll, false)
+
+	m := NewModel(listItems, "%1", nil, reg, generator.Context{Config: cfg}, theme.Light(), asyncSources, syncItems)
+	m.list.SetSize(80, 40)
+
+	// Simulate async result arriving
+	asyncItems := []item.Item{
+		{Type: "dir", Display: "~/async-dir", Action: item.ActionNextList, Data: map[string]string{"path": "/async"}},
+	}
+	result, _ := m.Update(sourceResultMsg{Name: "zoxide", Items: asyncItems})
+	m = result.(Model)
+
+	// htop (root action) + 2 inline entries (New window + Browse) = 3
+	items := m.list.Items()
+	if len(items) != 3 {
+		var displays []string
+		for _, li := range items {
+			if it, ok := li.(item.Item); ok {
+				displays = append(displays, it.Display)
+			}
+		}
+		t.Fatalf("got %d items %v, want 3", len(items), displays)
+	}
+
+	var foundInline bool
+	for _, li := range items {
+		it := li.(item.Item)
+		if it.Display == "~/async-dir » New window" {
+			foundInline = true
+			break
+		}
+	}
+	if !foundInline {
+		t.Error("expected inline item '~/async-dir » New window' after async rebuild")
 	}
 }
