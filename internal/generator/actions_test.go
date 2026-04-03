@@ -85,7 +85,7 @@ func runActions(accumulated []item.Item, ctx Context) []item.Item {
 }
 
 func TestActionsGenerator_WithConfigActions(t *testing.T) {
-	cfg := &config.Config{
+	cfg := config.Config{
 		Actions: []config.Action{
 			{Name: "Yazi", Cmd: "tmux split-window -h yazi", Matches: "dir"},
 			{Name: "New pane", Cmd: "tmux split-window -v", Matches: "dir"},
@@ -116,7 +116,7 @@ func TestActionsGenerator_WithConfigActions(t *testing.T) {
 }
 
 func TestActionsGenerator_NewWindowAlwaysFirst(t *testing.T) {
-	cfg := &config.Config{
+	cfg := config.Config{
 		Actions: []config.Action{
 			{Name: "Alpha", Cmd: "echo alpha", Matches: "dir"},
 		},
@@ -132,7 +132,7 @@ func TestActionsGenerator_NewWindowAlwaysFirst(t *testing.T) {
 }
 
 func TestActionsGenerator_ConfigItemsHavePathAndPaneID(t *testing.T) {
-	cfg := &config.Config{
+	cfg := config.Config{
 		Actions: []config.Action{
 			{Name: "Yazi", Cmd: "yazi", Matches: "dir"},
 		},
@@ -150,7 +150,7 @@ func TestActionsGenerator_ConfigItemsHavePathAndPaneID(t *testing.T) {
 }
 
 func TestActionsGenerator_ConfigItemSource(t *testing.T) {
-	cfg := &config.Config{
+	cfg := config.Config{
 		Actions: []config.Action{
 			{Name: "Yazi", Cmd: "yazi", Matches: "dir"},
 		},
@@ -165,15 +165,15 @@ func TestActionsGenerator_ConfigItemSource(t *testing.T) {
 	}
 }
 
-func TestActionsGenerator_NilConfig(t *testing.T) {
-	items := runActions(dirAccumulated("/tmp"), Context{Config: nil})
+func TestActionsGenerator_ZeroConfig(t *testing.T) {
+	items := runActions(dirAccumulated("/tmp"), Context{})
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1 (only New window)", len(items))
 	}
 }
 
 func TestActionsGenerator_EmptyActions(t *testing.T) {
-	cfg := &config.Config{Actions: []config.Action{}}
+	cfg := config.Config{Actions: []config.Action{}}
 
 	items := runActions(dirAccumulated("/tmp"), Context{Config: cfg})
 	if len(items) != 1 {
@@ -199,7 +199,7 @@ func TestActionsGenerator_NewWindowHasIcon(t *testing.T) {
 }
 
 func TestActionsGenerator_ConfigIconPassedThrough(t *testing.T) {
-	cfg := &config.Config{
+	cfg := config.Config{
 		Actions: []config.Action{
 			{Name: "Browse", Cmd: "yazi", Matches: "dir", Icon: "\ue709"},
 		},
@@ -214,7 +214,7 @@ func TestActionsGenerator_ConfigIconPassedThrough(t *testing.T) {
 }
 
 func TestActionsGenerator_ConfigNoIcon(t *testing.T) {
-	cfg := &config.Config{
+	cfg := config.Config{
 		Actions: []config.Action{
 			{Name: "Yazi", Cmd: "yazi", Matches: "dir"},
 		},
@@ -226,7 +226,7 @@ func TestActionsGenerator_ConfigNoIcon(t *testing.T) {
 }
 
 func TestActionsGenerator_DataMapsAreIndependent(t *testing.T) {
-	cfg := &config.Config{
+	cfg := config.Config{
 		Actions: []config.Action{
 			{Name: "A", Cmd: "a", Matches: "dir"},
 		},
@@ -240,7 +240,7 @@ func TestActionsGenerator_DataMapsAreIndependent(t *testing.T) {
 }
 
 func TestActionsGenerator_FiltersNonMatchingActions(t *testing.T) {
-	cfg := &config.Config{
+	cfg := config.Config{
 		Actions: []config.Action{
 			{Name: "Root only", Cmd: "echo root", Matches: "root"},
 			{Name: "Dir action", Cmd: "echo dir", Matches: "dir"},
@@ -257,7 +257,7 @@ func TestActionsGenerator_FiltersNonMatchingActions(t *testing.T) {
 }
 
 func TestActionsGenerator_AllItemsHaveTypeAction(t *testing.T) {
-	cfg := &config.Config{
+	cfg := config.Config{
 		Actions: []config.Action{
 			{Name: "Yazi", Cmd: "yazi", Matches: "dir"},
 		},
@@ -272,7 +272,7 @@ func TestActionsGenerator_AllItemsHaveTypeAction(t *testing.T) {
 }
 
 func TestActionsGenerator_StagedAction(t *testing.T) {
-	cfg := &config.Config{
+	cfg := config.Config{
 		Actions: []config.Action{
 			{
 				Name: "Staged", Cmd: "echo {{.name}}", Matches: "dir",

@@ -37,7 +37,7 @@ func (a Action) ToItem() item.Item {
 	}
 }
 
-func MatchingActions(cfg *Config, matchType string) func(context.Context) ([]item.Item, error) {
+func MatchingActions(cfg Config, matchType string) func(context.Context) ([]item.Item, error) {
 	return func(_ context.Context) ([]item.Item, error) {
 		var items []item.Item
 		for _, a := range cfg.Actions {

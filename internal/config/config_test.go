@@ -22,11 +22,20 @@ func TestDefaultConfig(t *testing.T) {
 	if len(cfg.Actions) != 0 {
 		t.Errorf("Actions = %d, want 0", len(cfg.Actions))
 	}
-	if cfg.Display.ShortenHome == nil || *cfg.Display.ShortenHome != "~" {
-		t.Errorf("Display.ShortenHome = %v, want pointer to \"~\"", cfg.Display.ShortenHome)
+	if cfg.Display.ShortenHome != "~" {
+		t.Errorf("Display.ShortenHome = %q, want \"~\"", cfg.Display.ShortenHome)
 	}
 	if !cfg.Behavior.BellToTop {
 		t.Error("Behavior.BellToTop = false, want true")
+	}
+	if !cfg.Behavior.AutoSelectSingle {
+		t.Error("Behavior.AutoSelectSingle = false, want true")
+	}
+	if !cfg.Behavior.WrapList {
+		t.Error("Behavior.WrapList = false, want true")
+	}
+	if !cfg.Behavior.StartInFilter {
+		t.Error("Behavior.StartInFilter = false, want true")
 	}
 	if cfg.Behavior.InlineActions {
 		t.Error("Behavior.InlineActions = true, want false")
@@ -426,75 +435,6 @@ func TestValidate_StageKeyStartsWithDigit(t *testing.T) {
 	}
 }
 
-func TestBehavior_ShouldWrapList_DefaultTrue(t *testing.T) {
-	b := Behavior{}
-	if !b.ShouldWrapList() {
-		t.Error("ShouldWrapList() = false, want true when nil")
-	}
-}
-
-func TestBehavior_ShouldWrapList_ExplicitTrue(t *testing.T) {
-	v := true
-	b := Behavior{WrapList: &v}
-	if !b.ShouldWrapList() {
-		t.Error("ShouldWrapList() = false, want true")
-	}
-}
-
-func TestBehavior_ShouldWrapList_ExplicitFalse(t *testing.T) {
-	v := false
-	b := Behavior{WrapList: &v}
-	if b.ShouldWrapList() {
-		t.Error("ShouldWrapList() = true, want false")
-	}
-}
-
-func TestBehavior_ShouldStartInFilter_DefaultTrue(t *testing.T) {
-	b := Behavior{}
-	if !b.ShouldStartInFilter() {
-		t.Error("ShouldStartInFilter() = false, want true when nil")
-	}
-}
-
-func TestBehavior_ShouldStartInFilter_ExplicitTrue(t *testing.T) {
-	v := true
-	b := Behavior{StartInFilter: &v}
-	if !b.ShouldStartInFilter() {
-		t.Error("ShouldStartInFilter() = false, want true")
-	}
-}
-
-func TestBehavior_ShouldStartInFilter_ExplicitFalse(t *testing.T) {
-	v := false
-	b := Behavior{StartInFilter: &v}
-	if b.ShouldStartInFilter() {
-		t.Error("ShouldStartInFilter() = true, want false")
-	}
-}
-
-func TestBehavior_ShouldAutoSelectSingle_DefaultTrue(t *testing.T) {
-	b := Behavior{}
-	if !b.ShouldAutoSelectSingle() {
-		t.Error("ShouldAutoSelectSingle() = false, want true when nil")
-	}
-}
-
-func TestBehavior_ShouldAutoSelectSingle_ExplicitTrue(t *testing.T) {
-	v := true
-	b := Behavior{AutoSelectSingle: &v}
-	if !b.ShouldAutoSelectSingle() {
-		t.Error("ShouldAutoSelectSingle() = false, want true")
-	}
-}
-
-func TestBehavior_ShouldAutoSelectSingle_ExplicitFalse(t *testing.T) {
-	v := false
-	b := Behavior{AutoSelectSingle: &v}
-	if b.ShouldAutoSelectSingle() {
-		t.Error("ShouldAutoSelectSingle() = true, want false")
-	}
-}
-
 func TestLoad_ValidTOML(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
@@ -519,9 +459,6 @@ matches = "root"
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg == nil {
-		t.Fatal("expected non-nil config")
-	}
 	if len(cfg.Actions) != 2 {
 		t.Fatalf("got %d actions, want 2", len(cfg.Actions))
 	}
@@ -541,9 +478,6 @@ func TestLoad_MissingFile_ReturnsDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected nil error, got: %v", err)
 	}
-	if cfg == nil {
-		t.Fatal("expected non-nil config")
-	}
 	defaults := DefaultConfig()
 	if cfg.Timeout.Fetch != defaults.Timeout.Fetch {
 		t.Errorf("Timeout.Fetch = %s, want %s", cfg.Timeout.Fetch, defaults.Timeout.Fetch)
@@ -560,12 +494,9 @@ func TestLoad_MalformedTOML(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	_, err := Load(path)
 	if err == nil {
 		t.Fatal("expected error for malformed TOML")
-	}
-	if cfg == nil {
-		t.Fatal("expected non-nil config even on error")
 	}
 }
 
@@ -579,9 +510,6 @@ func TestLoad_EmptyFile(t *testing.T) {
 	cfg, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg == nil {
-		t.Fatal("expected non-nil config for empty file")
 	}
 	if cfg.Timeout.Fetch != 2*time.Second {
 		t.Errorf("Timeout.Fetch = %s, want 2s (default preserved)", cfg.Timeout.Fetch)
@@ -785,8 +713,8 @@ func TestLoad_DisplayRules(t *testing.T) {
 	if cfg.Display.Rules["github.palantir.build"] != "gpb" {
 		t.Errorf("rule = %q, want %q", cfg.Display.Rules["github.palantir.build"], "gpb")
 	}
-	if *cfg.Display.ShortenHome != "~" {
-		t.Errorf("ShortenHome = %q, want default %q", *cfg.Display.ShortenHome, "~")
+	if cfg.Display.ShortenHome != "~" {
+		t.Errorf("ShortenHome = %q, want default %q", cfg.Display.ShortenHome, "~")
 	}
 }
 
@@ -804,11 +732,8 @@ shorten_home = ""
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.Display.ShortenHome == nil {
-		t.Fatal("ShortenHome should not be nil")
-	}
-	if *cfg.Display.ShortenHome != "" {
-		t.Errorf("ShortenHome = %q, want empty string", *cfg.Display.ShortenHome)
+	if cfg.Display.ShortenHome != "" {
+		t.Errorf("ShortenHome = %q, want empty string", cfg.Display.ShortenHome)
 	}
 }
 
@@ -983,8 +908,8 @@ matches = "root"
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !cfg.Behavior.ShouldWrapList() {
-		t.Error("ShouldWrapList() = false, want true (default)")
+	if !cfg.Behavior.WrapList {
+		t.Error("Behavior.WrapList = false, want true (default)")
 	}
 }
 
@@ -1002,8 +927,8 @@ wrap_list = false
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.Behavior.ShouldWrapList() {
-		t.Error("ShouldWrapList() = true, want false")
+	if cfg.Behavior.WrapList {
+		t.Error("Behavior.WrapList = true, want false")
 	}
 }
 
@@ -1166,8 +1091,8 @@ auto_select_single = false
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.Behavior.ShouldAutoSelectSingle() {
-		t.Error("ShouldAutoSelectSingle() = true, want false")
+	if cfg.Behavior.AutoSelectSingle {
+		t.Error("Behavior.AutoSelectSingle = true, want false")
 	}
 }
 

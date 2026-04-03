@@ -164,7 +164,7 @@ func TestIntegration_ThreeSourceTypes(t *testing.T) {
 			{Type: "dir", Source: "zoxide", Display: "/projects"},
 		}, nil
 	}}
-	cfg := &config.Config{
+	cfg := config.Config{
 		Actions: []config.Action{
 			{Name: "htop", Cmd: "htop", Matches: "root"},
 		},
@@ -185,7 +185,7 @@ func TestIntegration_ThreeSourceTypes(t *testing.T) {
 }
 
 func TestIntegration_ConfigActionsInOrder(t *testing.T) {
-	cfg := &config.Config{
+	cfg := config.Config{
 		Actions: []config.Action{
 			{Name: "alpha", Cmd: "echo alpha", Matches: "root"},
 			{Name: "beta", Cmd: "echo beta", Matches: "root"},
@@ -219,7 +219,7 @@ func TestIntegration_EmptyConfig(t *testing.T) {
 		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
 	}}
 
-	gen := newIntegrationRootGenerator(windows, Source{Name: "actions", Type: "action", Fetch: config.MatchingActions(&config.Config{}, "root")})
+	gen := newIntegrationRootGenerator(windows, Source{Name: "actions", Type: "action", Fetch: config.MatchingActions(config.Config{}, "root")})
 	items := gen(nil, Context{})
 
 	if len(items) != 1 {
@@ -275,7 +275,7 @@ func TestIntegration_MalformedConfig(t *testing.T) {
 		return nil, cfgErr
 	}}
 
-	gen := newIntegrationRootGenerator(windows, dirs, badConfig, Source{Name: "actions", Type: "action", Fetch: config.MatchingActions(&config.Config{}, "root")})
+	gen := newIntegrationRootGenerator(windows, dirs, badConfig, Source{Name: "actions", Type: "action", Fetch: config.MatchingActions(config.Config{}, "root")})
 	items := gen(nil, Context{})
 
 	if len(items) != 3 {
@@ -325,7 +325,7 @@ func TestIntegration_OneSourceFailsOthersWork(t *testing.T) {
 }
 
 func TestIntegration_DirActionsWithConfig(t *testing.T) {
-	cfg := &config.Config{
+	cfg := config.Config{
 		Actions: []config.Action{
 			{Name: "Yazi", Cmd: "tmux split-window -h -t {{sq .pane_id}} -c {{sq .path}} yazi", Matches: "dir"},
 			{Name: "New pane", Cmd: "tmux split-window -v -c {{sq .path}}", Matches: "dir"},
@@ -363,7 +363,7 @@ func TestIntegration_DirActionsWithConfig(t *testing.T) {
 }
 
 func TestIntegration_DirActionConfigCmdRendersWithPathAndPaneID(t *testing.T) {
-	cfg := &config.Config{
+	cfg := config.Config{
 		Actions: []config.Action{
 			{Name: "Yazi", Cmd: "tmux split-window -h -t {{sq .pane_id}} -c {{sq .path}} yazi", Matches: "dir"},
 		},
@@ -399,7 +399,7 @@ func TestIntegration_DirActionConfigCmdRendersWithPathAndPaneID(t *testing.T) {
 }
 
 func TestIntegration_DirActionsEmptyConfig(t *testing.T) {
-	cfg := &config.Config{Actions: []config.Action{}}
+	cfg := config.Config{Actions: []config.Action{}}
 	reg := setupRegistry()
 	ctx := Context{PaneID: "%1", Config: cfg}
 

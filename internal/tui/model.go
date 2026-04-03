@@ -16,7 +16,6 @@ import (
 	log "charm.land/log/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/jmcampanini/cmdk/internal/config"
 	"github.com/jmcampanini/cmdk/internal/execute"
 	"github.com/jmcampanini/cmdk/internal/generator"
 	"github.com/jmcampanini/cmdk/internal/item"
@@ -61,17 +60,10 @@ type Model struct {
 const horizontalPadding = 1
 
 func NewModel(items []list.Item, paneID string, accumulated []item.Item, registry *generator.Registry, ctx generator.Context, t theme.Theme, asyncSources []AsyncSource, baseItems []item.Item) Model {
-	var beh config.Behavior
-	if ctx.Config != nil {
-		beh = ctx.Config.Behavior
-	}
-
-	wrapList := beh.ShouldWrapList()
-	startInFilter := beh.ShouldStartInFilter()
-	inline := beh.InlineActions
+	beh := ctx.Config.Behavior
 
 	m := Model{
-		list:             newFilterList(items, t, wrapList, startInFilter),
+		list:             newFilterList(items, t, beh.WrapList, beh.StartInFilter),
 		paneID:           paneID,
 		accumulated:      accumulated,
 		registry:         registry,
@@ -79,16 +71,16 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 		stackStyle:       lipgloss.NewStyle().Foreground(t.Overlay0),
 		filterStyle:      lipgloss.NewStyle().Inline(true).Background(t.TextboxBg),
 		theme:            t,
-		autoSelectSingle: beh.ShouldAutoSelectSingle(),
+		autoSelectSingle: beh.AutoSelectSingle,
 		baseItems:        baseItems,
 		asyncSources:     asyncSources,
 		asyncResults:     make([][]item.Item, len(asyncSources)),
 		bellToTop:        beh.BellToTop,
-		wrapList:         wrapList,
-		startInFilter:    startInFilter,
-		inline:           inline,
+		wrapList:         beh.WrapList,
+		startInFilter:    beh.StartInFilter,
+		inline:           beh.InlineActions,
 	}
-	if inline && baseItems != nil {
+	if beh.InlineActions && baseItems != nil {
 		m.list.SetItems(m.buildRootItems())
 	}
 	return m
@@ -489,10 +481,7 @@ func (m Model) advanceStage() Model {
 			log.Error("failed to render picker source template", "key", stage.Key, "error", err)
 			return m.initPickerWithError(stage.Key, fmt.Sprintf("template error: %s", err))
 		}
-		var pickerTimeout time.Duration
-		if m.ctx.Config != nil {
-			pickerTimeout = m.ctx.Config.Timeout.Picker
-		}
+		pickerTimeout := m.ctx.Config.Timeout.Picker
 		items, runErr := runPickerSource(rendered, pickerTimeout, stage)
 		if runErr != nil {
 			log.Error("picker source command failed", "key", stage.Key, "command", rendered, "error", runErr)

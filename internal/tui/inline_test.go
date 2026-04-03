@@ -38,7 +38,7 @@ func TestExpandInline_PassthroughNonNextList(t *testing.T) {
 }
 
 func TestExpandInline_ExpandsDirItems(t *testing.T) {
-	cfg := &config.Config{
+	cfg := config.Config{
 		Actions: []config.Action{
 			{Name: "Browse", Cmd: "yazi {{sq .path}}", Matches: "dir", Icon: "\uf07c"},
 		},
@@ -91,7 +91,7 @@ func TestExpandInline_ExpandsDirItems(t *testing.T) {
 }
 
 func TestExpandInline_IconDefaultsToCmd(t *testing.T) {
-	cfg := &config.Config{
+	cfg := config.Config{
 		Actions: []config.Action{
 			{Name: "NoIcon", Cmd: "echo", Matches: "dir"},
 		},
