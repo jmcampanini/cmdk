@@ -11,9 +11,12 @@ FISH_COMPLETIONS_DIR := $(HOME)/.config/fish/completions
 BASH_COMPLETIONS_DIR := $(BREW_PREFIX)/etc/bash_completion.d
 ZSH_COMPLETIONS_DIR := $(BREW_PREFIX)/share/zsh/site-functions
 
-.PHONY: all build check lint test clean help install install-completions uninstall
+.PHONY: all build check lint test clean help install install-completions uninstall gen-icons
 
 all: build ## Default target
+
+gen-icons: ## Regenerate icon entries from Nerd Fonts glyphnames.json
+	go run ./internal/icon/gen
 
 build: clean check ## Build the binary
 	mkdir -p $(BUILD_DIR)

@@ -855,7 +855,7 @@ func TestValidate_EmptyIconOK(t *testing.T) {
 
 func TestValidate_DirActionIconAlias(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Actions = []Action{{Name: "Yazi", Cmd: "yazi", Matches: "dir", Icon: ":nf-md-folder:"}}
+	cfg.Actions = []Action{{Name: "Yazi", Cmd: "yazi", Matches: "dir", Icon: ":nf-cod-folder:"}}
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -1006,7 +1006,7 @@ func TestLoad_DirActionWithIcon(t *testing.T) {
 name = "Browse"
 cmd = "yazi"
 matches = "dir"
-icon = ":nf-md-folder_open:"
+icon = ":nf-cod-folder_opened:"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -1015,8 +1015,8 @@ icon = ":nf-md-folder_open:"
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.Actions[0].Icon != "\U000f0770" {
-		t.Errorf("Icon = %q, want resolved unicode \\U000f0770", cfg.Actions[0].Icon)
+	if cfg.Actions[0].Icon != "\ueaf7" {
+		t.Errorf("Icon = %q, want resolved unicode \\ueaf7", cfg.Actions[0].Icon)
 	}
 }
 
