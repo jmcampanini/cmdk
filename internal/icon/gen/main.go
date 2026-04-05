@@ -91,7 +91,11 @@ func run() error {
 		return fmt.Errorf("gofmt: %w", err)
 	}
 
-	outPath := filepath.Join(packageDir(), outFile)
+	pkgDir, err := packageDir()
+	if err != nil {
+		return err
+	}
+	outPath := filepath.Join(pkgDir, outFile)
 	if err := os.WriteFile(outPath, formatted, 0o644); err != nil {
 		return fmt.Errorf("write: %w", err)
 	}
@@ -109,9 +113,10 @@ func download(url string) ([]byte, error) {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 }
 
 func hasAllowedPrefix(key string) bool {
@@ -147,8 +152,10 @@ func generate(entries []entry) []byte {
 	return []byte(b.String())
 }
 
-// One level up from gen/ to reach the icon package directory.
-func packageDir() string {
-	_, file, _, _ := runtime.Caller(0)
-	return filepath.Dir(filepath.Dir(file))
+func packageDir() (string, error) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return "", fmt.Errorf("runtime.Caller failed; cannot determine package directory")
+	}
+	return filepath.Dir(filepath.Dir(file)), nil
 }

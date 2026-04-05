@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -30,7 +31,6 @@ var docsIconsCmd = &cobra.Command{
 			return nil
 		}
 
-		// If no set flags but other flags present, show all sets.
 		showAll := !hasSetFlag
 
 		entries := icon.All()
@@ -46,6 +46,11 @@ var docsIconsCmd = &cobra.Command{
 				continue
 			}
 			filtered = append(filtered, e)
+		}
+
+		if len(filtered) == 0 {
+			fmt.Fprintln(os.Stderr, "No icons matched the given flags/filter.")
+			return nil
 		}
 
 		if flagIconFzf {
@@ -119,16 +124,19 @@ func prefixHeading(prefix string) string {
 }
 
 func printIconHelp() {
-	fmt.Print(`ICON ALIASES
+	counts := iconSetCounts()
+	total := counts["cod"] + counts["dev"] + counts["oct"]
 
-  cmdk supports 1,256 Nerdfont icon aliases from three icon sets:
+	fmt.Printf(`ICON ALIASES
+
+  cmdk supports %d Nerdfont icon aliases from three icon sets:
 
     cod   Codicons (VS Code icons)    — UI actions, terminals, files, debug
     dev   Devicons                    — language and tool logos
     oct   Octicons (GitHub icons)     — git workflows, project management
 
   Use aliases in config with colon syntax: icon = ":nf-cod-terminal:"
-  Or use raw unicode characters directly: icon = "` + "\uebc8" + `"
+  Or use raw unicode characters directly: icon = "`+"\uebc8"+`"
 
 USAGE
 
@@ -141,12 +149,20 @@ USAGE
 
 FLAGS
 
-  --cod           Show Codicons (438 icons)
-  --dev           Show Devicons (508 icons)
-  --oct           Show Octicons (310 icons)
+  --cod           Show Codicons (%d icons)
+  --dev           Show Devicons (%d icons)
+  --oct           Show Octicons (%d icons)
   --filter STR    Case-insensitive substring match on alias and description
   --fzf           Flat output (one line per icon, no headers)
-`)
+`, total, counts["cod"], counts["dev"], counts["oct"])
+}
+
+func iconSetCounts() map[string]int {
+	counts := make(map[string]int)
+	for _, e := range icon.All() {
+		counts[setFromAlias(e.Alias)]++
+	}
+	return counts
 }
 
 func init() {
