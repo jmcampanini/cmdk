@@ -57,10 +57,7 @@ func run() error {
 
 	var entries []entry
 	for key, val := range raw {
-		if key == "METADATA" {
-			continue
-		}
-		if !hasAllowedPrefix(key) {
+		if key == "METADATA" || !hasAllowedPrefix(key) {
 			continue
 		}
 
