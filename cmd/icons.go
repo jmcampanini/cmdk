@@ -139,12 +139,12 @@ func printIconHelp() {
 
 USAGE
 
-  cmdk docs icons --cod                    Show all Codicons
-  cmdk docs icons --dev --oct              Show Devicons and Octicons
-  cmdk docs icons --filter terminal        Search all sets for "terminal"
-  cmdk docs icons --cod --filter folder    Search Codicons for "folder"
-  cmdk docs icons --fzf                    Flat output for piping to fzf
-  cmdk docs icons --fzf | fzf             Interactive fuzzy search
+  cmdk icons --cod                    Show all Codicons
+  cmdk icons --dev --oct              Show Devicons and Octicons
+  cmdk icons --filter terminal        Search all sets for "terminal"
+  cmdk icons --cod --filter folder    Search Codicons for "folder"
+  cmdk icons --fzf                    Flat output for piping to fzf
+  cmdk icons --fzf | fzf             Interactive fuzzy search
 
 FLAGS
 
@@ -170,5 +170,5 @@ func init() {
 	docsIconsCmd.Flags().BoolVar(&flagIconOct, "oct", false, "Show Octicons")
 	docsIconsCmd.Flags().StringVar(&flagIconFilter, "filter", "", "Filter by substring match on alias or description")
 	docsIconsCmd.Flags().BoolVar(&flagIconFzf, "fzf", false, "Flat output for piping to fzf")
-	docsCmd.AddCommand(docsIconsCmd)
+	rootCmd.AddCommand(docsIconsCmd)
 }

@@ -37,7 +37,7 @@ func Resolve(raw string) (string, error) {
 			if suggestion := suggestAlias(alias); suggestion != "" {
 				return "", fmt.Errorf("unknown icon alias %q; did you mean :%s:?", raw, suggestion)
 			}
-			return "", fmt.Errorf("unknown icon alias %q; run \"cmdk docs icons --filter <term>\" to search aliases", raw)
+			return "", fmt.Errorf("unknown icon alias %q; run \"cmdk icons --filter <term>\" to search aliases", raw)
 		}
 		return icon, nil
 	}

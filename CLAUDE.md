@@ -13,7 +13,7 @@ Use `make` targets — not raw `go` commands:
 ## Documentation
 
 - Keep the `cmdk --help` code block in README.md in sync with actual CLI output
-- Keep `internal/config/docs.go` (rendered by `cmdk docs` and `cmdk config --help`) in sync with config struct fields and validation rules
+- Keep `internal/config/docs.go` (rendered by `cmdk docs`) in sync with config struct fields and validation rules
 
 ## Security
 

@@ -28,7 +28,7 @@ func ConfigDocs() []SectionDoc {
 				{Name: "name", Type: "string", Description: "Display name in the launcher.", Validation: "cannot be empty"},
 				{Name: "matches", Type: "string", Description: "Item type this action appears for: \"root\" (top-level) or \"dir\" (after selecting a directory).", Validation: "cannot be empty; must be \"root\" or \"dir\""},
 				{Name: "cmd", Type: "string", Description: "Shell command or Go template to execute after all stages complete.", Validation: "cannot be empty"},
-				{Name: "icon", Type: "string", Description: "Nerdfont icon: alias like :nf-dev-github:, raw glyph, or \\uXXXX escape. Run \"cmdk docs icons --filter <term>\" to search aliases.", Validation: "if :nf-*: alias, must be in supported set; otherwise must be a single grapheme cluster"},
+				{Name: "icon", Type: "string", Description: "Nerdfont icon: alias like :nf-dev-github:, raw glyph, or \\uXXXX escape. Run \"cmdk icons --filter <term>\" to search aliases.", Validation: "if :nf-*: alias, must be in supported set; otherwise must be a single grapheme cluster"},
 				{Name: "stages", Type: "array", Description: "Optional pipeline of data-collection stages to run before executing cmd. See STAGES section."},
 			},
 			Example: "[[actions]]\nname = \"Yazi\"\nmatches = \"root\"\ncmd = \"tmux split-window -h yazi\"\nicon = \":nf-cod-folder:\"\n\n[[actions]]\nname = \"New Window\"\nmatches = \"dir\"\ncmd = \"tmux new-window -c {{sq .path}}\"\n\n[[actions]]\nname = \"New Branch\"\nmatches = \"dir\"\ncmd = \"git checkout -b {{.branch}}\"\nstages = [\n  { type = \"prompt\", text = \"Branch name:\", key = \"branch\" },\n]",
