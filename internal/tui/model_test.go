@@ -1662,10 +1662,10 @@ func inlineTestRegistry() *generator.Registry {
 		return []item.Item{
 			{Type: "action", Display: "New window", Action: item.ActionExecute,
 				Cmd: "tmux new-window -c {{sq .path}}", Data: map[string]string{"path": last.Data["path"]},
-				Icon: "\uf2d0"},
+				Icon: "\ueb7f"},
 			{Type: "action", Display: "Browse", Action: item.ActionExecute,
 				Cmd: "yazi {{sq .path}}", Data: map[string]string{"path": last.Data["path"]},
-				Icon: "\uf07c"},
+				Icon: "\ueaf7"},
 		}
 	})
 	reg.MapType("dir", "dir-actions")

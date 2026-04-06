@@ -193,8 +193,8 @@ func TestActionsGenerator_NewWindowHasIcon(t *testing.T) {
 	if items[0].Icon == "" {
 		t.Error("New window item should have a non-empty Icon")
 	}
-	if items[0].Icon != "\uf2d0" {
-		t.Errorf("New window Icon = %q, want \\uf2d0", items[0].Icon)
+	if items[0].Icon != "\ueb7f" {
+		t.Errorf("New window Icon = %q, want \\ueb7f", items[0].Icon)
 	}
 }
 

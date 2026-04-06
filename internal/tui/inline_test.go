@@ -40,7 +40,7 @@ func TestExpandInline_PassthroughNonNextList(t *testing.T) {
 func TestExpandInline_ExpandsDirItems(t *testing.T) {
 	cfg := config.Config{
 		Actions: []config.Action{
-			{Name: "Browse", Cmd: "yazi {{sq .path}}", Matches: "dir", Icon: "\uf07c"},
+			{Name: "Browse", Cmd: "yazi {{sq .path}}", Matches: "dir", Icon: "\ueaf7"},
 		},
 	}
 	reg := testInlineRegistry()
@@ -85,8 +85,8 @@ func TestExpandInline_ExpandsDirItems(t *testing.T) {
 	if browse.Display != "~/projects » Browse" {
 		t.Errorf("Display = %q, want ~/projects » Browse", browse.Display)
 	}
-	if browse.Icon != "\uf07c" {
-		t.Errorf("Icon = %q, want \\uf07c", browse.Icon)
+	if browse.Icon != "\ueaf7" {
+		t.Errorf("Icon = %q, want \\ueaf7", browse.Icon)
 	}
 }
 

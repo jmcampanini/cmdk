@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	iconWindow     = "\uf2d0"
-	iconDir        = "\uf07c"
-	iconCmd        = "\uf120"
+	iconWindow     = "\ueb7f"
+	iconDir        = "\ueaf7"
+	iconCmd        = "\uebc8"
 	defaultTimeout = 5 * time.Second
 )
 
@@ -839,7 +839,10 @@ stages = [
 }
 
 func TestE2E_ShortenTruncateFlag(t *testing.T) {
-	out, err := exec.Command(binaryPath, "shorten", "--truncate", "2", "/usr/local/bin/foo").CombinedOutput()
+	xdg := writeConfig(t, "")
+	cmd := exec.Command(binaryPath, "shorten", "--truncate", "2", "/usr/local/bin/foo")
+	cmd.Env = append(os.Environ(), "XDG_CONFIG_HOME="+xdg)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("shorten failed: %v\n%s", err, out)
 	}
@@ -850,7 +853,10 @@ func TestE2E_ShortenTruncateFlag(t *testing.T) {
 }
 
 func TestE2E_ShortenTruncateWithSymbolFlag(t *testing.T) {
-	out, err := exec.Command(binaryPath, "shorten", "--truncate", "2", "--truncate-symbol", "…", "/usr/local/bin/foo").CombinedOutput()
+	xdg := writeConfig(t, "")
+	cmd := exec.Command(binaryPath, "shorten", "--truncate", "2", "--truncate-symbol", "…", "/usr/local/bin/foo")
+	cmd.Env = append(os.Environ(), "XDG_CONFIG_HOME="+xdg)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("shorten failed: %v\n%s", err, out)
 	}
@@ -879,7 +885,10 @@ truncation_symbol = "…"
 }
 
 func TestE2E_ShortenNoTruncateFlag(t *testing.T) {
-	out, err := exec.Command(binaryPath, "shorten", "/usr/local/bin/foo").CombinedOutput()
+	xdg := writeConfig(t, "")
+	cmd := exec.Command(binaryPath, "shorten", "/usr/local/bin/foo")
+	cmd.Env = append(os.Environ(), "XDG_CONFIG_HOME="+xdg)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("shorten failed: %v\n%s", err, out)
 	}

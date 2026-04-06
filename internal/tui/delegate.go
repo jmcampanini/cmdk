@@ -17,10 +17,10 @@ import (
 )
 
 const (
-	iconWindow = "\uf2d0"
-	iconDir    = "\uf07c"
-	iconCmd    = "\uf120"
-	iconBell   = "\U000f009e"
+	iconWindow = "\ueb7f"
+	iconDir    = "\ueaf7"
+	iconCmd    = "\uebc8"
+	iconBell   = "\ueaa2"
 	itemGap    = "  "
 )
 

@@ -34,7 +34,7 @@ func NewActionsGenerator() GeneratorFunc {
 				Action:  item.ActionExecute,
 				Cmd:     "tmux new-window -c {{sq .path}}",
 				Data:    maps.Clone(data),
-				Icon:    "\uf2d0",
+				Icon:    "\ueb7f",
 			})
 		}
 
