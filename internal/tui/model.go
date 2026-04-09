@@ -44,6 +44,8 @@ type Model struct {
 	mode             viewMode
 	stageInput       textinput.Model
 	stageLabel       string
+	stageError       string
+	errorStyle       lipgloss.Style
 	pickerList       list.Model
 	pickerKey        string
 	theme            theme.Theme
@@ -70,6 +72,7 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 		ctx:              ctx,
 		stackStyle:       lipgloss.NewStyle().Foreground(t.Overlay0),
 		filterStyle:      lipgloss.NewStyle().Inline(true).Background(t.TextboxBg),
+		errorStyle:       lipgloss.NewStyle().Foreground(t.Error),
 		theme:            t,
 		autoSelectSingle: beh.AutoSelectSingle,
 		baseItems:        baseItems,
@@ -287,6 +290,8 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m Model) updatePrompt(msg tea.Msg) (tea.Model, tea.Cmd) {
 	key, ok := msg.(tea.KeyPressMsg)
 	if !ok {
+		// Clear error on non-key messages (e.g. tea.PasteMsg) so pasted text dismisses a stale "required" error.
+		m.stageError = ""
 		var cmd tea.Cmd
 		m.stageInput, cmd = m.stageInput.Update(msg)
 		return m, cmd
@@ -300,6 +305,10 @@ func (m Model) updatePrompt(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		stage := m.accumulated[actionIdx].Stages[len(m.accumulated)-actionIdx-1]
 		value := m.stageInput.Value()
+		if !stage.AllowEmpty && strings.TrimSpace(value) == "" {
+			m.stageError = "required"
+			return m, nil
+		}
 		return m.pushStageResult(stage.Key, value, value)
 
 	case "esc":
@@ -311,6 +320,7 @@ func (m Model) updatePrompt(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	m.stageInput, cmd = m.stageInput.Update(msg)
+	m.stageError = ""
 	return m, cmd
 }
 
@@ -434,6 +444,7 @@ func (m Model) recoverFromMissingAction() Model {
 
 // advanceStage looks at the current stage index and configures the appropriate view.
 func (m Model) advanceStage() Model {
+	m.stageError = ""
 	actionIdx := m.findActionIndex()
 	if actionIdx < 0 {
 		return m.recoverFromMissingAction()
@@ -751,7 +762,11 @@ func (m Model) overheadHeight() int {
 
 func (m Model) promptView() string {
 	pad := strings.Repeat(" ", horizontalPadding)
-	return pad + m.stageLabel + "\n" + pad + m.stageInput.View()
+	view := pad + m.stageLabel + "\n" + pad + m.stageInput.View()
+	if m.stageError != "" {
+		view += "\n" + pad + m.errorStyle.Render(m.stageError)
+	}
+	return view
 }
 
 func (m Model) View() tea.View {

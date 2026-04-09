@@ -18,14 +18,15 @@ import (
 )
 
 type StageConfig struct {
-	Type      string `toml:"type"`
-	Key       string `toml:"key"`
-	Text      string `toml:"text"`
-	Default   string `toml:"default"`
-	Source    string `toml:"source"`
-	Delimiter string `toml:"delimiter"`
-	Display   int    `toml:"display"`
-	Pass      int    `toml:"pass"`
+	Type       string `toml:"type"`
+	Key        string `toml:"key"`
+	Text       string `toml:"text"`
+	Default    string `toml:"default"`
+	Source     string `toml:"source"`
+	Delimiter  string `toml:"delimiter"`
+	Display    int    `toml:"display"`
+	Pass       int    `toml:"pass"`
+	AllowEmpty bool   `toml:"allow_empty"`
 }
 
 type Action struct {
@@ -208,6 +209,9 @@ func validateStages(actionIdx int, stages []StageConfig) error {
 			}
 			if s.Pass < 0 {
 				return fmt.Errorf("%s.pass cannot be negative", prefix)
+			}
+			if s.AllowEmpty {
+				return fmt.Errorf("%s.allow_empty must not be set for picker stage", prefix)
 			}
 		default:
 			return fmt.Errorf("%s.type %q is not valid (valid: prompt, picker)", prefix, s.Type)

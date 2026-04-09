@@ -16,14 +16,15 @@ const (
 )
 
 type Stage struct {
-	Type      StageType
-	Key       string
-	Text      string
-	Default   string
-	Source    string
-	Delimiter string
-	Display   int
-	Pass      int
+	Type       StageType
+	Key        string
+	Text       string
+	Default    string
+	Source     string
+	Delimiter  string
+	Display    int
+	Pass       int
+	AllowEmpty bool
 }
 
 // EffectiveDelimiter returns the delimiter to use for field splitting.
