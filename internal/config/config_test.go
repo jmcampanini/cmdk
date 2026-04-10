@@ -1218,3 +1218,30 @@ allow_empty = true
 		t.Error("stage.AllowEmpty = false, want true")
 	}
 }
+
+func TestLoad_ActionWithStages_AllowEmptyDefault(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[[actions]]
+name = "Test"
+cmd = "echo {{.name}}"
+matches = "root"
+
+[[actions.stages]]
+type = "prompt"
+key = "name"
+text = "Name:"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	s := cfg.Actions[0].Stages[0]
+	if s.AllowEmpty {
+		t.Error("stage.AllowEmpty = true, want false (default)")
+	}
+}

@@ -306,6 +306,7 @@ func (m Model) updatePrompt(msg tea.Msg) (tea.Model, tea.Cmd) {
 		stage := m.accumulated[actionIdx].Stages[len(m.accumulated)-actionIdx-1]
 		value := m.stageInput.Value()
 		if !stage.AllowEmpty && strings.TrimSpace(value) == "" {
+			log.Debug("blocked empty prompt submission", "key", stage.Key)
 			m.stageError = "required"
 			return m, nil
 		}

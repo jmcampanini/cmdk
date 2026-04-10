@@ -1079,6 +1079,47 @@ func TestPromptRequired_EscBackClearsError(t *testing.T) {
 	}
 }
 
+func TestPromptRequired_MixedAllowEmptyMultiStage(t *testing.T) {
+	items := []list.Item{
+		item.Item{
+			Type:    "action",
+			Display: "Mixed",
+			Action:  item.ActionStaged,
+			Cmd:     "echo {{.first}} {{.second}}",
+			Stages: []item.Stage{
+				{Type: item.StagePrompt, Key: "first", Text: "Required:"},
+				{Type: item.StagePrompt, Key: "second", Text: "Optional:", AllowEmpty: true},
+			},
+		},
+	}
+	m := newTestModel(items, testRegistry())
+	m.list.SetSize(80, 40)
+
+	m = selectStagedItem(t, m)
+
+	// First stage is required — empty blocked
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+	if m.stageError != "required" {
+		t.Fatalf("first stage: stageError = %q, want required", m.stageError)
+	}
+
+	// Type value and advance
+	m = typeInPrompt(t, m, "hello")
+	result, _ = m.Update(enterMsg)
+	m = result.(Model)
+
+	// Second stage is allow_empty — empty accepted
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+	if m.Selected() == nil {
+		t.Fatal("Selected() should be set — second stage allows empty")
+	}
+	if cmd == nil {
+		t.Error("expected Quit command")
+	}
+}
+
 // --- Picker stage tests ---
 
 func pickerItems() []list.Item {
