@@ -918,6 +918,208 @@ func TestPromptView_ContainsLabelAndInput(t *testing.T) {
 	}
 }
 
+func allowEmptyPromptItems() []list.Item {
+	return []list.Item{
+		item.Item{
+			Type:    "action",
+			Display: "Commit",
+			Action:  item.ActionStaged,
+			Cmd:     "git commit -m {{.msg}}",
+			Stages: []item.Stage{
+				{Type: item.StagePrompt, Key: "msg", Text: "Message:", AllowEmpty: true},
+			},
+		},
+	}
+}
+
+func TestPromptRequired_EnterOnEmpty_ShowsError(t *testing.T) {
+	m := newTestModel(stagedItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	m = selectStagedItem(t, m)
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.mode != viewPrompt {
+		t.Errorf("mode = %d, want viewPrompt", m.mode)
+	}
+	if m.stageError != "required" {
+		t.Errorf("stageError = %q, want %q", m.stageError, "required")
+	}
+	if m.Selected() != nil {
+		t.Error("Selected() should be nil — submission blocked")
+	}
+	if cmd != nil {
+		t.Error("should not quit on blocked submission")
+	}
+}
+
+func TestPromptRequired_EnterOnWhitespace_ShowsError(t *testing.T) {
+	m := newTestModel(stagedItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	m = selectStagedItem(t, m)
+	m = typeInPrompt(t, m, "   ")
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.stageError != "required" {
+		t.Errorf("stageError = %q, want %q", m.stageError, "required")
+	}
+}
+
+func TestPromptRequired_ErrorClearsOnTyping(t *testing.T) {
+	m := newTestModel(stagedItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	m = selectStagedItem(t, m)
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+	if m.stageError != "required" {
+		t.Fatal("expected error after empty submit")
+	}
+
+	m = typeInPrompt(t, m, "f")
+	if m.stageError != "" {
+		t.Errorf("stageError = %q, want empty after typing", m.stageError)
+	}
+}
+
+func TestPromptRequired_SubmitsAfterTyping(t *testing.T) {
+	m := newTestModel(stagedItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	m = selectStagedItem(t, m)
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+
+	m = typeInPrompt(t, m, "feature/auth")
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.Selected() == nil {
+		t.Fatal("Selected() should be set after valid submission")
+	}
+	if cmd == nil {
+		t.Error("expected Quit command")
+	}
+}
+
+func TestPromptAllowEmpty_EnterOnEmpty_Submits(t *testing.T) {
+	m := newTestModel(allowEmptyPromptItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	m = selectStagedItem(t, m)
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.Selected() == nil {
+		t.Fatal("Selected() should be set — allow_empty permits empty")
+	}
+	if cmd == nil {
+		t.Error("expected Quit command")
+	}
+	if m.stageError != "" {
+		t.Errorf("stageError = %q, want empty", m.stageError)
+	}
+}
+
+func TestPromptRequired_ErrorAppearsInView(t *testing.T) {
+	m := newTestModel(stagedItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+
+	m = selectStagedItem(t, m)
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+
+	view := m.View()
+	content := ansi.Strip(view.Content)
+	if !strings.Contains(content, "required") {
+		t.Error("prompt view should contain error text 'required'")
+	}
+}
+
+func TestPromptRequired_DefaultValueBypassesError(t *testing.T) {
+	m := newTestModel(stagedItemWithDefault(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	m = selectStagedItem(t, m)
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.Selected() == nil {
+		t.Fatal("Selected() should be set — default value is non-empty")
+	}
+	if cmd == nil {
+		t.Error("expected Quit command")
+	}
+}
+
+func TestPromptRequired_EscBackClearsError(t *testing.T) {
+	m := newTestModel(multiStageItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	m = selectStagedItem(t, m)
+	m = typeInPrompt(t, m, "main.go")
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+
+	// Now on second stage — press Enter empty to trigger error
+	result, _ = m.Update(enterMsg)
+	m = result.(Model)
+	if m.stageError != "required" {
+		t.Fatal("expected error on second stage")
+	}
+
+	// Esc back to first stage — error should clear
+	result, _ = m.Update(escMsg)
+	m = result.(Model)
+	if m.stageError != "" {
+		t.Errorf("stageError = %q, want empty after Esc back", m.stageError)
+	}
+}
+
+func TestPromptRequired_MixedAllowEmptyMultiStage(t *testing.T) {
+	items := []list.Item{
+		item.Item{
+			Type:    "action",
+			Display: "Mixed",
+			Action:  item.ActionStaged,
+			Cmd:     "echo {{.first}} {{.second}}",
+			Stages: []item.Stage{
+				{Type: item.StagePrompt, Key: "first", Text: "Required:"},
+				{Type: item.StagePrompt, Key: "second", Text: "Optional:", AllowEmpty: true},
+			},
+		},
+	}
+	m := newTestModel(items, testRegistry())
+	m.list.SetSize(80, 40)
+
+	m = selectStagedItem(t, m)
+
+	// First stage is required — empty blocked
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+	if m.stageError != "required" {
+		t.Fatalf("first stage: stageError = %q, want required", m.stageError)
+	}
+
+	// Type value and advance
+	m = typeInPrompt(t, m, "hello")
+	result, _ = m.Update(enterMsg)
+	m = result.(Model)
+
+	// Second stage is allow_empty — empty accepted
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+	if m.Selected() == nil {
+		t.Fatal("Selected() should be set — second stage allows empty")
+	}
+	if cmd == nil {
+		t.Error("expected Quit command")
+	}
+}
+
 // --- Picker stage tests ---
 
 func pickerItems() []list.Item {

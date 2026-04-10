@@ -45,6 +45,7 @@ func ConfigDocs() []SectionDoc {
 				{Name: "delimiter", Type: "string", Description: "Field delimiter for splitting source lines into parts. Only for type = \"picker\". Defaults to \"|\" when display or pass is set.", Validation: "forbidden for prompt"},
 				{Name: "display", Type: "int", Description: "1-based field index to display and match against. 0 = whole line (default). Only for type = \"picker\".", Validation: "forbidden for prompt; cannot be negative"},
 				{Name: "pass", Type: "int", Description: "1-based field index to pass as the stage result value. 0 = whole line (default). Only for type = \"picker\".", Validation: "forbidden for prompt; cannot be negative"},
+				{Name: "allow_empty", Type: "bool", Description: "Allow empty input for prompt stages. When false (default), pressing Enter on an empty or whitespace-only prompt shows an error. Only for type = \"prompt\".", Validation: "forbidden for picker"},
 			},
 			Example: "stages = [\n  { type = \"prompt\", text = \"Branch name:\", key = \"branch\", default = \"feature/\" },\n  { type = \"picker\", source = \"find {{.path}} -type f\", key = \"file\" },\n  { type = \"picker\", source = \"printf 'Alice|alice@co\\nBob|bob@co'\", key = \"user\", delimiter = \"|\", display = 1, pass = 2 },\n]",
 		},

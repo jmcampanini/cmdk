@@ -243,6 +243,27 @@ func TestMatchingActions_StageConversion_FieldConfig(t *testing.T) {
 	}
 }
 
+func TestMatchingActions_StageConversion_AllowEmpty(t *testing.T) {
+	cfg := Config{
+		Actions: []Action{
+			{
+				Name: "Test", Cmd: "echo", Matches: "root",
+				Stages: []StageConfig{
+					{Type: "prompt", Key: "msg", Text: "Message:", AllowEmpty: true},
+				},
+			},
+		},
+	}
+	fn := MatchingActions(cfg, "root")
+	items, err := fn(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !items[0].Stages[0].AllowEmpty {
+		t.Error("AllowEmpty = false, want true")
+	}
+}
+
 func TestMatchingActions_NoStagesGivesActionExecute(t *testing.T) {
 	cfg := Config{
 		Actions: []Action{

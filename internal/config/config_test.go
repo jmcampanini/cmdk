@@ -435,6 +435,32 @@ func TestValidate_StageKeyStartsWithDigit(t *testing.T) {
 	}
 }
 
+func TestValidate_StagePromptAllowEmpty(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "msg", Text: "Message:", AllowEmpty: true}},
+	}}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_StagePickerForbidsAllowEmpty(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "picker", Key: "dir", Source: "zoxide", AllowEmpty: true}},
+	}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for picker stage with allow_empty")
+	}
+	if !strings.Contains(err.Error(), "allow_empty") {
+		t.Errorf("error = %q, want to contain 'allow_empty'", err.Error())
+	}
+}
+
 func TestLoad_ValidTOML(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
@@ -1162,5 +1188,60 @@ default = "dev"
 	}
 	if s.Default != "dev" {
 		t.Errorf("stage.Default = %q, want dev", s.Default)
+	}
+}
+
+func TestLoad_ActionWithStages_AllowEmpty(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[[actions]]
+name = "Commit"
+cmd = "git commit -m {{.msg}}"
+matches = "root"
+
+[[actions.stages]]
+type = "prompt"
+key = "msg"
+text = "Message:"
+allow_empty = true
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	s := cfg.Actions[0].Stages[0]
+	if !s.AllowEmpty {
+		t.Error("stage.AllowEmpty = false, want true")
+	}
+}
+
+func TestLoad_ActionWithStages_AllowEmptyDefault(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[[actions]]
+name = "Test"
+cmd = "echo {{.name}}"
+matches = "root"
+
+[[actions.stages]]
+type = "prompt"
+key = "name"
+text = "Name:"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	s := cfg.Actions[0].Stages[0]
+	if s.AllowEmpty {
+		t.Error("stage.AllowEmpty = true, want false (default)")
 	}
 }
