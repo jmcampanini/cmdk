@@ -22,7 +22,7 @@ type charClass int
 
 // Order matters: computeBonus uses > charNonWord to select boundary-eligible characters.
 const (
-	charWhite     charClass = iota
+	charWhite charClass = iota
 	charNonWord
 	charDelimiter
 	charLower

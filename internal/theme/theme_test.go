@@ -12,10 +12,10 @@ func stubDarkBackground(t *testing.T, dark bool) {
 
 func TestResolve(t *testing.T) {
 	tests := []struct {
-		name       string
-		darkBg     bool
-		input      string
-		wantTheme  string
+		name      string
+		darkBg    bool
+		input     string
+		wantTheme string
 	}{
 		{"auto-detect dark background", true, "", "dark"},
 		{"auto-detect light background", false, "", "light"},

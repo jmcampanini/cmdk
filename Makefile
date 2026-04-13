@@ -11,7 +11,7 @@ FISH_COMPLETIONS_DIR := $(HOME)/.config/fish/completions
 BASH_COMPLETIONS_DIR := $(BREW_PREFIX)/etc/bash_completion.d
 ZSH_COMPLETIONS_DIR := $(BREW_PREFIX)/share/zsh/site-functions
 
-.PHONY: all build check lint test clean help install install-completions uninstall gen-icons
+.PHONY: all build check fmt lint test clean help install install-completions uninstall gen-icons
 
 all: build ## Default target
 
@@ -24,7 +24,13 @@ build: clean check ## Build the binary
 
 check: lint test ## Run all quality checks
 
-lint: ## Run golangci-lint
+fmt: ## Fix formatting and tidy go.mod
+	gofmt -w .
+	go mod tidy
+
+lint: ## Run quality checks
+	go mod tidy -diff
+	@test -z "$$(gofmt -l .)" || { echo "gofmt needed:"; gofmt -d .; exit 1; }
 	golangci-lint run ./...
 
 test: ## Run tests
