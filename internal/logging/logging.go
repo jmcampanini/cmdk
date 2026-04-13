@@ -10,6 +10,12 @@ import (
 
 var defaultDir = filepath.Join(os.Getenv("HOME"), ".local", "state", "cmdk")
 
+const logFileName = "cmdk.log"
+
+func DefaultLogPath() string {
+	return filepath.Join(defaultDir, logFileName)
+}
+
 type Logger struct {
 	closer io.Closer
 }
@@ -27,7 +33,7 @@ func SetupWithDir(dir string) (*Logger, error) {
 		return nil, err
 	}
 
-	f, err := os.OpenFile(filepath.Join(dir, "cmdk.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	f, err := os.OpenFile(filepath.Join(dir, logFileName), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return nil, err
 	}

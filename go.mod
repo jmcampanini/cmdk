@@ -7,6 +7,7 @@ require (
 	charm.land/bubbletea/v2 v2.0.2
 	charm.land/lipgloss/v2 v2.0.2
 	charm.land/log/v2 v2.0.0
+	github.com/246859/tail v1.0.0
 	github.com/BurntSushi/toml v1.6.0
 	github.com/charmbracelet/x/ansi v0.11.6
 	github.com/rivo/uniseg v0.4.7
