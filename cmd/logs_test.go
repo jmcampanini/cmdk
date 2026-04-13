@@ -63,9 +63,40 @@ func TestTail_EmptyFile(t *testing.T) {
 
 func TestTail_NonExistentFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nope.log")
-	_, err := os.Open(path)
+	f, err := os.Open(path)
+	if err == nil {
+		_ = f.Close()
+		t.Fatal("expected error for non-existent file")
+	}
 	if !os.IsNotExist(err) {
 		t.Fatalf("expected not-exist error, got %v", err)
+	}
+}
+
+func TestLogsTail_ValidationErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		n       int
+		wantErr string
+	}{
+		{"zero", 0, "line count must be positive"},
+		{"negative", -5, "line count must be positive"},
+		{"over max", 10001, "at most 10000"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prev := tailLines
+			tailLines = tt.n
+			defer func() { tailLines = prev }()
+
+			err := logsTailCmd.RunE(logsTailCmd, nil)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("error %q does not contain %q", err.Error(), tt.wantErr)
+			}
+		})
 	}
 }
 

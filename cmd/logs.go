@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/246859/tail"
 	"github.com/spf13/cobra"
@@ -19,10 +20,11 @@ var tailLines int
 func readTail(f *os.File, n int) ([]byte, error) {
 	data, err := tail.Tail(f, n+1)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reading log file tail: %w", err)
 	}
-	// The library counts a trailing newline as an extra line,
-	// so we request n+1 and trim back to n.
+	// The tail library treats \n as a separator, so a file ending in \n
+	// has an empty trailing segment that eats one of our n requested lines.
+	// Over-fetch by one and trim back to compensate.
 	lines := bytes.SplitAfter(data, []byte("\n"))
 	if len(lines) > 0 && len(lines[len(lines)-1]) == 0 {
 		lines = lines[:len(lines)-1]
@@ -43,7 +45,11 @@ var logsPathCmd = &cobra.Command{
 	Short: "Print the log file path",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println(logging.DefaultLogPath())
+		path := logging.DefaultLogPath()
+		if !filepath.IsAbs(path) {
+			return fmt.Errorf("cannot determine log file location: $HOME is not set")
+		}
+		fmt.Println(path)
 		return nil
 	},
 }
@@ -61,12 +67,15 @@ var logsTailCmd = &cobra.Command{
 		}
 
 		path := logging.DefaultLogPath()
+		if !filepath.IsAbs(path) {
+			return fmt.Errorf("cannot determine log file location: $HOME is not set")
+		}
 		f, err := os.Open(path)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				return fmt.Errorf("log file does not exist: %s", path)
 			}
-			return err
+			return fmt.Errorf("could not open log file %s: %w", path, err)
 		}
 		defer func() { _ = f.Close() }()
 
