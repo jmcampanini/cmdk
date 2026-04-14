@@ -81,11 +81,11 @@ func ConfigDocs() []SectionDoc {
 		},
 		{
 			Name:        "display",
-			Description: "Path display formatting. String values support inline Nerdfont icon aliases\n  (e.g. :nf-dev-github:) which are resolved to glyphs at load time.",
+			Description: "Path display formatting. Most string values support inline Nerdfont icon\n  aliases (e.g. :nf-dev-github:) which are resolved to glyphs at load time.",
 			Fields: []FieldDoc{
 				{Name: "shorten_home", Type: "string", Description: "Replace $HOME prefix in display paths; empty string disables. Supports icon aliases."},
 				{Name: "truncation_length", Type: "int", Description: "Number of rightmost path segments to display; 0 disables. Paths with this many or fewer segments are left unchanged. Applied after home shortening and rules.", Validation: "cannot be negative"},
-				{Name: "truncation_symbol", Type: "string", Description: "String prepended (with an implied trailing /) when truncation occurs. Empty string means no prefix. Supports icon aliases."},
+				{Name: "truncation_symbol", Type: "string", Description: "String prepended (with an implied trailing /) when truncation occurs. Empty string means no prefix. For example, \":nf-cod-ellipsis:\" produces \"\\uea7c/foo/bar\". Supports icon aliases."},
 				{Name: "rules", Type: "map[string]string", Description: "Literal substring replacements applied to display paths. Keys are substrings to match, values are replacements. Replacement values support icon aliases; match keys do not.", Validation: "match key cannot be empty"},
 			},
 			Example: "[display]\nshorten_home = \"~\"\ntruncation_length = 3\ntruncation_symbol = \":nf-cod-ellipsis:\"\n\n[display.rules]\n\"github.com\" = \":nf-dev-github:gh\"\n\"~/Code\" = \":nf-cod-folder:Code\"",

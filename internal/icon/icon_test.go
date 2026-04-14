@@ -120,6 +120,7 @@ func TestResolveInline(t *testing.T) {
 		{"trailing colon", "text:", "text:"},
 		{"double colon", "::", "::"},
 		{"colon only", ":", ":"},
+		{"alias then trailing colon", ":nf-dev-github:trailing:", "\ue709trailing:"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -143,6 +144,8 @@ func TestResolveInline_Errors(t *testing.T) {
 		{"unknown alias", ":nf-fake-thing:", "unknown icon alias"},
 		{"unknown with suggestion", ":nf-dev-gith:", "did you mean"},
 		{"unknown in mixed text", "text:nf-fake:more", "unknown icon alias"},
+		{"minimal nf- prefix", ":nf-:", "unknown icon alias"},
+		{"unterminated alias", ":nf-oct-home", "unterminated icon alias"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

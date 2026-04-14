@@ -1181,6 +1181,15 @@ func TestLoad_DisplayInlineIconResolution(t *testing.T) {
 			},
 		},
 		{
+			name: "rule with empty value skipped",
+			toml: "[display.rules]\n\"foo\" = \"\"",
+			check: func(t *testing.T, cfg Config) {
+				if cfg.Display.Rules["foo"] != "" {
+					t.Errorf("empty rule value should remain empty, got %q", cfg.Display.Rules["foo"])
+				}
+			},
+		},
+		{
 			name: "adjacent aliases in rule",
 			toml: "[display.rules]\n\"github.com\" = \":nf-dev-github::nf-cod-folder_opened:\"",
 			check: func(t *testing.T, cfg Config) {
@@ -1217,6 +1226,11 @@ func TestLoad_DisplayInvalidInlineIcon(t *testing.T) {
 			name:      "invalid shorten_home alias",
 			toml:      "[display]\nshorten_home = \":nf-fake:\"",
 			wantInErr: "display.shorten_home",
+		},
+		{
+			name:      "invalid truncation_symbol alias",
+			toml:      "[display]\ntruncation_symbol = \":nf-fake:\"",
+			wantInErr: "display.truncation_symbol",
 		},
 		{
 			name:      "invalid rule alias",

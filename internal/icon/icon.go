@@ -98,6 +98,9 @@ func ResolveInline(s string) (string, error) {
 
 		endPos := strings.IndexByte(s[i+1:], ':')
 		if endPos == -1 {
+			if strings.HasPrefix(s[i:], ":nf-") {
+				return "", fmt.Errorf("unterminated icon alias in %q (missing closing colon)", s)
+			}
 			b.WriteString(s[i:])
 			break
 		}
