@@ -32,14 +32,7 @@ func Resolve(raw string) (string, error) {
 	}
 
 	if alias, ok := parseAlias(raw); ok {
-		icon, exists := registry[alias]
-		if !exists {
-			if suggestion := suggestAlias(alias); suggestion != "" {
-				return "", fmt.Errorf("unknown icon alias %q; did you mean :%s:?", raw, suggestion)
-			}
-			return "", fmt.Errorf("unknown icon alias %q; run \"cmdk icons --filter <term>\" to search aliases", raw)
-		}
-		return icon, nil
+		return resolveAlias(alias)
 	}
 
 	if n := uniseg.GraphemeClusterCount(raw); n != 1 {
@@ -59,6 +52,17 @@ func parseAlias(raw string) (string, bool) {
 	return "", false
 }
 
+func resolveAlias(alias string) (string, error) {
+	if glyph, ok := registry[alias]; ok {
+		return glyph, nil
+	}
+	formatted := ":" + alias + ":"
+	if suggestion := suggestAlias(alias); suggestion != "" {
+		return "", fmt.Errorf("unknown icon alias %q; did you mean :%s:?", formatted, suggestion)
+	}
+	return "", fmt.Errorf("unknown icon alias %q; run \"cmdk icons --filter <term>\" to search aliases", formatted)
+}
+
 func suggestAlias(invalid string) string {
 	best := ""
 	bestLen := 0
@@ -73,6 +77,49 @@ func suggestAlias(invalid string) string {
 		return best
 	}
 	return ""
+}
+
+func ResolveInline(s string) (string, error) {
+	if !strings.Contains(s, ":") {
+		return s, nil
+	}
+
+	var b strings.Builder
+	b.Grow(len(s))
+	i := 0
+	for i < len(s) {
+		colonPos := strings.IndexByte(s[i:], ':')
+		if colonPos == -1 {
+			b.WriteString(s[i:])
+			break
+		}
+		b.WriteString(s[i : i+colonPos])
+		i += colonPos
+
+		endPos := strings.IndexByte(s[i+1:], ':')
+		if endPos == -1 {
+			if strings.HasPrefix(s[i:], ":nf-") {
+				return "", fmt.Errorf("unterminated icon alias in %q (missing closing colon)", s)
+			}
+			b.WriteString(s[i:])
+			break
+		}
+
+		alias := s[i+1 : i+1+endPos]
+		if !strings.HasPrefix(alias, "nf-") {
+			b.WriteByte(':')
+			i++
+			continue
+		}
+
+		glyph, err := resolveAlias(alias)
+		if err != nil {
+			return "", err
+		}
+		b.WriteString(glyph)
+		i += 1 + endPos + 1
+	}
+	return b.String(), nil
 }
 
 func commonPrefixLen(a, b string) int {
