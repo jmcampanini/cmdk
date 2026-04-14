@@ -220,6 +220,18 @@ func validateStages(actionIdx int, stages []StageConfig) error {
 	return nil
 }
 
+func resolveInlineField(val *string, field string) error {
+	if *val == "" {
+		return nil
+	}
+	resolved, err := icon.ResolveInline(*val)
+	if err != nil {
+		return fmt.Errorf("%s: %w", field, err)
+	}
+	*val = resolved
+	return nil
+}
+
 func (c *Config) resolveIcons() error {
 	for i := range c.Actions {
 		if c.Actions[i].Icon != "" {
@@ -229,6 +241,22 @@ func (c *Config) resolveIcons() error {
 			}
 			c.Actions[i].Icon = resolved
 		}
+	}
+	if err := resolveInlineField(&c.Display.ShortenHome, "display.shorten_home"); err != nil {
+		return err
+	}
+	if err := resolveInlineField(&c.Display.TruncationSymbol, "display.truncation_symbol"); err != nil {
+		return err
+	}
+	for match, replace := range c.Display.Rules {
+		if replace == "" {
+			continue
+		}
+		resolved, err := icon.ResolveInline(replace)
+		if err != nil {
+			return fmt.Errorf("display.rules[%q]: %w", match, err)
+		}
+		c.Display.Rules[match] = resolved
 	}
 	return nil
 }

@@ -1129,6 +1129,119 @@ matches = "dir"
 	}
 }
 
+func TestLoad_DisplayInlineIconResolution(t *testing.T) {
+	tests := []struct {
+		name  string
+		toml  string
+		check func(t *testing.T, cfg Config)
+	}{
+		{
+			name: "shorten_home alias",
+			toml: "[display]\nshorten_home = \":nf-oct-home:\"",
+			check: func(t *testing.T, cfg Config) {
+				if cfg.Display.ShortenHome != "\uf46d" {
+					t.Errorf("ShortenHome = %q, want \\uf46d", cfg.Display.ShortenHome)
+				}
+			},
+		},
+		{
+			name: "truncation_symbol alias",
+			toml: "[display]\ntruncation_symbol = \":nf-cod-ellipsis:\"",
+			check: func(t *testing.T, cfg Config) {
+				if cfg.Display.TruncationSymbol != "\uea7c" {
+					t.Errorf("TruncationSymbol = %q, want \\uea7c", cfg.Display.TruncationSymbol)
+				}
+			},
+		},
+		{
+			name: "rule value alias with text",
+			toml: "[display.rules]\n\"github.com\" = \":nf-dev-github:gh\"",
+			check: func(t *testing.T, cfg Config) {
+				if cfg.Display.Rules["github.com"] != "\ue709gh" {
+					t.Errorf("rule = %q, want %q", cfg.Display.Rules["github.com"], "\ue709gh")
+				}
+			},
+		},
+		{
+			name: "rule value alias only",
+			toml: "[display.rules]\n\"github.com\" = \":nf-dev-github:\"",
+			check: func(t *testing.T, cfg Config) {
+				if cfg.Display.Rules["github.com"] != "\ue709" {
+					t.Errorf("rule = %q, want \\ue709", cfg.Display.Rules["github.com"])
+				}
+			},
+		},
+		{
+			name: "rule key not resolved",
+			toml: "[display.rules]\n\":nf-dev-github:\" = \"gh\"",
+			check: func(t *testing.T, cfg Config) {
+				if _, ok := cfg.Display.Rules[":nf-dev-github:"]; !ok {
+					t.Error("rule key should remain as literal :nf-dev-github:")
+				}
+			},
+		},
+		{
+			name: "adjacent aliases in rule",
+			toml: "[display.rules]\n\"github.com\" = \":nf-dev-github::nf-cod-folder_opened:\"",
+			check: func(t *testing.T, cfg Config) {
+				want := "\ue709\ueaf7"
+				if cfg.Display.Rules["github.com"] != want {
+					t.Errorf("rule = %q, want %q", cfg.Display.Rules["github.com"], want)
+				}
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "config.toml")
+			if err := os.WriteFile(path, []byte(tt.toml), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := Load(path)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			tt.check(t, cfg)
+		})
+	}
+}
+
+func TestLoad_DisplayInvalidInlineIcon(t *testing.T) {
+	tests := []struct {
+		name      string
+		toml      string
+		wantInErr string
+	}{
+		{
+			name:      "invalid shorten_home alias",
+			toml:      "[display]\nshorten_home = \":nf-fake:\"",
+			wantInErr: "display.shorten_home",
+		},
+		{
+			name:      "invalid rule alias",
+			toml:      "[display.rules]\n\"gh\" = \":nf-fake:\"",
+			wantInErr: "display.rules",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "config.toml")
+			if err := os.WriteFile(path, []byte(tt.toml), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			_, err := Load(path)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if !strings.Contains(err.Error(), tt.wantInErr) {
+				t.Errorf("error = %q, want to contain %q", err.Error(), tt.wantInErr)
+			}
+		})
+	}
+}
+
 func TestLoad_BehaviorAutoSelectSingle(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
