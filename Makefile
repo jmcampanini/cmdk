@@ -1,72 +1,44 @@
 BINARY_NAME := cmdk
-BUILD_DIR := build
-INSTALL_DIR := $(HOME)/.local/bin
+OUT_DIR := out
 
+# Version is injected at build time via ldflags so `cmdk --version` reports
+# the git describe of the working tree (or an RFC3339 timestamp as a fallback).
 VERSION := $(shell git describe --tags --dirty --always 2>/dev/null || date -u '+%Y-%m-%dT%H:%M:%SZ')
 LDFLAGS := -ldflags "-X github.com/jmcampanini/cmdk/cmd.Version=$(VERSION)"
 
-# Shell completion directories
-BREW_PREFIX := $(shell brew --prefix 2>/dev/null || echo "/opt/homebrew")
-FISH_COMPLETIONS_DIR := $(HOME)/.config/fish/completions
-BASH_COMPLETIONS_DIR := $(BREW_PREFIX)/etc/bash_completion.d
-ZSH_COMPLETIONS_DIR := $(BREW_PREFIX)/share/zsh/site-functions
-
-.PHONY: all build check fmt lint test clean help install install-completions uninstall gen-icons
-
-all: build ## Default target
-
-gen-icons: ## Regenerate icon entries from Nerd Fonts glyphnames.json
-	go run ./internal/icon/gen
-
-build: clean check ## Build the binary
-	mkdir -p $(BUILD_DIR)
-	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) .
-
-check: lint test ## Run all quality checks
-
-fmt: ## Fix formatting and tidy go.mod
-	gofmt -w .
-	go mod tidy
-
-lint: ## Run quality checks
-	go mod tidy -diff
-	@test -z "$$(gofmt -l .)" || { echo "gofmt needed:"; gofmt -d .; exit 1; }
-	golangci-lint run ./...
-
-test: ## Run tests
-	go test ./...
-
-clean: ## Remove build artifacts, test cache, and lint cache
-	go clean
-	go clean -testcache
-	golangci-lint cache clean
-	rm -rf $(BUILD_DIR)
-
-install-completions: build ## Install shell completions
-	@echo "Installing shell completions..."
-	@mkdir -p $(FISH_COMPLETIONS_DIR)
-	@$(BUILD_DIR)/$(BINARY_NAME) completion fish > $(FISH_COMPLETIONS_DIR)/$(BINARY_NAME).fish
-	@echo "  fish: $(FISH_COMPLETIONS_DIR)/$(BINARY_NAME).fish"
-	@mkdir -p $(BASH_COMPLETIONS_DIR)
-	@$(BUILD_DIR)/$(BINARY_NAME) completion bash > $(BASH_COMPLETIONS_DIR)/$(BINARY_NAME)
-	@echo "  bash: $(BASH_COMPLETIONS_DIR)/$(BINARY_NAME)"
-	@mkdir -p $(ZSH_COMPLETIONS_DIR)
-	@$(BUILD_DIR)/$(BINARY_NAME) completion zsh > $(ZSH_COMPLETIONS_DIR)/_$(BINARY_NAME)
-	@echo "  zsh:  $(ZSH_COMPLETIONS_DIR)/_$(BINARY_NAME)"
-
-install: build install-completions ## Install binary and completions
-	@echo "Installing $(BINARY_NAME) to $(INSTALL_DIR)..."
-	@mkdir -p $(INSTALL_DIR)
-	@cp $(BUILD_DIR)/$(BINARY_NAME) $(INSTALL_DIR)/$(BINARY_NAME)
-	@echo "Installed $(INSTALL_DIR)/$(BINARY_NAME)"
-
-uninstall: ## Remove binary and completions
-	@echo "Uninstalling $(BINARY_NAME)..."
-	@rm -f $(INSTALL_DIR)/$(BINARY_NAME)
-	@rm -f $(FISH_COMPLETIONS_DIR)/$(BINARY_NAME).fish
-	@rm -f $(BASH_COMPLETIONS_DIR)/$(BINARY_NAME)
-	@rm -f $(ZSH_COMPLETIONS_DIR)/_$(BINARY_NAME)
-	@echo "Uninstalled"
+.DEFAULT_GOAL := help
+.PHONY: help build check fmt tidy lint test clean gen-icons
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
+
+build: ## compile binary to ./out/cmdk
+	mkdir -p $(OUT_DIR)
+	go build $(LDFLAGS) -o $(OUT_DIR)/$(BINARY_NAME) .
+
+test: ## run tests with -race
+	go test -race ./...
+
+lint: ## run golangci-lint
+	golangci-lint run ./...
+
+fmt: ## apply gofmt -w in-place
+	gofmt -w .
+
+tidy: ## apply go mod tidy
+	go mod tidy
+
+check: ## fmt-check + tidy-check + lint + test (CI gate, never modifies files)
+	@test -z "$$(gofmt -l .)" || { echo "gofmt needed:"; gofmt -d .; exit 1; }
+	go mod tidy -diff
+	$(MAKE) lint
+	$(MAKE) test
+
+clean: ## remove build artifacts and caches
+	go clean
+	go clean -testcache
+	golangci-lint cache clean
+	rm -rf $(OUT_DIR)
+
+gen-icons: ## regenerate icon entries from Nerd Fonts glyphnames.json
+	go run ./internal/icon/gen
