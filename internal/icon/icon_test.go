@@ -100,3 +100,62 @@ func TestAll_Count(t *testing.T) {
 		t.Errorf("got %d entries, want 1256", len(all))
 	}
 }
+
+func TestResolveInline(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"empty", "", ""},
+		{"no colons", "hello world", "hello world"},
+		{"single alias", ":nf-dev-github:", "\ue709"},
+		{"alias then text", ":nf-dev-github:gh", "\ue709gh"},
+		{"text then alias", "icon:nf-dev-github:", "icon\ue709"},
+		{"text alias text", "pre:nf-dev-github:post", "pre\ue709post"},
+		{"adjacent aliases", ":nf-dev-github::nf-cod-folder_opened:", "\ue709\ueaf7"},
+		{"multiple with text", ":nf-dev-github: and :nf-cod-folder_opened:", "\ue709 and \ueaf7"},
+		{"non-alias colons", "a:b:c", "a:b:c"},
+		{"single colon", "a:b", "a:b"},
+		{"trailing colon", "text:", "text:"},
+		{"double colon", "::", "::"},
+		{"colon only", ":", ":"},
+		{"alias then trailing colon", ":nf-dev-github:trailing:", "\ue709trailing:"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ResolveInline(tt.input)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolveInline_Errors(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		wantInErr string
+	}{
+		{"unknown alias", ":nf-fake-thing:", "unknown icon alias"},
+		{"unknown with suggestion", ":nf-dev-gith:", "did you mean"},
+		{"unknown in mixed text", "text:nf-fake:more", "unknown icon alias"},
+		{"minimal nf- prefix", ":nf-:", "unknown icon alias"},
+		{"unterminated alias", ":nf-oct-home", "unterminated icon alias"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ResolveInline(tt.input)
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if !strings.Contains(err.Error(), tt.wantInErr) {
+				t.Errorf("error = %q, want to contain %q", err.Error(), tt.wantInErr)
+			}
+		})
+	}
+}

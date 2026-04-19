@@ -21,4 +21,5 @@ jobs:
           version: v2.11.3
           install-only: true
 
+      - run: make check
       - run: make build
