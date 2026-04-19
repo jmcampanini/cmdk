@@ -20,7 +20,8 @@ brew upgrade --fetch-HEAD cmdk
 ### From source
 
 ```sh
-make install
+make build
+# binary at ./out/cmdk — copy or symlink onto your PATH
 ```
 
 ## Usage
