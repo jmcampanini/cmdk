@@ -28,7 +28,7 @@ fmt: ## apply gofmt -w in-place
 tidy: ## apply go mod tidy
 	go mod tidy
 
-check: ## fmt-check + tidy-check + lint + test (CI gate, never modifies files)
+check: ## fmt-check + tidy-check + lint + test
 	@test -z "$$(gofmt -l .)" || { echo "gofmt needed:"; gofmt -d .; exit 1; }
 	go mod tidy -diff
 	$(MAKE) lint
