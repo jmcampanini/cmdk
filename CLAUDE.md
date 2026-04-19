@@ -2,14 +2,7 @@
 
 ## Build & Verification
 
-Use `make` targets — not raw `go` commands:
-
-- `make check` — run all quality checks (lint + test)
-- `make build` — build binary with version injection via ldflags
-- `make fmt` — fix formatting and tidy go.mod
-- `make lint` — run golangci-lint, check formatting, check go.mod tidy
-- `make test` — run unit tests
-- `make clean` — remove build artifacts, test cache, and lint cache
+- Use `make` targets — not raw `go` commands. Run `make help` to list them.
 
 ## Documentation
 
