@@ -49,7 +49,7 @@ var docsIconsCmd = &cobra.Command{
 		}
 
 		if len(filtered) == 0 {
-			fmt.Fprintln(os.Stderr, "No icons matched the given flags/filter.")
+			emitIconsEmptyHint()
 			return nil
 		}
 
@@ -75,6 +75,46 @@ var docsIconsCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+func emitIconsEmptyHint() {
+	sets := []struct {
+		name   string
+		active bool
+	}{
+		{"cod", flagIconCod},
+		{"dev", flagIconDev},
+		{"oct", flagIconOct},
+	}
+
+	var active, missing []string
+	for _, s := range sets {
+		if s.active {
+			active = append(active, s.name)
+		} else {
+			missing = append(missing, "--"+s.name)
+		}
+	}
+
+	scope := "sets: all"
+	if len(active) > 0 {
+		scope = "sets: " + strings.Join(active, ",")
+	}
+
+	query := "icons"
+	if flagIconFilter != "" {
+		query = fmt.Sprintf("filter=%q", flagIconFilter)
+	}
+
+	fmt.Fprintf(os.Stderr, "no results for %s (%s)\n", query, scope)
+	fmt.Fprintln(os.Stderr, "try:")
+	if len(active) > 0 && len(missing) > 0 {
+		fmt.Fprintf(os.Stderr, "  %-24s include other icon sets\n", strings.Join(missing, " "))
+	}
+	if flagIconFilter != "" {
+		fmt.Fprintf(os.Stderr, "  %-24s broader match\n", "--filter=<shorter>")
+	}
+	fmt.Fprintf(os.Stderr, "  %-24s interactive fuzzy search\n", "cmdk icons --fzf | fzf")
 }
 
 func matchesSetFlag(set string) bool {
