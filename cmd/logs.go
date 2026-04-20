@@ -38,6 +38,25 @@ func readTail(f *os.File, n int) ([]byte, error) {
 var logsCmd = &cobra.Command{
 	Use:   "logs",
 	Short: "Inspect cmdk log file",
+	Long: `Inspect the cmdk log file.
+
+cmdk writes a single rolling log to:
+
+  $HOME/.local/state/cmdk/cmdk.log
+
+The directory is created on first run. Logged events include startup
+phases, source fetch results, theme resolution, configuration warnings,
+and the command line of any executed action. Errors and warnings are
+included by default; there is no verbosity flag.
+
+Subcommands:
+
+  cmdk logs path        Print the absolute path to the log file
+  cmdk logs tail [-n N] Print the last N lines (default 25, max 10000)
+
+The log is plain text with one event per line and is safe to inspect
+with any pager (` + "`tail -f`, `less`" + `, etc.).
+`,
 }
 
 var logsPathCmd = &cobra.Command{
