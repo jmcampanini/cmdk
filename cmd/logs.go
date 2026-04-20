@@ -40,14 +40,17 @@ var logsCmd = &cobra.Command{
 	Short: "Inspect cmdk log file",
 	Long: `Inspect the cmdk log file.
 
-cmdk writes a single rolling log to:
+cmdk appends events to a single log file at:
 
   $HOME/.local/state/cmdk/cmdk.log
 
-The directory is created on first run. Logged events include startup
-phases, source fetch results, theme resolution, configuration warnings,
-and the command line of any executed action. Errors and warnings are
-included by default; there is no verbosity flag.
+The directory is created on first run. The file is never rotated or
+truncated; remove it manually if it grows too large.
+
+Logged events include configuration warnings, the command line of any
+executed action, and errors from source fetches, async sources, and
+TUI internals. Startup phase timings are emitted by --timings, not to
+this log.
 
 Subcommands:
 
