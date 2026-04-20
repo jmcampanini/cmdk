@@ -1,6 +1,6 @@
 # cmdk
 
-Keyboard-driven tmux launcher. Runs as a TUI inside a tmux popup, presenting fuzzy-filterable lists of items for switching windows, opening directories, and running shell commands.
+Keyboard-driven tmux launcher: a fuzzy-filterable popup TUI for switching windows, opening directories, and running shell commands.
 
 ## Installation
 
@@ -24,31 +24,21 @@ make build
 # binary at ./out/cmdk — copy or symlink onto your PATH
 ```
 
-## Usage
+## Quickstart
 
+Bind a key in `~/.tmux.conf` to launch cmdk in a tmux popup:
+
+```tmux
+bind-key Space display-popup -E "cmdk --pane-id=#{pane_id}"
 ```
-$ cmdk --help
-Keyboard-driven tmux launcher
 
-Usage:
-  cmdk [flags]
-  cmdk [command]
+Reload tmux (`tmux source-file ~/.tmux.conf`), then press `prefix + Space` inside any tmux session to open the launcher.
 
-Available Commands:
-  completion  Generate the autocompletion script for the specified shell
-  config      Show resolved configuration and validate a config file
-  docs        Show configuration reference
-  help        Help about any command
-  shorten     Apply display rules to shorten a path
+## Reference
 
-Flags:
-  -c, --config string    path to config file (also validates; exits 1 on error)
-  -h, --help             help for cmdk
-      --pane-id string   tmux pane ID
-      --theme string     color theme (light, dark)
-      --timings          measure and print startup phase durations
-      --timings-json     output timings as JSON (implies --timings)
-  -v, --version          version for cmdk
+For the full command reference, run `cmdk --help`. See also:
 
-Use "cmdk [command] --help" for more information about a command.
-```
+- `cmdk help exit-codes` — exit codes and error categories
+- `cmdk logs --help` — where logs go and how to inspect them
+- `cmdk docs` — configuration reference
+- `cmdk icons` — supported icon aliases
