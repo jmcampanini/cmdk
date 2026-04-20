@@ -101,12 +101,11 @@ func emitIconsEmptyHint() {
 		scope = "sets: " + strings.Join(active, ",")
 	}
 
-	query := "icons"
 	if flagIconFilter != "" {
-		query = fmt.Sprintf("filter=%q", flagIconFilter)
+		fmt.Fprintf(os.Stderr, "no results for filter=%q (%s)\n", flagIconFilter, scope)
+	} else {
+		fmt.Fprintf(os.Stderr, "no results (%s)\n", scope)
 	}
-
-	fmt.Fprintf(os.Stderr, "no results for %s (%s)\n", query, scope)
 	fmt.Fprintln(os.Stderr, "try:")
 	if len(active) > 0 && len(missing) > 0 {
 		fmt.Fprintf(os.Stderr, "  %-24s include other icon sets\n", strings.Join(missing, " "))
