@@ -515,6 +515,26 @@ func TestLoad_MissingFile_ReturnsDefaults(t *testing.T) {
 	}
 }
 
+func TestLoad_DirectoryPathReturnsError(t *testing.T) {
+	cfg, err := Load(t.TempDir())
+	if err == nil {
+		t.Fatal("expected error for directory config path")
+	}
+	defaults := DefaultConfig()
+	if cfg.Timeout.Fetch != defaults.Timeout.Fetch {
+		t.Errorf("Timeout.Fetch = %s, want default %s", cfg.Timeout.Fetch, defaults.Timeout.Fetch)
+	}
+}
+
+func TestValidateFile_RejectsNonRegularPath(t *testing.T) {
+	if _, err := os.Stat(os.DevNull); err != nil {
+		t.Skipf("os.DevNull is not available: %v", err)
+	}
+	if err := ValidateFile(os.DevNull); err == nil {
+		t.Fatal("ValidateFile(os.DevNull) error = nil, want non-regular file error")
+	}
+}
+
 func TestLoad_MalformedTOML(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")

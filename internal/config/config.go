@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -269,6 +270,9 @@ func Load(path string) (Config, error) {
 // LoadWithReport loads the effective config and returns provenance metadata for the loaded layers.
 // It always returns a valid Config, even when err is non-nil (defaults are used as fallback).
 func LoadWithReport(path string) (Config, configloader.LoadReport, error) {
+	if err := validateOptionalRegularFile(path); err != nil {
+		return DefaultConfig(), configloader.LoadReport{}, err
+	}
 	fileLoader, err := configloader.NewMergeAllFilesLoader[Config](configloader.File(path))
 	if err != nil {
 		return DefaultConfig(), configloader.LoadReport{}, err
@@ -290,6 +294,9 @@ func LoadWithReport(path string) (Config, configloader.LoadReport, error) {
 
 // ValidateFile validates a required config file.
 func ValidateFile(path string) error {
+	if err := validateRequiredRegularFile(path); err != nil {
+		return err
+	}
 	fileLoader, err := configloader.NewRequiredFileLoader[Config](path)
 	if err != nil {
 		return err
@@ -303,6 +310,39 @@ func ValidateFile(path string) error {
 		return err
 	}
 	return cfg.resolveIcons()
+}
+
+// TODO: Remove these preflight checks once go-config-loader rejects existing
+// non-regular config paths while still allowing missing optional files.
+func validateOptionalRegularFile(path string) error {
+	if path == "" {
+		return nil
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("config file not accessible: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("config path is not a regular file: %s", path)
+	}
+	return nil
+}
+
+func validateRequiredRegularFile(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("config file not found: %s", path)
+		}
+		return fmt.Errorf("config file not accessible: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("config path is not a regular file: %s", path)
+	}
+	return nil
 }
 
 func applyDefaultSources(cfg Config) Config {
