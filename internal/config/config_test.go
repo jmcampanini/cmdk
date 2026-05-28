@@ -675,7 +675,7 @@ fetch = "3s"
 	}
 }
 
-func TestLoadWithReport_EnvironmentOverrides(t *testing.T) {
+func TestLoadWithReport_IgnoresConfigEnvOverrides(t *testing.T) {
 	t.Setenv("CMDK_FETCH_TIMEOUT", "5s")
 	t.Setenv("CMDK_WRAP_LIST", "false")
 
@@ -683,17 +683,17 @@ func TestLoadWithReport_EnvironmentOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.Timeout.Fetch != 5*time.Second {
-		t.Errorf("Timeout.Fetch = %s, want 5s", cfg.Timeout.Fetch)
+	if cfg.Timeout.Fetch != DefaultConfig().Timeout.Fetch {
+		t.Errorf("Timeout.Fetch = %s, want default %s", cfg.Timeout.Fetch, DefaultConfig().Timeout.Fetch)
 	}
-	if cfg.Behavior.WrapList {
-		t.Error("Behavior.WrapList = true, want false")
+	if cfg.Behavior.WrapList != DefaultConfig().Behavior.WrapList {
+		t.Errorf("Behavior.WrapList = %v, want default %v", cfg.Behavior.WrapList, DefaultConfig().Behavior.WrapList)
 	}
-	if got := report.Updates["timeout.fetch"]; got != configloader.SourceEnv {
-		t.Errorf("report.Updates[timeout.fetch] = %q, want %q", got, configloader.SourceEnv)
+	if got := report.Updates["timeout.fetch"]; got != configloader.SourceDefault {
+		t.Errorf("report.Updates[timeout.fetch] = %q, want %q", got, configloader.SourceDefault)
 	}
-	if got := report.Updates["behavior.wraplist"]; got != configloader.SourceEnv {
-		t.Errorf("report.Updates[behavior.wraplist] = %q, want %q", got, configloader.SourceEnv)
+	if got := report.Updates["behavior.wraplist"]; got != configloader.SourceDefault {
+		t.Errorf("report.Updates[behavior.wraplist] = %q, want %q", got, configloader.SourceDefault)
 	}
 }
 

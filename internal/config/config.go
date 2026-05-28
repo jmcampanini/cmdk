@@ -37,16 +37,16 @@ type Action struct {
 }
 
 type Behavior struct {
-	AutoSelectSingle bool `toml:"auto_select_single" config:"auto-select-single" help:"skip the action list when only one action matches"`
-	BellToTop        bool `toml:"bell_to_top" config:"bell-to-top" help:"sort tmux windows with bell activity to the top"`
-	WrapList         bool `toml:"wrap_list" config:"wrap-list" help:"wrap list navigation at the first and last item"`
-	StartInFilter    bool `toml:"start_in_filter" config:"start-in-filter" help:"open lists in filter mode"`
-	InlineActions    bool `toml:"inline_actions" config:"inline-actions" help:"expand directory actions inline in the root list"`
+	AutoSelectSingle bool `toml:"auto_select_single"`
+	BellToTop        bool `toml:"bell_to_top"`
+	WrapList         bool `toml:"wrap_list"`
+	StartInFilter    bool `toml:"start_in_filter"`
+	InlineActions    bool `toml:"inline_actions"`
 }
 
 type Timeout struct {
-	Fetch  time.Duration `toml:"fetch" config:"fetch-timeout" help:"maximum wait for source data"`
-	Picker time.Duration `toml:"picker" config:"picker-timeout" help:"maximum wait for picker stage source commands"`
+	Fetch  time.Duration `toml:"fetch"`
+	Picker time.Duration `toml:"picker"`
 }
 
 type SourceConfig struct {
@@ -55,9 +55,9 @@ type SourceConfig struct {
 }
 
 type Display struct {
-	ShortenHome      string            `toml:"shorten_home" config:"shorten-home" help:"replacement for the home directory prefix; empty disables shortening"`
-	TruncationLength int               `toml:"truncation_length" config:"truncation-length" help:"number of rightmost path segments to display; zero disables truncation"`
-	TruncationSymbol string            `toml:"truncation_symbol" config:"truncation-symbol" help:"string prepended when truncation occurs"`
+	ShortenHome      string            `toml:"shorten_home"`
+	TruncationLength int               `toml:"truncation_length"`
+	TruncationSymbol string            `toml:"truncation_symbol"`
 	Rules            map[string]string `toml:"rules"`
 }
 
@@ -76,9 +76,9 @@ var reservedKeys = []string{"path", "pane_id", "session", "window_index"}
 
 var validStageKey = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
-// DefaultConfig returns a Config with production defaults. Load layers TOML
-// and environment overrides on top of this struct, so fields set here act as
-// defaults for anything external config does not mention.
+// DefaultConfig returns a Config with production defaults. Load decodes TOML
+// on top of this struct, so fields set here act as defaults for anything the
+// user's config file does not mention.
 func DefaultConfig() Config {
 	return Config{
 		Behavior: Behavior{
@@ -273,12 +273,7 @@ func LoadWithReport(path string) (Config, configloader.LoadReport, error) {
 	if err != nil {
 		return DefaultConfig(), configloader.LoadReport{}, err
 	}
-	envLoader, err := configloader.NewEnvironmentLoader[Config]("cmdk", configloader.OSEnv())
-	if err != nil {
-		return DefaultConfig(), configloader.LoadReport{}, err
-	}
-
-	cfg, report, err := configloader.Load(DefaultConfig(), fileLoader, envLoader)
+	cfg, report, err := configloader.Load(DefaultConfig(), fileLoader)
 	if err != nil {
 		return DefaultConfig(), configloader.LoadReport{}, err
 	}
@@ -293,7 +288,7 @@ func LoadWithReport(path string) (Config, configloader.LoadReport, error) {
 	return cfg, report, nil
 }
 
-// ValidateFile validates a required config file without applying environment overrides.
+// ValidateFile validates a required config file.
 func ValidateFile(path string) error {
 	fileLoader, err := configloader.NewRequiredFileLoader[Config](path)
 	if err != nil {

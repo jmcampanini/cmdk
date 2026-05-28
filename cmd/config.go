@@ -22,7 +22,7 @@ func newConfigCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
 		Short: "Show resolved configuration and validate a config file",
-		Long:  "Show resolved configuration after applying defaults, the config file, and CMDK_* environment variables. Exits non-zero if the config is invalid.\n\nSee \"cmdk docs\" for the configuration reference and \"cmdk icons\" for icon aliases.",
+		Long:  "Show resolved configuration after applying defaults and the config file. Exits non-zero if the config is invalid.\n\nSee \"cmdk docs\" for the configuration reference and \"cmdk icons\" for icon aliases.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if validatePath != "" {

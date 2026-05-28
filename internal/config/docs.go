@@ -101,8 +101,6 @@ func RenderHelp() string {
 	b.WriteString("CONFIGURATION REFERENCE\n\n")
 	b.WriteString("Config file: $XDG_CONFIG_HOME/cmdk/config.toml\n")
 	b.WriteString("    default: ~/.config/cmdk/config.toml\n")
-	b.WriteString("Environment overrides use CMDK_ plus the config tag, e.g. CMDK_FETCH_TIMEOUT=5s or CMDK_WRAP_LIST=false.\n")
-
 	for _, section := range docs {
 		b.WriteString("\n")
 		b.WriteString(strings.ToUpper(section.Name))
