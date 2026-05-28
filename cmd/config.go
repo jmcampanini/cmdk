@@ -3,8 +3,10 @@ package cmd
 import (
 	"fmt"
 	"io"
-	"text/tabwriter"
+	"strings"
 
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
 	"github.com/jmcampanini/go-config-loader/configreporter"
 	"github.com/spf13/cobra"
 
@@ -64,17 +66,29 @@ func newConfigCommand() *cobra.Command {
 }
 
 func writeProvenanceTable(out io.Writer, reporter configreporter.Reporter[config.Config]) error {
-	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 	headers := reporter.ProvenanceHeaders()
-	if _, err := fmt.Fprintf(w, "# %s\t%s\t%s\n", headers[0], headers[1], headers[2]); err != nil {
-		return err
-	}
-	for _, row := range reporter.ProvenanceRows() {
-		if _, err := fmt.Fprintf(w, "# %s\t%s\t%s\n", row[0], row[1], row[2]); err != nil {
+	provenance := table.New().
+		BorderTop(false).
+		BorderBottom(false).
+		BorderLeft(false).
+		BorderRight(false).
+		BorderHeader(false).
+		BorderColumn(false).
+		StyleFunc(func(_ int, col int) lipgloss.Style {
+			if col < len(headers)-1 {
+				return lipgloss.NewStyle().PaddingRight(2)
+			}
+			return lipgloss.NewStyle()
+		}).
+		Headers(headers...).
+		Rows(reporter.ProvenanceRows()...)
+
+	for _, line := range strings.Split(provenance.String(), "\n") {
+		if _, err := fmt.Fprintf(out, "# %s\n", strings.TrimRight(line, " ")); err != nil {
 			return err
 		}
 	}
-	return w.Flush()
+	return nil
 }
 
 func init() {
