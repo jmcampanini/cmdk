@@ -3,7 +3,6 @@ package config
 import (
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -12,7 +11,7 @@ import (
 	"time"
 
 	log "charm.land/log/v2"
-	"github.com/BurntSushi/toml"
+	"github.com/jmcampanini/go-config-loader/configloader"
 
 	"github.com/jmcampanini/cmdk/internal/icon"
 )
@@ -38,16 +37,16 @@ type Action struct {
 }
 
 type Behavior struct {
-	AutoSelectSingle bool `toml:"auto_select_single"`
-	BellToTop        bool `toml:"bell_to_top"`
-	WrapList         bool `toml:"wrap_list"`
-	StartInFilter    bool `toml:"start_in_filter"`
-	InlineActions    bool `toml:"inline_actions"`
+	AutoSelectSingle bool `toml:"auto_select_single" config:"auto-select-single" help:"skip the action list when only one action matches"`
+	BellToTop        bool `toml:"bell_to_top" config:"bell-to-top" help:"sort tmux windows with bell activity to the top"`
+	WrapList         bool `toml:"wrap_list" config:"wrap-list" help:"wrap list navigation at the first and last item"`
+	StartInFilter    bool `toml:"start_in_filter" config:"start-in-filter" help:"open lists in filter mode"`
+	InlineActions    bool `toml:"inline_actions" config:"inline-actions" help:"expand directory actions inline in the root list"`
 }
 
 type Timeout struct {
-	Fetch  time.Duration `toml:"fetch"`
-	Picker time.Duration `toml:"picker"`
+	Fetch  time.Duration `toml:"fetch" config:"fetch-timeout" help:"maximum wait for source data"`
+	Picker time.Duration `toml:"picker" config:"picker-timeout" help:"maximum wait for picker stage source commands"`
 }
 
 type SourceConfig struct {
@@ -56,9 +55,9 @@ type SourceConfig struct {
 }
 
 type Display struct {
-	ShortenHome      string            `toml:"shorten_home"`
-	TruncationLength int               `toml:"truncation_length"`
-	TruncationSymbol string            `toml:"truncation_symbol"`
+	ShortenHome      string            `toml:"shorten_home" config:"shorten-home" help:"replacement for the home directory prefix; empty disables shortening"`
+	TruncationLength int               `toml:"truncation_length" config:"truncation-length" help:"number of rightmost path segments to display; zero disables truncation"`
+	TruncationSymbol string            `toml:"truncation_symbol" config:"truncation-symbol" help:"string prepended when truncation occurs"`
 	Rules            map[string]string `toml:"rules"`
 }
 
@@ -77,9 +76,9 @@ var reservedKeys = []string{"path", "pane_id", "session", "window_index"}
 
 var validStageKey = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
-// DefaultConfig returns a Config with production defaults. Load decodes TOML
-// on top of this struct, so fields set here act as defaults for anything the
-// user's config file does not mention.
+// DefaultConfig returns a Config with production defaults. Load layers TOML
+// and environment overrides on top of this struct, so fields set here act as
+// defaults for anything external config does not mention.
 func DefaultConfig() Config {
 	return Config{
 		Behavior: Behavior{
@@ -263,30 +262,64 @@ func (c *Config) resolveIcons() error {
 
 // Load always returns a valid Config, even when err is non-nil (defaults are used as fallback).
 func Load(path string) (Config, error) {
-	cfg := DefaultConfig()
+	cfg, _, err := LoadWithReport(path)
+	return cfg, err
+}
 
-	_, err := toml.DecodeFile(path, &cfg)
+// LoadWithReport loads the effective config and returns provenance metadata for the loaded layers.
+// It always returns a valid Config, even when err is non-nil (defaults are used as fallback).
+func LoadWithReport(path string) (Config, configloader.LoadReport, error) {
+	fileLoader, err := configloader.NewMergeAllFilesLoader[Config](configloader.File(path))
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return DefaultConfig(), nil
-		}
-		return DefaultConfig(), err
+		return DefaultConfig(), configloader.LoadReport{}, err
+	}
+	envLoader, err := configloader.NewEnvironmentLoader[Config]("cmdk", configloader.OSEnv())
+	if err != nil {
+		return DefaultConfig(), configloader.LoadReport{}, err
 	}
 
-	defaults := DefaultConfig()
-	for name, sc := range defaults.Sources {
+	cfg, report, err := configloader.Load(DefaultConfig(), fileLoader, envLoader)
+	if err != nil {
+		return DefaultConfig(), configloader.LoadReport{}, err
+	}
+
+	cfg = applyDefaultSources(cfg)
+	if err := cfg.Validate(); err != nil {
+		return DefaultConfig(), configloader.LoadReport{}, err
+	}
+	if err := cfg.resolveIcons(); err != nil {
+		return DefaultConfig(), configloader.LoadReport{}, err
+	}
+	return cfg, report, nil
+}
+
+// ValidateFile validates a required config file without applying environment overrides.
+func ValidateFile(path string) error {
+	fileLoader, err := configloader.NewRequiredFileLoader[Config](path)
+	if err != nil {
+		return err
+	}
+	cfg, _, err := configloader.Load(DefaultConfig(), fileLoader)
+	if err != nil {
+		return err
+	}
+	cfg = applyDefaultSources(cfg)
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
+	return cfg.resolveIcons()
+}
+
+func applyDefaultSources(cfg Config) Config {
+	if cfg.Sources == nil {
+		cfg.Sources = map[string]SourceConfig{}
+	}
+	for name, sc := range DefaultConfig().Sources {
 		if _, ok := cfg.Sources[name]; !ok {
 			cfg.Sources[name] = sc
 		}
 	}
-
-	if err := cfg.Validate(); err != nil {
-		return DefaultConfig(), err
-	}
-	if err := cfg.resolveIcons(); err != nil {
-		return DefaultConfig(), err
-	}
-	return cfg, nil
+	return cfg
 }
 
 func DefaultPath() string {

@@ -1,5 +1,10 @@
-BINARY_NAME := cmdk
-OUT_DIR := out
+.PHONY: help build test lint lint-fix fmt fmt-check tidy tidy-check check clean gen-icons
+
+BUILD_DIR   := build
+BINARY      := $(BUILD_DIR)/cmdk
+CMD         := .
+PKG         := ./...
+GOFMT_FILES := $(shell git ls-files --cached --others --exclude-standard -- '*.go')
 
 # Version is injected at build time via ldflags so `cmdk --version` reports
 # the git describe of the working tree (or an RFC3339 timestamp as a fallback).
@@ -7,38 +12,46 @@ VERSION := $(shell git describe --tags --dirty --always 2>/dev/null || date -u '
 LDFLAGS := -ldflags "-X github.com/jmcampanini/cmdk/cmd.Version=$(VERSION)"
 
 .DEFAULT_GOAL := help
-.PHONY: help build check fmt tidy lint test clean gen-icons
 
-help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-15s %s\n", $$1, $$2}'
+help: ## Show this help.
+	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_.-]+:.*##/ { printf "  %-16s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
-build: ## compile binary to ./out/cmdk
-	mkdir -p $(OUT_DIR)
-	go build $(LDFLAGS) -o $(OUT_DIR)/$(BINARY_NAME) .
+build: ## Build cmdk into ./build/cmdk.
+	@mkdir -p $(BUILD_DIR)
+	go build $(LDFLAGS) -o $(BINARY) $(CMD)
 
-test: ## run tests with -race
-	go test -race ./...
+test: ## Run tests with the race detector.
+	go test -race $(PKG)
 
-lint: ## run golangci-lint
-	golangci-lint run ./...
+lint: ## Run golangci-lint.
+	golangci-lint run $(PKG)
 
-fmt: ## apply gofmt -w in-place
-	gofmt -w .
+lint-fix: ## Run golangci-lint with --fix.
+	golangci-lint run --fix $(PKG)
 
-tidy: ## apply go mod tidy
+fmt: ## Apply gofmt -w to tracked/non-ignored Go files.
+	@if [ -n "$(GOFMT_FILES)" ]; then gofmt -w $(GOFMT_FILES); fi
+
+fmt-check: ## Fail if tracked/non-ignored Go files need gofmt.
+	@if [ -z "$(GOFMT_FILES)" ]; then exit 0; fi; \
+	diff=$$(gofmt -l $(GOFMT_FILES) 2>&1); rc=$$?; \
+	if [ $$rc -ne 0 ]; then echo "gofmt failed (rc=$$rc):"; echo "$$diff"; exit $$rc; fi; \
+	if [ -n "$$diff" ]; then echo "gofmt issues:"; echo "$$diff"; exit 1; fi
+
+tidy: ## Apply go mod tidy.
 	go mod tidy
 
-check: ## fmt-check + tidy-check + lint + test
-	@test -z "$$(gofmt -l .)" || { echo "gofmt needed:"; gofmt -d .; exit 1; }
-	go mod tidy -diff
-	$(MAKE) lint
-	$(MAKE) test
+tidy-check: ## Fail if go mod tidy would change go.mod/go.sum.
+	@out=$$(go mod tidy -diff); rc=$$?; \
+	if [ $$rc -eq 0 ]; then exit 0; fi; \
+	if [ -n "$$out" ]; then echo "$$out"; echo "go mod tidy would change go.mod/go.sum"; exit 1; fi; \
+	echo "go mod tidy failed (rc=$$rc)"; exit $$rc
 
-clean: ## remove build artifacts and caches
-	go clean
+check: fmt-check tidy-check lint test ## Run all non-mutating checks.
+
+clean: ## Remove build artifacts, coverage files, and test cache.
+	rm -rf $(BUILD_DIR) out dist coverage.out coverage.html *.coverprofile
 	go clean -testcache
-	golangci-lint cache clean
-	rm -rf $(OUT_DIR)
 
-gen-icons: ## regenerate icon entries from Nerd Fonts glyphnames.json
+gen-icons: ## Regenerate icon entries from Nerd Fonts glyphnames.json.
 	go run ./internal/icon/gen

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jmcampanini/go-config-loader/configloader"
 )
 
 func TestDefaultConfig(t *testing.T) {
@@ -641,6 +643,63 @@ min_score = 2.5
 	}
 	if cfg.Sources["zoxide"].MinScore != 2.5 {
 		t.Errorf("Sources[zoxide].MinScore = %f, want 2.5", cfg.Sources["zoxide"].MinScore)
+	}
+}
+
+func TestLoadWithReport_TracksFileProvenance(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[timeout]
+fetch = "3s"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, report, err := LoadWithReport(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Timeout.Fetch != 3*time.Second {
+		t.Errorf("Timeout.Fetch = %s, want 3s", cfg.Timeout.Fetch)
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := report.Updates["timeout.fetch"]; got != absPath {
+		t.Errorf("report.Updates[timeout.fetch] = %q, want %q", got, absPath)
+	}
+	if len(report.LoadedFiles) != 1 || report.LoadedFiles[0] != absPath {
+		t.Errorf("report.LoadedFiles = %v, want [%q]", report.LoadedFiles, absPath)
+	}
+}
+
+func TestLoadWithReport_EnvironmentOverrides(t *testing.T) {
+	t.Setenv("CMDK_FETCH_TIMEOUT", "5s")
+	t.Setenv("CMDK_WRAP_LIST", "false")
+
+	cfg, report, err := LoadWithReport("/nonexistent/path/config.toml")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Timeout.Fetch != 5*time.Second {
+		t.Errorf("Timeout.Fetch = %s, want 5s", cfg.Timeout.Fetch)
+	}
+	if cfg.Behavior.WrapList {
+		t.Error("Behavior.WrapList = true, want false")
+	}
+	if got := report.Updates["timeout.fetch"]; got != configloader.SourceEnv {
+		t.Errorf("report.Updates[timeout.fetch] = %q, want %q", got, configloader.SourceEnv)
+	}
+	if got := report.Updates["behavior.wraplist"]; got != configloader.SourceEnv {
+		t.Errorf("report.Updates[behavior.wraplist] = %q, want %q", got, configloader.SourceEnv)
+	}
+}
+
+func TestValidateFile_MissingFile(t *testing.T) {
+	if err := ValidateFile("/nonexistent/path/config.toml"); err == nil {
+		t.Fatal("ValidateFile() error = nil, want missing file error")
 	}
 }
 

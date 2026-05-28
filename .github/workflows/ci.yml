@@ -40,4 +40,4 @@ jobs:
         run: make build
 
       - name: Version smoke test
-        run: ./out/cmdk --version
+        run: ./build/cmdk --version

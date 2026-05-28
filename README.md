@@ -21,7 +21,7 @@ brew upgrade --fetch-HEAD cmdk
 
 ```sh
 make build
-# binary at ./out/cmdk — copy or symlink onto your PATH
+# binary at ./build/cmdk — copy or symlink onto your PATH
 ```
 
 ## Quickstart
@@ -39,6 +39,7 @@ Reload tmux (`tmux source-file ~/.tmux.conf`), then press `prefix + Space` insid
 For the full command reference, run `cmdk --help`. See also:
 
 - `cmdk help exit-codes` — exit codes and error categories
+- `cmdk config --provenance` — effective configuration and source provenance
 - `cmdk logs --help` — where logs go and how to inspect them
 - `cmdk docs` — configuration reference
 - `cmdk icons` — supported icon aliases
