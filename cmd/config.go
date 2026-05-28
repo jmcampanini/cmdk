@@ -15,58 +15,71 @@ import (
 
 var configCmd = newConfigCommand()
 
+type configCommandOptions struct {
+	showProvenance bool
+	validatePath   string
+}
+
 func newConfigCommand() *cobra.Command {
-	var showProvenance bool
-	var validatePath string
+	var options configCommandOptions
 
 	cmd := &cobra.Command{
 		Use:   "config",
 		Short: "Show resolved configuration and validate a config file",
 		Long:  "Show resolved configuration after applying defaults and the config file. Exits non-zero if the config is invalid.\n\nSee \"cmdk docs\" for the configuration reference and \"cmdk icons\" for icon aliases.",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if validatePath != "" {
-				if err := config.ValidateFile(validatePath); err != nil {
-					return err
-				}
-				_, err := fmt.Fprintln(cmd.OutOrStdout(), "valid")
-				return err
-			}
-
-			path, err := resolveConfigPath()
-			if err != nil {
-				return err
-			}
-			cfg, report, err := config.LoadWithReport(path)
-			if err != nil {
-				return err
-			}
-
-			out := cmd.OutOrStdout()
-			reporter := configreporter.New(cfg, report)
-			if _, err := fmt.Fprintf(out, "# %s\n", path); err != nil {
-				return err
-			}
-			if err := reporter.WriteTOML(out); err != nil {
-				return err
-			}
-			if !showProvenance {
-				return nil
-			}
-
-			if _, err := fmt.Fprintln(out, "\n# Provenance"); err != nil {
-				return err
-			}
-			return writeProvenanceTable(out, reporter)
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runConfigCommand(cmd, options)
 		},
 	}
-	cmd.Flags().BoolVar(&showProvenance, "provenance", false, "include config provenance")
-	cmd.Flags().StringVar(&validatePath, "validate", "", "validate a config file and exit")
+	cmd.Flags().BoolVar(&options.showProvenance, "provenance", false, "include config provenance")
+	cmd.Flags().StringVar(&options.validatePath, "validate", "", "validate a config file and exit")
 	return cmd
+}
+
+func runConfigCommand(cmd *cobra.Command, options configCommandOptions) error {
+	if options.validatePath != "" {
+		if err := config.ValidateFile(options.validatePath); err != nil {
+			return err
+		}
+		_, err := fmt.Fprintln(cmd.OutOrStdout(), "valid")
+		return err
+	}
+
+	path, err := resolveConfigPath()
+	if err != nil {
+		return err
+	}
+	cfg, report, err := config.LoadWithReport(path)
+	if err != nil {
+		return err
+	}
+
+	reporter := configreporter.New(cfg, report)
+	return writeConfigReport(cmd.OutOrStdout(), path, reporter, options.showProvenance)
+}
+
+func writeConfigReport(out io.Writer, path string, reporter configreporter.Reporter[config.Config], showProvenance bool) error {
+	if _, err := fmt.Fprintf(out, "# %s\n", path); err != nil {
+		return err
+	}
+	if err := reporter.WriteTOML(out); err != nil {
+		return err
+	}
+	if !showProvenance {
+		return nil
+	}
+
+	if _, err := fmt.Fprintln(out, "\n# Provenance"); err != nil {
+		return err
+	}
+	return writeProvenanceTable(out, reporter)
 }
 
 func writeProvenanceTable(out io.Writer, reporter configreporter.Reporter[config.Config]) error {
 	headers := reporter.ProvenanceHeaders()
+	paddedCell := lipgloss.NewStyle().PaddingRight(2)
+	plainCell := lipgloss.NewStyle()
 	provenance := table.New().
 		BorderTop(false).
 		BorderBottom(false).
@@ -76,9 +89,9 @@ func writeProvenanceTable(out io.Writer, reporter configreporter.Reporter[config
 		BorderColumn(false).
 		StyleFunc(func(_ int, col int) lipgloss.Style {
 			if col < len(headers)-1 {
-				return lipgloss.NewStyle().PaddingRight(2)
+				return paddedCell
 			}
-			return lipgloss.NewStyle()
+			return plainCell
 		}).
 		Headers(headers...).
 		Rows(reporter.ProvenanceRows()...)

@@ -703,11 +703,12 @@ func TestLoadWithReport_IgnoresConfigEnvOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.Timeout.Fetch != DefaultConfig().Timeout.Fetch {
-		t.Errorf("Timeout.Fetch = %s, want default %s", cfg.Timeout.Fetch, DefaultConfig().Timeout.Fetch)
+	defaults := DefaultConfig()
+	if cfg.Timeout.Fetch != defaults.Timeout.Fetch {
+		t.Errorf("Timeout.Fetch = %s, want default %s", cfg.Timeout.Fetch, defaults.Timeout.Fetch)
 	}
-	if cfg.Behavior.WrapList != DefaultConfig().Behavior.WrapList {
-		t.Errorf("Behavior.WrapList = %v, want default %v", cfg.Behavior.WrapList, DefaultConfig().Behavior.WrapList)
+	if cfg.Behavior.WrapList != defaults.Behavior.WrapList {
+		t.Errorf("Behavior.WrapList = %v, want default %v", cfg.Behavior.WrapList, defaults.Behavior.WrapList)
 	}
 	if got := report.Updates["timeout.fetch"]; got != configloader.SourceDefault {
 		t.Errorf("report.Updates[timeout.fetch] = %q, want %q", got, configloader.SourceDefault)

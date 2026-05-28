@@ -282,11 +282,8 @@ func LoadWithReport(path string) (Config, configloader.LoadReport, error) {
 		return DefaultConfig(), configloader.LoadReport{}, err
 	}
 
-	cfg = applyDefaultSources(cfg)
-	if err := cfg.Validate(); err != nil {
-		return DefaultConfig(), configloader.LoadReport{}, err
-	}
-	if err := cfg.resolveIcons(); err != nil {
+	cfg, err = finalizeLoadedConfig(cfg)
+	if err != nil {
 		return DefaultConfig(), configloader.LoadReport{}, err
 	}
 	return cfg, report, nil
@@ -305,11 +302,19 @@ func ValidateFile(path string) error {
 	if err != nil {
 		return err
 	}
+	_, err = finalizeLoadedConfig(cfg)
+	return err
+}
+
+func finalizeLoadedConfig(cfg Config) (Config, error) {
 	cfg = applyDefaultSources(cfg)
 	if err := cfg.Validate(); err != nil {
-		return err
+		return cfg, err
 	}
-	return cfg.resolveIcons()
+	if err := cfg.resolveIcons(); err != nil {
+		return cfg, err
+	}
+	return cfg, nil
 }
 
 // TODO: Remove these preflight checks once go-config-loader rejects existing
@@ -318,24 +323,26 @@ func validateOptionalRegularFile(path string) error {
 	if path == "" {
 		return nil
 	}
-	info, err := os.Stat(path)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil
-		}
-		return fmt.Errorf("config file not accessible: %w", err)
+	err := validateRegularFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
 	}
-	if !info.Mode().IsRegular() {
-		return fmt.Errorf("config path is not a regular file: %s", path)
-	}
-	return nil
+	return err
 }
 
 func validateRequiredRegularFile(path string) error {
+	err := validateRegularFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("config file not found: %s", path)
+	}
+	return err
+}
+
+func validateRegularFile(path string) error {
 	info, err := os.Stat(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("config file not found: %s", path)
+			return err
 		}
 		return fmt.Errorf("config file not accessible: %w", err)
 	}
