@@ -4,7 +4,7 @@ BUILD_DIR   := build
 BINARY      := $(BUILD_DIR)/cmdk
 CMD         := .
 PKG         := ./...
-GOFMT_FILES := $(shell git ls-files --cached --others --exclude-standard -- '*.go')
+GOFMT_FILES := $(shell git ls-files '*.go')
 
 # Version is injected at build time via ldflags so `cmdk --version` reports
 # the git describe of the working tree (or an RFC3339 timestamp as a fallback).
@@ -29,14 +29,17 @@ lint: ## Run golangci-lint.
 lint-fix: ## Run golangci-lint with --fix.
 	golangci-lint run --fix $(PKG)
 
-fmt: ## Apply gofmt -w to tracked/non-ignored Go files.
+fmt: ## Format tracked Go files.
 	@if [ -n "$(GOFMT_FILES)" ]; then gofmt -w $(GOFMT_FILES); fi
 
-fmt-check: ## Fail if tracked/non-ignored Go files need gofmt.
-	@if [ -z "$(GOFMT_FILES)" ]; then exit 0; fi; \
-	files=$$(gofmt -l $(GOFMT_FILES) 2>&1); rc=$$?; \
-	if [ $$rc -ne 0 ]; then echo "gofmt failed (rc=$$rc):"; echo "$$files"; exit $$rc; fi; \
-	if [ -n "$$files" ]; then echo "gofmt issues:"; echo "$$files"; exit 1; fi
+fmt-check: ## Fail if tracked Go files need gofmt.
+	@files="$$(gofmt -l $(GOFMT_FILES))"; \
+	if [ -n "$$files" ]; then \
+		echo "gofmt needed:"; \
+		echo "$$files"; \
+		echo "Run: make fmt"; \
+		exit 1; \
+	fi
 
 tidy: ## Apply go mod tidy.
 	go mod tidy
