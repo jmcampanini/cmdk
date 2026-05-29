@@ -101,7 +101,6 @@ func RenderHelp() string {
 	b.WriteString("CONFIGURATION REFERENCE\n\n")
 	b.WriteString("Config file: $XDG_CONFIG_HOME/cmdk/config.toml\n")
 	b.WriteString("    default: ~/.config/cmdk/config.toml\n")
-
 	for _, section := range docs {
 		b.WriteString("\n")
 		b.WriteString(strings.ToUpper(section.Name))

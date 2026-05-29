@@ -12,7 +12,7 @@ import (
 	"time"
 
 	log "charm.land/log/v2"
-	"github.com/BurntSushi/toml"
+	"github.com/jmcampanini/go-config-loader/configloader"
 
 	"github.com/jmcampanini/cmdk/internal/icon"
 )
@@ -263,30 +263,104 @@ func (c *Config) resolveIcons() error {
 
 // Load always returns a valid Config, even when err is non-nil (defaults are used as fallback).
 func Load(path string) (Config, error) {
-	cfg := DefaultConfig()
+	cfg, _, err := LoadWithReport(path)
+	return cfg, err
+}
 
-	_, err := toml.DecodeFile(path, &cfg)
+// LoadWithReport loads the effective config and returns provenance metadata for the loaded layers.
+// It always returns a valid Config, even when err is non-nil (defaults are used as fallback).
+func LoadWithReport(path string) (Config, configloader.LoadReport, error) {
+	if err := validateOptionalRegularFile(path); err != nil {
+		return DefaultConfig(), configloader.LoadReport{}, err
+	}
+	fileLoader, err := configloader.NewMergeAllFilesLoader[Config](configloader.File(path))
+	if err != nil {
+		return DefaultConfig(), configloader.LoadReport{}, err
+	}
+	return loadConfig(fileLoader)
+}
+
+// ValidateFile validates a required config file.
+func ValidateFile(path string) error {
+	if err := validateRequiredRegularFile(path); err != nil {
+		return err
+	}
+	fileLoader, err := configloader.NewRequiredFileLoader[Config](path)
+	if err != nil {
+		return err
+	}
+	_, _, err = loadConfig(fileLoader)
+	return err
+}
+
+func loadConfig(fileLoader configloader.ConfigLoader[Config]) (Config, configloader.LoadReport, error) {
+	cfg, report, err := configloader.Load(DefaultConfig(), fileLoader)
+	if err != nil {
+		return DefaultConfig(), configloader.LoadReport{}, err
+	}
+	cfg, err = finalizeLoadedConfig(cfg)
+	if err != nil {
+		return DefaultConfig(), configloader.LoadReport{}, err
+	}
+	return cfg, report, nil
+}
+
+func finalizeLoadedConfig(cfg Config) (Config, error) {
+	cfg = applyDefaultSources(cfg)
+	if err := cfg.Validate(); err != nil {
+		return cfg, err
+	}
+	if err := cfg.resolveIcons(); err != nil {
+		return cfg, err
+	}
+	return cfg, nil
+}
+
+// TODO: Remove these preflight checks once go-config-loader rejects existing
+// non-regular config paths while still allowing missing optional files.
+func validateOptionalRegularFile(path string) error {
+	if path == "" {
+		return nil
+	}
+	err := validateRegularFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	return err
+}
+
+func validateRequiredRegularFile(path string) error {
+	err := validateRegularFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("config file not found: %s", path)
+	}
+	return err
+}
+
+func validateRegularFile(path string) error {
+	info, err := os.Stat(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return DefaultConfig(), nil
+			return err
 		}
-		return DefaultConfig(), err
+		return fmt.Errorf("config file not accessible: %w", err)
 	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("config path is not a regular file: %s", path)
+	}
+	return nil
+}
 
-	defaults := DefaultConfig()
-	for name, sc := range defaults.Sources {
+func applyDefaultSources(cfg Config) Config {
+	if cfg.Sources == nil {
+		cfg.Sources = map[string]SourceConfig{}
+	}
+	for name, sc := range DefaultConfig().Sources {
 		if _, ok := cfg.Sources[name]; !ok {
 			cfg.Sources[name] = sc
 		}
 	}
-
-	if err := cfg.Validate(); err != nil {
-		return DefaultConfig(), err
-	}
-	if err := cfg.resolveIcons(); err != nil {
-		return DefaultConfig(), err
-	}
-	return cfg, nil
+	return cfg
 }
 
 func DefaultPath() string {

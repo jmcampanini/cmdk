@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jmcampanini/go-config-loader/configloader"
 )
 
 func TestDefaultConfig(t *testing.T) {
@@ -513,6 +515,27 @@ func TestLoad_MissingFile_ReturnsDefaults(t *testing.T) {
 	}
 }
 
+func TestLoad_DirectoryPathReturnsError(t *testing.T) {
+	cfg, err := Load(t.TempDir())
+	if err == nil {
+		t.Fatal("expected error for directory config path")
+	}
+	defaults := DefaultConfig()
+	if cfg.Timeout.Fetch != defaults.Timeout.Fetch {
+		t.Errorf("Timeout.Fetch = %s, want default %s", cfg.Timeout.Fetch, defaults.Timeout.Fetch)
+	}
+}
+
+func TestValidateFile_RejectsNonRegularPath(t *testing.T) {
+	path := os.DevNull
+	if _, err := os.Stat(path); err != nil {
+		t.Skipf("os.DevNull is not available: %v", err)
+	}
+	if err := ValidateFile(path); err == nil {
+		t.Fatal("ValidateFile(os.DevNull) error = nil, want non-regular file error")
+	}
+}
+
 func TestLoad_MalformedTOML(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
@@ -641,6 +664,64 @@ min_score = 2.5
 	}
 	if cfg.Sources["zoxide"].MinScore != 2.5 {
 		t.Errorf("Sources[zoxide].MinScore = %f, want 2.5", cfg.Sources["zoxide"].MinScore)
+	}
+}
+
+func TestLoadWithReport_TracksFileProvenance(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[timeout]
+fetch = "3s"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, report, err := LoadWithReport(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Timeout.Fetch != 3*time.Second {
+		t.Errorf("Timeout.Fetch = %s, want 3s", cfg.Timeout.Fetch)
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := report.Updates["timeout.fetch"]; got != absPath {
+		t.Errorf("report.Updates[timeout.fetch] = %q, want %q", got, absPath)
+	}
+	if len(report.LoadedFiles) != 1 || report.LoadedFiles[0] != absPath {
+		t.Errorf("report.LoadedFiles = %v, want [%q]", report.LoadedFiles, absPath)
+	}
+}
+
+func TestLoadWithReport_IgnoresConfigEnvOverrides(t *testing.T) {
+	t.Setenv("CMDK_FETCH_TIMEOUT", "5s")
+	t.Setenv("CMDK_WRAP_LIST", "false")
+
+	cfg, report, err := LoadWithReport("/nonexistent/path/config.toml")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	defaults := DefaultConfig()
+	if cfg.Timeout.Fetch != defaults.Timeout.Fetch {
+		t.Errorf("Timeout.Fetch = %s, want default %s", cfg.Timeout.Fetch, defaults.Timeout.Fetch)
+	}
+	if cfg.Behavior.WrapList != defaults.Behavior.WrapList {
+		t.Errorf("Behavior.WrapList = %v, want default %v", cfg.Behavior.WrapList, defaults.Behavior.WrapList)
+	}
+	if got := report.Updates["timeout.fetch"]; got != configloader.SourceDefault {
+		t.Errorf("report.Updates[timeout.fetch] = %q, want %q", got, configloader.SourceDefault)
+	}
+	if got := report.Updates["behavior.wraplist"]; got != configloader.SourceDefault {
+		t.Errorf("report.Updates[behavior.wraplist] = %q, want %q", got, configloader.SourceDefault)
+	}
+}
+
+func TestValidateFile_MissingFile(t *testing.T) {
+	if err := ValidateFile("/nonexistent/path/config.toml"); err == nil {
+		t.Fatal("ValidateFile() error = nil, want missing file error")
 	}
 }
 
