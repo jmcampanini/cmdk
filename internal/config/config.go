@@ -277,16 +277,7 @@ func LoadWithReport(path string) (Config, configloader.LoadReport, error) {
 	if err != nil {
 		return DefaultConfig(), configloader.LoadReport{}, err
 	}
-	cfg, report, err := configloader.Load(DefaultConfig(), fileLoader)
-	if err != nil {
-		return DefaultConfig(), configloader.LoadReport{}, err
-	}
-
-	cfg, err = finalizeLoadedConfig(cfg)
-	if err != nil {
-		return DefaultConfig(), configloader.LoadReport{}, err
-	}
-	return cfg, report, nil
+	return loadConfig(fileLoader)
 }
 
 // ValidateFile validates a required config file.
@@ -298,12 +289,20 @@ func ValidateFile(path string) error {
 	if err != nil {
 		return err
 	}
-	cfg, _, err := configloader.Load(DefaultConfig(), fileLoader)
-	if err != nil {
-		return err
-	}
-	_, err = finalizeLoadedConfig(cfg)
+	_, _, err = loadConfig(fileLoader)
 	return err
+}
+
+func loadConfig(fileLoader configloader.ConfigLoader[Config]) (Config, configloader.LoadReport, error) {
+	cfg, report, err := configloader.Load(DefaultConfig(), fileLoader)
+	if err != nil {
+		return DefaultConfig(), configloader.LoadReport{}, err
+	}
+	cfg, err = finalizeLoadedConfig(cfg)
+	if err != nil {
+		return DefaultConfig(), configloader.LoadReport{}, err
+	}
+	return cfg, report, nil
 }
 
 func finalizeLoadedConfig(cfg Config) (Config, error) {

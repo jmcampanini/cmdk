@@ -78,6 +78,7 @@ func writeConfigReport(out io.Writer, path string, reporter configreporter.Repor
 
 func writeProvenanceTable(out io.Writer, reporter configreporter.Reporter[config.Config]) error {
 	headers := reporter.ProvenanceHeaders()
+	lastColumn := len(headers) - 1
 	paddedCell := lipgloss.NewStyle().PaddingRight(2)
 	plainCell := lipgloss.NewStyle()
 	provenance := table.New().
@@ -88,7 +89,7 @@ func writeProvenanceTable(out io.Writer, reporter configreporter.Reporter[config
 		BorderHeader(false).
 		BorderColumn(false).
 		StyleFunc(func(_ int, col int) lipgloss.Style {
-			if col < len(headers)-1 {
+			if col < lastColumn {
 				return paddedCell
 			}
 			return plainCell

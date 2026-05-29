@@ -34,9 +34,9 @@ fmt: ## Apply gofmt -w to tracked/non-ignored Go files.
 
 fmt-check: ## Fail if tracked/non-ignored Go files need gofmt.
 	@if [ -z "$(GOFMT_FILES)" ]; then exit 0; fi; \
-	diff=$$(gofmt -l $(GOFMT_FILES) 2>&1); rc=$$?; \
-	if [ $$rc -ne 0 ]; then echo "gofmt failed (rc=$$rc):"; echo "$$diff"; exit $$rc; fi; \
-	if [ -n "$$diff" ]; then echo "gofmt issues:"; echo "$$diff"; exit 1; fi
+	files=$$(gofmt -l $(GOFMT_FILES) 2>&1); rc=$$?; \
+	if [ $$rc -ne 0 ]; then echo "gofmt failed (rc=$$rc):"; echo "$$files"; exit $$rc; fi; \
+	if [ -n "$$files" ]; then echo "gofmt issues:"; echo "$$files"; exit 1; fi
 
 tidy: ## Apply go mod tidy.
 	go mod tidy

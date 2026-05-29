@@ -527,10 +527,11 @@ func TestLoad_DirectoryPathReturnsError(t *testing.T) {
 }
 
 func TestValidateFile_RejectsNonRegularPath(t *testing.T) {
-	if _, err := os.Stat(os.DevNull); err != nil {
+	path := os.DevNull
+	if _, err := os.Stat(path); err != nil {
 		t.Skipf("os.DevNull is not available: %v", err)
 	}
-	if err := ValidateFile(os.DevNull); err == nil {
+	if err := ValidateFile(path); err == nil {
 		t.Fatal("ValidateFile(os.DevNull) error = nil, want non-regular file error")
 	}
 }
