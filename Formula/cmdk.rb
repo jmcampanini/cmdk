@@ -6,8 +6,11 @@ class Cmdk < Formula
   depends_on "go" => :build
 
   def install
-    ldflags = "-s -w -X github.com/jmcampanini/cmdk/cmd.Version=HEAD-#{Utils.git_short_head}"
-    system "go", "build", *std_go_args(output: bin/"cmdk", ldflags: ldflags)
+    ldflags = %W[
+      -s -w
+      -X github.com/jmcampanini/cmdk/cmd.Version=#{version}
+    ]
+    system "go", "build", "-buildvcs=false", *std_go_args(output: bin/"cmdk", ldflags:)
     generate_completions_from_executable(bin/"cmdk", "completion")
   end
 
