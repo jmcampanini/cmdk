@@ -12,6 +12,8 @@ import (
 type SessionWindowsFunc func(context.Context, item.Item) ([]item.Item, error)
 
 func NewSessionGenerator(fetchWindows SessionWindowsFunc) GeneratorFunc {
+	actions := NewActionsGenerator()
+
 	return func(accumulated []item.Item, ctx Context) []item.Item {
 		if len(accumulated) == 0 {
 			return nil
@@ -36,11 +38,11 @@ func NewSessionGenerator(fetchWindows SessionWindowsFunc) GeneratorFunc {
 				Display: "Connect",
 				Action:  item.ActionExecute,
 				Cmd:     sessionConnectCmd(session),
-				Data:    maps.Clone(data),
+				Data:    data,
 			},
 		}
 
-		items = append(items, NewActionsGenerator()(accumulated, ctx)...)
+		items = append(items, actions(accumulated, ctx)...)
 		items = append(items, fetchSessionWindows(session, ctx, fetchWindows)...)
 		return items
 	}

@@ -3,6 +3,7 @@ package tmux
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os/exec"
 	"sort"
 	"strconv"
@@ -130,9 +131,7 @@ func ParseWindowsForSession(output string, session item.Item) []item.Item {
 		}
 		it.Action = item.ActionExecute
 		it.Cmd = sessionWindowCmd(session)
-		for k, v := range session.Data {
-			it.Data[k] = v
-		}
+		maps.Copy(it.Data, session.Data)
 		if sessionName := session.Data["session_name"]; sessionName != "" {
 			it.Data["session"] = sessionName
 		}

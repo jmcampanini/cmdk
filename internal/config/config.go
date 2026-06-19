@@ -169,6 +169,7 @@ func reservedKeysForMatch(matchType string) []string {
 }
 
 func validateStages(actionIdx int, matchType string, stages []StageConfig) error {
+	reserved := reservedKeysForMatch(matchType)
 	seenKeys := make(map[string]bool, len(stages))
 	for j, s := range stages {
 		prefix := fmt.Sprintf("actions[%d].stages[%d]", actionIdx, j)
@@ -183,7 +184,6 @@ func validateStages(actionIdx int, matchType string, stages []StageConfig) error
 			return fmt.Errorf("%s.key %q is duplicate within this action (case-insensitive)", prefix, s.Key)
 		}
 		seenKeys[lower] = true
-		reserved := reservedKeysForMatch(matchType)
 		if slices.Contains(reserved, lower) {
 			return fmt.Errorf("%s.key %q is reserved (reserved keys: %v)", prefix, s.Key, reserved)
 		}
