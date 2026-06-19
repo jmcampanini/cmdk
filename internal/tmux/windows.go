@@ -85,38 +85,50 @@ func newWindowItem(parsed windowLine, bell bool) item.Item {
 	return it
 }
 
-func ParseWindows(output string) []item.Item {
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	if len(lines) == 1 && lines[0] == "" {
-		return nil
+func newWindowParseErrorItem(malformedRows int) item.Item {
+	rowWord := "row"
+	if malformedRows != 1 {
+		rowWord = "rows"
 	}
 
-	type entry struct {
-		session     string
-		windowIndex int
-		bell        bool
-		item        item.Item
-	}
+	it := item.NewItem()
+	it.Type = "window"
+	it.Source = "tmux"
+	it.Display = fmt.Sprintf("tmux parse error: %d unparseable list-windows %s", malformedRows, rowWord)
+	return it
+}
 
-	entries := make([]entry, 0, len(lines))
+type windowEntry struct {
+	session     string
+	windowIndex int
+	bell        bool
+	item        item.Item
+}
+
+func parseWindowEntries(output string) ([]windowEntry, int) {
+	lines := strings.Split(output, "\n")
+	entries := make([]windowEntry, 0, len(lines))
+	malformedRows := 0
+
 	for _, line := range lines {
-		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
 
 		parsed, ok := parseWindowLine(line)
 		if !ok {
+			malformedRows++
 			continue
 		}
 
 		idx, err := strconv.Atoi(parsed.windowIndex)
 		if err != nil {
+			malformedRows++
 			continue
 		}
 
 		bell := parsed.bellFlag == "1"
-		entries = append(entries, entry{
+		entries = append(entries, windowEntry{
 			session:     parsed.session,
 			windowIndex: idx,
 			bell:        bell,
@@ -124,6 +136,10 @@ func ParseWindows(output string) []item.Item {
 		})
 	}
 
+	return entries, malformedRows
+}
+
+func sortWindowEntries(entries []windowEntry) {
 	// Bell windows sort first: true sorts before false.
 	sort.Slice(entries, func(i, j int) bool {
 		left, right := entries[i], entries[j]
@@ -135,12 +151,31 @@ func ParseWindows(output string) []item.Item {
 		}
 		return left.windowIndex < right.windowIndex
 	})
+}
 
+func itemsFromWindowEntries(entries []windowEntry) []item.Item {
 	items := make([]item.Item, len(entries))
 	for i, e := range entries {
 		items[i] = e.item
 	}
 	return items
+}
+
+func ParseWindows(output string) ([]item.Item, error) {
+	entries, malformedRows := parseWindowEntries(output)
+	if len(entries) == 0 {
+		if malformedRows > 0 {
+			return nil, fmt.Errorf("could not parse any tmux list-windows rows (%d unparseable)", malformedRows)
+		}
+		return nil, nil
+	}
+
+	sortWindowEntries(entries)
+	items := itemsFromWindowEntries(entries)
+	if malformedRows > 0 {
+		items = append(items, newWindowParseErrorItem(malformedRows))
+	}
+	return items, nil
 }
 
 func ListWindows(ctx context.Context) ([]item.Item, error) {
@@ -151,5 +186,5 @@ func ListWindows(ctx context.Context) ([]item.Item, error) {
 		}
 		return nil, err
 	}
-	return ParseWindows(string(out)), nil
+	return ParseWindows(string(out))
 }

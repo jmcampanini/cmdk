@@ -6,9 +6,18 @@ import (
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
+func mustParseWindows(t *testing.T, output string) []item.Item {
+	t.Helper()
+	items, err := ParseWindows(output)
+	if err != nil {
+		t.Fatalf("ParseWindows returned error: %v", err)
+	}
+	return items
+}
+
 func TestParseWindows_MultiSession(t *testing.T) {
 	output := "dev\t$2\t1\t@3\tnode\t0\nmain\t$1\t1\t@1\tzsh\t0\nmain\t$1\t2\t@2\tvim\t0\n"
-	items := ParseWindows(output)
+	items := mustParseWindows(t, output)
 
 	if len(items) != 3 {
 		t.Fatalf("got %d items, want 3", len(items))
@@ -53,7 +62,7 @@ func TestParseWindows_MultiSession(t *testing.T) {
 
 func TestParseWindows_SortBySessionThenIndex(t *testing.T) {
 	output := "z\t$2\t2\t@4\tbash\t0\na\t$1\t3\t@3\tzsh\t0\na\t$1\t1\t@1\tvim\t0\nz\t$2\t1\t@2\tfish\t0\n"
-	items := ParseWindows(output)
+	items := mustParseWindows(t, output)
 
 	if len(items) != 4 {
 		t.Fatalf("got %d items, want 4", len(items))
@@ -69,7 +78,7 @@ func TestParseWindows_SortBySessionThenIndex(t *testing.T) {
 
 func TestParseWindows_WindowNameWithSpaces(t *testing.T) {
 	output := "work\t$9\t1\t@7\tmy cool app\t0\n"
-	items := ParseWindows(output)
+	items := mustParseWindows(t, output)
 
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
@@ -93,7 +102,7 @@ func TestParseWindows_WindowNameWithSpaces(t *testing.T) {
 
 func TestParseWindows_EscapedControlCharsInNames(t *testing.T) {
 	output := "work" + tmuxEscapedNewline + "notes\t$9\t1\t@7\tmy" + tmuxEscapedTab + "cool" + tmuxEscapedNewline + "app\t0\n"
-	items := ParseWindows(output)
+	items := mustParseWindows(t, output)
 
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
@@ -107,30 +116,67 @@ func TestParseWindows_EscapedControlCharsInNames(t *testing.T) {
 	}
 }
 
-func TestParseWindows_RawTabInNameIsRejected(t *testing.T) {
+func TestParseWindows_RawTabInNameReturnsError(t *testing.T) {
 	output := "work\t$9\t1\t@7\tmy\tcool\tapp\t0\n"
-	items := ParseWindows(output)
+	items, err := ParseWindows(output)
 
+	if err == nil {
+		t.Fatal("expected error")
+	}
 	if len(items) != 0 {
 		t.Fatalf("got %d items, want 0", len(items))
 	}
 }
 
-func TestParseWindows_InvalidStableIDsAreRejected(t *testing.T) {
-	output := "main\t1\t1\t@1\tzsh\t0\nmain\t$1\t2\t2\tvim\t0\nmain\t$1\t3\t@3\tfish\t0\n"
-	items := ParseWindows(output)
+func TestParseWindows_PartialMalformedRowsAddsParseErrorItem(t *testing.T) {
+	output := "main\t1\t1\t@1\tzsh\t0\nmain\t$1\t2\t2\tvim\t0\nmain\t$1\tnope\t@3\tbad-index\t0\nmain\t$1\t3\t@3\tfish\t0\n"
+	items := mustParseWindows(t, output)
 
-	if len(items) != 1 {
-		t.Fatalf("got %d items, want 1", len(items))
+	if len(items) != 2 {
+		t.Fatalf("got %d items, want 2", len(items))
 	}
 	if items[0].Display != "tmux: main:3 fish" {
 		t.Errorf("Display = %q, want %q", items[0].Display, "tmux: main:3 fish")
+	}
+	if items[1].Display != "tmux parse error: 3 unparseable list-windows rows" {
+		t.Errorf("parse error Display = %q", items[1].Display)
+	}
+	if items[1].Action != "" {
+		t.Errorf("parse error Action = %q, want empty", items[1].Action)
+	}
+	if items[1].Cmd != "" {
+		t.Errorf("parse error Cmd = %q, want empty", items[1].Cmd)
+	}
+}
+
+func TestParseWindows_AllMalformedRowsReturnsError(t *testing.T) {
+	output := "main\t1\t1\t@1\tzsh\t0\nmain\t$1\t2\t2\tvim\t0\n"
+	items, err := ParseWindows(output)
+
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if err.Error() != "could not parse any tmux list-windows rows (2 unparseable)" {
+		t.Errorf("error = %q", err.Error())
+	}
+	if len(items) != 0 {
+		t.Fatalf("got %d items, want 0", len(items))
+	}
+}
+
+func TestParseWindows_EmptyOutput(t *testing.T) {
+	items, err := ParseWindows("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(items) != 0 {
+		t.Errorf("got %d items, want 0", len(items))
 	}
 }
 
 func TestParseWindows_BellFlag(t *testing.T) {
 	output := "main\t$1\t1\t@1\tzsh\t1\nmain\t$1\t2\t@2\tvim\t0\n"
-	items := ParseWindows(output)
+	items := mustParseWindows(t, output)
 
 	if len(items) != 2 {
 		t.Fatalf("got %d items, want 2", len(items))
@@ -148,7 +194,7 @@ func TestParseWindows_BellFlag(t *testing.T) {
 
 func TestParseWindows_BellSortedFirst(t *testing.T) {
 	output := "main\t$1\t1\t@1\tzsh\t0\nmain\t$1\t2\t@2\tvim\t1\nmain\t$1\t3\t@3\tfish\t0\n"
-	items := ParseWindows(output)
+	items := mustParseWindows(t, output)
 
 	if len(items) != 3 {
 		t.Fatalf("got %d items, want 3", len(items))
@@ -158,12 +204,5 @@ func TestParseWindows_BellSortedFirst(t *testing.T) {
 	}
 	if items[1].Display != "tmux: main:1 zsh" {
 		t.Errorf("item[1].Display = %q, want %q", items[1].Display, "tmux: main:1 zsh")
-	}
-}
-
-func TestParseWindows_EmptyOutput(t *testing.T) {
-	items := ParseWindows("")
-	if len(items) != 0 {
-		t.Errorf("got %d items, want 0", len(items))
 	}
 }
