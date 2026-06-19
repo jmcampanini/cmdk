@@ -25,7 +25,7 @@ func setupRegistry() *Registry {
 	windows := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute,
-				Cmd: "tmux switch-client -t '{{.session_id}}:{{.window_id}}'",
+				Cmd: "tmux switch-client -t {{sq .session_id}}:{{sq .window_id}}",
 				Data: map[string]string{
 					"session":      "main",
 					"session_id":   "$1",

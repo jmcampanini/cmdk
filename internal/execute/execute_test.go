@@ -9,20 +9,20 @@ import (
 )
 
 func TestRenderCmd(t *testing.T) {
-	tmpl := "tmux switch-client -t '{{.session_id}}:{{.window_id}}'"
+	tmpl := "tmux switch-client -t {{sq .session_id}}:{{sq .window_id}}"
 	data := map[string]string{"session_id": "$1", "window_id": "@2"}
 
 	got, err := RenderCmd(tmpl, data)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != "tmux switch-client -t '$1:@2'" {
+	if got != "tmux switch-client -t '$1':'@2'" {
 		t.Errorf("got %q", got)
 	}
 }
 
 func TestRenderCmd_MissingKey(t *testing.T) {
-	tmpl := "tmux switch-client -t '{{.session_id}}:{{.window_id}}'"
+	tmpl := "tmux switch-client -t {{sq .session_id}}:{{sq .window_id}}"
 	data := map[string]string{"session_id": "$1"}
 
 	_, err := RenderCmd(tmpl, data)
@@ -61,7 +61,7 @@ func TestFlattenData_Empty(t *testing.T) {
 
 func TestRun_PushesSelectedAndCallsExecFn(t *testing.T) {
 	selected := item.Item{
-		Cmd:  "tmux switch-client -t '{{.session_id}}:{{.window_id}}'",
+		Cmd:  "tmux switch-client -t {{sq .session_id}}:{{sq .window_id}}",
 		Data: map[string]string{"session_id": "$1", "window_id": "@2"},
 	}
 
@@ -87,7 +87,7 @@ func TestRun_PushesSelectedAndCallsExecFn(t *testing.T) {
 	if len(capturedArgv) != 3 || capturedArgv[0] != "sh" || capturedArgv[1] != "-c" {
 		t.Errorf("argv = %v, want [sh -c <cmd>]", capturedArgv)
 	}
-	if capturedArgv[2] != "tmux switch-client -t '$1:@2'" {
+	if capturedArgv[2] != "tmux switch-client -t '$1':'@2'" {
 		t.Errorf("rendered cmd = %q", capturedArgv[2])
 	}
 	if len(capturedEnvv) == 0 {

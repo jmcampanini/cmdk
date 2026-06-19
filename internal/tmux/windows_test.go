@@ -45,7 +45,7 @@ func TestParseWindows_MultiSession(t *testing.T) {
 		if items[i].Action != item.ActionExecute {
 			t.Errorf("item[%d].Action = %q, want %q", i, items[i].Action, item.ActionExecute)
 		}
-		if items[i].Cmd != "tmux switch-client -t '{{.session_id}}:{{.window_id}}'" {
+		if items[i].Cmd != "tmux switch-client -t {{sq .session_id}}:{{sq .window_id}}" {
 			t.Errorf("item[%d].Cmd = %q", i, items[i].Cmd)
 		}
 	}
@@ -91,15 +91,40 @@ func TestParseWindows_WindowNameWithSpaces(t *testing.T) {
 	}
 }
 
-func TestParseWindows_WindowNameWithTabs(t *testing.T) {
-	output := "work\t$9\t1\t@7\tmy\tcool\tapp\t0\n"
+func TestParseWindows_EscapedControlCharsInNames(t *testing.T) {
+	output := "work" + tmuxEscapedNewline + "notes\t$9\t1\t@7\tmy" + tmuxEscapedTab + "cool" + tmuxEscapedNewline + "app\t0\n"
 	items := ParseWindows(output)
 
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
-	if items[0].Display != "tmux: work:1 my\tcool\tapp" {
-		t.Errorf("Display = %q, want %q", items[0].Display, "tmux: work:1 my\tcool\tapp")
+	wantDisplay := "tmux: work" + tmuxEscapedNewline + "notes:1 my" + tmuxEscapedTab + "cool" + tmuxEscapedNewline + "app"
+	if items[0].Display != wantDisplay {
+		t.Errorf("Display = %q, want %q", items[0].Display, wantDisplay)
+	}
+	if items[0].Data["session"] != "work"+tmuxEscapedNewline+"notes" {
+		t.Errorf("session = %q", items[0].Data["session"])
+	}
+}
+
+func TestParseWindows_RawTabInNameIsRejected(t *testing.T) {
+	output := "work\t$9\t1\t@7\tmy\tcool\tapp\t0\n"
+	items := ParseWindows(output)
+
+	if len(items) != 0 {
+		t.Fatalf("got %d items, want 0", len(items))
+	}
+}
+
+func TestParseWindows_InvalidStableIDsAreRejected(t *testing.T) {
+	output := "main\t1\t1\t@1\tzsh\t0\nmain\t$1\t2\t2\tvim\t0\nmain\t$1\t3\t@3\tfish\t0\n"
+	items := ParseWindows(output)
+
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
+	}
+	if items[0].Display != "tmux: main:3 fish" {
+		t.Errorf("Display = %q, want %q", items[0].Display, "tmux: main:3 fish")
 	}
 }
 

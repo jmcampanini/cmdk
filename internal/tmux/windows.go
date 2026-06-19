@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -12,8 +13,18 @@ import (
 )
 
 const (
-	tmuxWindowSwitchCommand = "tmux switch-client -t '{{.session_id}}:{{.window_id}}'"
-	tmuxListWindowsFormat   = "#{session_name}\t#{session_id}\t#{window_index}\t#{window_id}\t#{window_name}\t#{window_bell_flag}"
+	tmuxEscapedNewline = "↵"
+	tmuxEscapedTab     = "⇥"
+
+	tmuxEscapedSessionNameFormat = "#{s|\t|" + tmuxEscapedTab + "|:#{s|\n|" + tmuxEscapedNewline + "|:#{session_name}}}"
+	tmuxEscapedWindowNameFormat  = "#{s|\t|" + tmuxEscapedTab + "|:#{s|\n|" + tmuxEscapedNewline + "|:#{window_name}}}"
+	tmuxWindowSwitchCommand      = "tmux switch-client -t {{sq .session_id}}:{{sq .window_id}}"
+	tmuxListWindowsFormat        = tmuxEscapedSessionNameFormat + "\t#{session_id}\t#{window_index}\t#{window_id}\t" + tmuxEscapedWindowNameFormat + "\t#{window_bell_flag}"
+)
+
+var (
+	validTmuxSessionID = regexp.MustCompile(`^\$\d+$`)
+	validTmuxWindowID  = regexp.MustCompile(`^@\d+$`)
 )
 
 type windowLine struct {
@@ -27,7 +38,10 @@ type windowLine struct {
 
 func parseWindowLine(line string) (windowLine, bool) {
 	fields := strings.Split(line, "\t")
-	if len(fields) < 6 {
+	if len(fields) != 6 {
+		return windowLine{}, false
+	}
+	if !validTmuxSessionID.MatchString(fields[1]) || !validTmuxWindowID.MatchString(fields[3]) {
 		return windowLine{}, false
 	}
 
@@ -36,8 +50,8 @@ func parseWindowLine(line string) (windowLine, bool) {
 		sessionID:   fields[1],
 		windowIndex: fields[2],
 		windowID:    fields[3],
-		windowName:  strings.Join(fields[4:len(fields)-1], "\t"),
-		bellFlag:    fields[len(fields)-1],
+		windowName:  fields[4],
+		bellFlag:    fields[5],
 	}, true
 }
 
