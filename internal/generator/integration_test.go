@@ -27,7 +27,10 @@ func setupRegistry() *Registry {
 			{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute,
 				Cmd: "tmux switch-client -t '{{.session_id}}:{{.window_id}}'",
 				Data: map[string]string{
-					"session": "main", "session_id": "$1", "window_index": "1", "window_id": "@1",
+					"session":      "main",
+					"session_id":   "$1",
+					"window_index": "1",
+					"window_id":    "@1",
 				}},
 		}, nil
 	}}

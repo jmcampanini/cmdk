@@ -242,7 +242,12 @@ func TestNormalizeKey(t *testing.T) {
 
 func TestBuildCMDKEnvVars_Basic(t *testing.T) {
 	items := []item.Item{
-		{Data: map[string]string{"path": "/home/user", "session": "main", "session_id": "$1", "window_id": "@2"}},
+		{Data: map[string]string{
+			"path":       "/home/user",
+			"session":    "main",
+			"session_id": "$1",
+			"window_id":  "@2",
+		}},
 	}
 	envs := BuildCMDKEnvVars(items, "%1")
 	envMap := envSliceToMap(envs)
