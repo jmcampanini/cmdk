@@ -116,3 +116,51 @@ func TestParseWindows_EmptyOutput(t *testing.T) {
 		t.Errorf("got %d items, want 0", len(items))
 	}
 }
+
+func TestParseWindowsForSession(t *testing.T) {
+	session := item.NewItem()
+	session.Type = "session"
+	session.Data["session_id"] = "$3"
+	session.Data["session_name"] = "work"
+	session.Data["session_kind"] = "external"
+
+	items := ParseWindowsForSession("2\tvim\t0\n1\tzsh\t1\n", session)
+
+	if len(items) != 2 {
+		t.Fatalf("got %d items, want 2", len(items))
+	}
+	if items[0].Display != "window 1 zsh" {
+		t.Errorf("items[0].Display = %q, want window 1 zsh", items[0].Display)
+	}
+	if items[1].Display != "window 2 vim" {
+		t.Errorf("items[1].Display = %q, want window 2 vim", items[1].Display)
+	}
+	if items[0].Data["session_id"] != "$3" {
+		t.Errorf("session_id = %q, want $3", items[0].Data["session_id"])
+	}
+	if items[0].Data["session"] != "work" {
+		t.Errorf("session = %q, want work", items[0].Data["session"])
+	}
+	if items[0].Data["window_index"] != "1" {
+		t.Errorf("window_index = %q, want 1", items[0].Data["window_index"])
+	}
+	if items[0].Cmd != `tmux switch-client -t {{sq (printf "%s:%s" .session_id .window_index)}}` {
+		t.Errorf("Cmd = %q", items[0].Cmd)
+	}
+	if _, ok := items[0].Data["bell"]; ok {
+		t.Error("session child windows should not set bell data that would reorder them above Connect")
+	}
+}
+
+func TestParseWindowsForSession_SkipsMalformed(t *testing.T) {
+	session := item.NewItem()
+	session.Data["session_id"] = "$1"
+
+	items := ParseWindowsForSession("bad\nnope\tname\t0\n1\tvalid\t0\n", session)
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
+	}
+	if items[0].Display != "window 1 valid" {
+		t.Errorf("Display = %q, want window 1 valid", items[0].Display)
+	}
+}

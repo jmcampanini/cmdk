@@ -12,7 +12,7 @@ const inlineSeparator = " » "
 func expandInline(items []item.Item, registry *generator.Registry, ctx generator.Context) []item.Item {
 	var result []item.Item
 	for _, it := range items {
-		if it.Action != item.ActionNextList {
+		if it.Action != item.ActionNextList || it.Type != "dir" {
 			result = append(result, it)
 			continue
 		}

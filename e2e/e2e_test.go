@@ -288,7 +288,7 @@ func TestE2E_EnterExecutesAndExits(t *testing.T) {
 
 	waitForReady(t, sess)
 
-	filterAndExecute(t, sess, sess[:20])
+	filterAndExecute(t, sess, sess+":")
 	waitForExit(t, sess)
 }
 

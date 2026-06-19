@@ -44,6 +44,7 @@ func newItemDelegate(t theme.Theme) itemDelegate {
 			"dir":     {iconDir, t.TypeDir},
 			"cmd":     {iconCmd, t.TypeCmd},
 			"action":  {iconCmd, t.TypeCmd},
+			"session": {iconCmd, t.TypeWindow},
 			"pick":    {iconCmd, t.TypeCmd},
 			"error":   {iconCmd, t.TypeCmd},
 			"loading": {iconCmd, t.TypeCmd},

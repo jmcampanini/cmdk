@@ -26,19 +26,19 @@ func ConfigDocs() []SectionDoc {
 			Description: "Actions shown in the launcher. Each action declares which item type\n  it matches and an optional stage pipeline to collect data before execution.",
 			Fields: []FieldDoc{
 				{Name: "name", Type: "string", Description: "Display name in the launcher.", Validation: "cannot be empty"},
-				{Name: "matches", Type: "string", Description: "Item type this action appears for: \"root\" (top-level) or \"dir\" (after selecting a directory).", Validation: "cannot be empty; must be \"root\" or \"dir\""},
+				{Name: "matches", Type: "string", Description: "Item type this action appears for: \"root\" (top-level), \"dir\" (after selecting a directory), or \"session\" (after selecting a tmux session).", Validation: "cannot be empty; must be \"root\", \"dir\", or \"session\""},
 				{Name: "cmd", Type: "string", Description: "Shell command or Go template to execute after all stages complete.", Validation: "cannot be empty"},
 				{Name: "icon", Type: "string", Description: "Nerdfont icon: alias like :nf-dev-github:, raw glyph, or \\uXXXX escape. Run \"cmdk icons --filter <term>\" to search aliases.", Validation: "if :nf-*: alias, must be in supported set; otherwise must be a single grapheme cluster"},
 				{Name: "stages", Type: "array", Description: "Optional pipeline of data-collection stages to run before executing cmd. See STAGES section."},
 			},
-			Example: "[[actions]]\nname = \"Yazi\"\nmatches = \"root\"\ncmd = \"tmux split-window -h yazi\"\nicon = \":nf-cod-folder:\"\n\n[[actions]]\nname = \"New Window\"\nmatches = \"dir\"\ncmd = \"tmux new-window -c {{sq .path}}\"\n\n[[actions]]\nname = \"New Branch\"\nmatches = \"dir\"\ncmd = \"git checkout -b {{.branch}}\"\nstages = [\n  { type = \"prompt\", text = \"Branch name:\", key = \"branch\" },\n]",
+			Example: "[[actions]]\nname = \"Yazi\"\nmatches = \"root\"\ncmd = \"tmux split-window -h yazi\"\nicon = \":nf-cod-folder:\"\n\n[[actions]]\nname = \"New Window\"\nmatches = \"dir\"\ncmd = \"tmux new-window -c {{sq .path}}\"\n\n[[actions]]\nname = \"Rename Session\"\nmatches = \"session\"\ncmd = \"tmux rename-session -t {{sq .session_id}} {{sq .new_name}}\"\nstages = [\n  { type = \"prompt\", text = \"New name for {{.session_name}}:\", key = \"new_name\" },\n]\n\n[[actions]]\nname = \"New Branch\"\nmatches = \"dir\"\ncmd = \"git checkout -b {{.branch}}\"\nstages = [\n  { type = \"prompt\", text = \"Branch name:\", key = \"branch\" },\n]",
 		},
 		{
 			Name:        "stages",
 			Description: "Stages are declared inline within an action's stages array.\n  Each stage collects one piece of data before the action executes.",
 			Fields: []FieldDoc{
 				{Name: "type", Type: "string", Description: "Stage type: \"prompt\" (text input) or \"picker\" (shell command → fuzzy list).", Validation: "must be \"prompt\" or \"picker\""},
-				{Name: "key", Type: "string", Description: "Template variable name for the stage's output value.", Validation: "cannot be empty; must be unique within action; cannot be reserved (path, pane_id, session, window_index)"},
+				{Name: "key", Type: "string", Description: "Template variable name for the stage's output value.", Validation: "cannot be empty; must be unique within action; cannot be reserved (path, pane_id, session, window_index; session actions also reserve session_attached, session_display, session_id, session_kind, session_name, session_windows)"},
 				{Name: "text", Type: "string", Description: "Prompt label (Go template). Only for type = \"prompt\".", Validation: "required for prompt; forbidden for picker"},
 				{Name: "default", Type: "string", Description: "Default value pre-filled in prompt (Go template). Only for type = \"prompt\"."},
 				{Name: "source", Type: "string", Description: "Shell command run via sh -c that produces newline-separated entries (Go template). Only for type = \"picker\".", Validation: "required for picker; forbidden for prompt"},
@@ -137,6 +137,12 @@ TEMPLATE VARIABLES
       {{.pane_id}}        tmux pane ID (when --pane-id is set)
       {{.session}}        tmux session name (from window items in the selection stack)
       {{.window_index}}   tmux window index (from window items in the selection stack)
+      {{.session_attached}} tmux attached client count (from session items)
+      {{.session_display}}  display string for the selected session
+      {{.session_id}}       tmux session ID, e.g. $1 (from session items)
+      {{.session_kind}}     session classification; "external" in this phase
+      {{.session_name}}     tmux session name (from session items)
+      {{.session_windows}}  tmux window count (from session items)
       {{.<key>}}          stage output keyed by the stage's key field
 
   Available functions:

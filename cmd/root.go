@@ -86,6 +86,7 @@ var rootCmd = &cobra.Command{
 
 		sources := []generator.Source{
 			traceSource(tr, "source/windows", generator.Source{Name: "windows", Type: "window", Async: true, Fetch: tmux.ListWindows}),
+			traceSource(tr, "source/sessions", generator.Source{Name: "sessions", Type: "session", Async: true, Fetch: tmux.ListSessions}),
 			traceSource(tr, "source/zoxide", generator.Source{Name: "zoxide", Type: "dir", Limit: zoxideCfg.Limit, Async: true, Fetch: func(ctx context.Context) ([]item.Item, error) {
 				return zoxide.ListDirs(ctx, zoxideCfg.MinScore, home, shortenHome, rules, trunc)
 			}}),
@@ -99,7 +100,9 @@ var rootCmd = &cobra.Command{
 
 		reg := generator.NewRegistry()
 		reg.Register("dir-actions", generator.NewActionsGenerator())
+		reg.Register("session", generator.NewSessionGenerator(tmux.ListWindowsForSession))
 		reg.MapType("dir", "dir-actions")
+		reg.MapType("session", "session")
 
 		ctx := generator.Context{PaneID: paneID, Config: cfg}
 
