@@ -293,6 +293,12 @@ func TestIntegration_MalformedConfig(t *testing.T) {
 		t.Errorf("items[1].Type = %q, want dir", items[1].Type)
 	}
 	errItem := items[2]
+	if errItem.Type != "error" {
+		t.Errorf("errItem.Type = %q, want error", errItem.Type)
+	}
+	if errItem.Data["source_type"] != "action" {
+		t.Errorf("errItem.Data[source_type] = %q, want action", errItem.Data["source_type"])
+	}
 	if errItem.Source != "config" {
 		t.Errorf("errItem.Source = %q, want config", errItem.Source)
 	}
@@ -320,6 +326,12 @@ func TestIntegration_OneSourceFailsOthersWork(t *testing.T) {
 	}
 	if items[0].Type != "window" {
 		t.Errorf("items[0] = %q, want window", items[0].Type)
+	}
+	if items[1].Type != "error" {
+		t.Errorf("items[1].Type = %q, want error", items[1].Type)
+	}
+	if items[1].Data["source_type"] != "dir" {
+		t.Errorf("items[1].Data[source_type] = %q, want dir", items[1].Data["source_type"])
 	}
 	if items[1].Display != "zoxide error: command not found" {
 		t.Errorf("items[1].Display = %q", items[1].Display)

@@ -68,9 +68,10 @@ func NewRootGenerator(timeout time.Duration, sources ...Source) GeneratorFunc {
 
 func ErrorItem(src Source, err error) item.Item {
 	errItem := item.NewItem()
-	errItem.Type = src.Type
+	errItem.Type = "error"
 	errItem.Source = src.Name
 	errItem.Display = fmt.Sprintf("%s error: %s", src.Name, err)
+	errItem.Data["source_type"] = src.Type
 	return errItem
 }
 
