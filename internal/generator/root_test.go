@@ -50,8 +50,11 @@ func TestRootGenerator_ErrorProducesErrorItem(t *testing.T) {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
 	errItem := items[0]
-	if errItem.Type != "dir" {
-		t.Errorf("Type = %q, want dir", errItem.Type)
+	if errItem.Type != "error" {
+		t.Errorf("Type = %q, want error", errItem.Type)
+	}
+	if errItem.Data["source_type"] != "dir" {
+		t.Errorf("Data[source_type] = %q, want dir", errItem.Data["source_type"])
 	}
 	if errItem.Source != "zoxide" {
 		t.Errorf("Source = %q, want zoxide", errItem.Source)
@@ -113,8 +116,11 @@ func TestRootGenerator_OneSourceErrors(t *testing.T) {
 	if items[0].Display != "main:1 zsh" {
 		t.Errorf("items[0].Display = %q, want %q", items[0].Display, "main:1 zsh")
 	}
-	if items[1].Type != "dir" {
-		t.Errorf("items[1].Type = %q, want dir (error item keeps source type)", items[1].Type)
+	if items[1].Type != "error" {
+		t.Errorf("items[1].Type = %q, want error", items[1].Type)
+	}
+	if items[1].Data["source_type"] != "dir" {
+		t.Errorf("items[1].Data[source_type] = %q, want dir", items[1].Data["source_type"])
 	}
 	if items[1].Action != "" {
 		t.Errorf("items[1].Action = %q, want empty", items[1].Action)
@@ -135,11 +141,17 @@ func TestRootGenerator_AllSourcesError(t *testing.T) {
 	if len(items) != 2 {
 		t.Fatalf("got %d items, want 2", len(items))
 	}
-	if items[0].Type != "window" {
-		t.Errorf("items[0].Type = %q, want window", items[0].Type)
+	if items[0].Type != "error" {
+		t.Errorf("items[0].Type = %q, want error", items[0].Type)
 	}
-	if items[1].Type != "dir" {
-		t.Errorf("items[1].Type = %q, want dir", items[1].Type)
+	if items[0].Data["source_type"] != "window" {
+		t.Errorf("items[0].Data[source_type] = %q, want window", items[0].Data["source_type"])
+	}
+	if items[1].Type != "error" {
+		t.Errorf("items[1].Type = %q, want error", items[1].Type)
+	}
+	if items[1].Data["source_type"] != "dir" {
+		t.Errorf("items[1].Data[source_type] = %q, want dir", items[1].Data["source_type"])
 	}
 }
 
@@ -172,8 +184,11 @@ func TestRootGenerator_ErrorItemInDirGroup(t *testing.T) {
 	if got0.Type != "action" {
 		t.Errorf("ordered[0].Type = %q, want action", got0.Type)
 	}
-	if got1.Type != "dir" {
-		t.Errorf("ordered[1].Type = %q, want dir (error item)", got1.Type)
+	if got1.Type != "error" {
+		t.Errorf("ordered[1].Type = %q, want error", got1.Type)
+	}
+	if got1.Data["source_type"] != "dir" {
+		t.Errorf("ordered[1].Data[source_type] = %q, want dir", got1.Data["source_type"])
 	}
 	if got2.Type != "window" {
 		t.Errorf("ordered[2].Type = %q, want window", got2.Type)
@@ -189,8 +204,11 @@ func TestRootGenerator_NilFetchProducesErrorItem(t *testing.T) {
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
-	if items[0].Type != "dir" {
-		t.Errorf("Type = %q, want dir", items[0].Type)
+	if items[0].Type != "error" {
+		t.Errorf("Type = %q, want error", items[0].Type)
+	}
+	if items[0].Data["source_type"] != "dir" {
+		t.Errorf("Data[source_type] = %q, want dir", items[0].Data["source_type"])
 	}
 	if items[0].Source != "zoxide" {
 		t.Errorf("Source = %q, want zoxide", items[0].Source)
@@ -257,8 +275,11 @@ func TestRootGenerator_TimeoutProducesErrorItem(t *testing.T) {
 	if items[0].Display != "main:1 zsh" {
 		t.Errorf("items[0].Display = %q, want %q", items[0].Display, "main:1 zsh")
 	}
-	if items[1].Type != "dir" {
-		t.Errorf("items[1].Type = %q, want dir", items[1].Type)
+	if items[1].Type != "error" {
+		t.Errorf("items[1].Type = %q, want error", items[1].Type)
+	}
+	if items[1].Data["source_type"] != "dir" {
+		t.Errorf("items[1].Data[source_type] = %q, want dir", items[1].Data["source_type"])
 	}
 	if !strings.HasPrefix(items[1].Display, "zoxide error:") {
 		t.Errorf("items[1].Display = %q, want prefix %q", items[1].Display, "zoxide error:")
@@ -311,8 +332,11 @@ func TestErrorItem_Fields(t *testing.T) {
 	src := Source{Name: "zoxide", Type: "dir"}
 	errItem := ErrorItem(src, errors.New("not found"))
 
-	if errItem.Type != "dir" {
-		t.Errorf("Type = %q, want dir", errItem.Type)
+	if errItem.Type != "error" {
+		t.Errorf("Type = %q, want error", errItem.Type)
+	}
+	if errItem.Data["source_type"] != "dir" {
+		t.Errorf("Data[source_type] = %q, want dir", errItem.Data["source_type"])
 	}
 	if errItem.Source != "zoxide" {
 		t.Errorf("Source = %q, want zoxide", errItem.Source)

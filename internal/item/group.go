@@ -7,16 +7,22 @@ var TypeOrder = []string{"action", "dir", "window"}
 func GroupAndOrder(items []Item, bellToTop bool) []list.Item {
 	var bellItems []Item
 	buckets := make(map[string][]Item)
+	var bucketOrder []string
+	seenBucket := make(map[string]bool)
 	for _, it := range items {
 		if bellToTop && it.Data["bell"] == "1" {
 			bellItems = append(bellItems, it)
 			continue
 		}
 		bucketKey := it.Type
-		if bucketKey == "loading" {
+		if bucketKey == "loading" || bucketKey == "error" {
 			if st := it.Data["source_type"]; st != "" {
 				bucketKey = st
 			}
+		}
+		if !seenBucket[bucketKey] {
+			seenBucket[bucketKey] = true
+			bucketOrder = append(bucketOrder, bucketKey)
 		}
 		buckets[bucketKey] = append(buckets[bucketKey], it)
 	}
@@ -33,10 +39,10 @@ func GroupAndOrder(items []Item, bellToTop bool) []list.Item {
 		}
 	}
 
-	for _, it := range items {
-		if !seen[it.Type] {
-			seen[it.Type] = true
-			for _, unknown := range buckets[it.Type] {
+	for _, bucketKey := range bucketOrder {
+		if !seen[bucketKey] {
+			seen[bucketKey] = true
+			for _, unknown := range buckets[bucketKey] {
 				result = append(result, unknown)
 			}
 		}

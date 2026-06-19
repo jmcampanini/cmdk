@@ -130,7 +130,7 @@ func TestDelegate_PickerUsesDefaultPresentation(t *testing.T) {
 func TestDelegate_ErrorUsesErrorPresentation(t *testing.T) {
 	dark := theme.Dark()
 	d := newItemDelegate(dark)
-	it := item.Item{Type: "error", Display: "command error"}
+	it := item.Item{Type: "error", Display: "zoxide error: command not found", Source: "zoxide", Data: map[string]string{"source_type": "dir"}}
 
 	assertIconInfo(t, d.iconInfoForItem(it), iconError, dark.Error)
 }

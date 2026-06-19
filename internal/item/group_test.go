@@ -138,6 +138,51 @@ func TestGroupAndOrder_LoadingItemInSourceTypeBucket(t *testing.T) {
 	}
 }
 
+func TestGroupAndOrder_ErrorItemInSourceTypeBucket(t *testing.T) {
+	errItem := NewItem()
+	errItem.Type = "error"
+	errItem.Display = "zoxide error: command not found"
+	errItem.Data["source_type"] = "dir"
+
+	items := []Item{
+		{Type: "action", Display: "deploy"},
+		{Type: "window", Display: "main:1 zsh"},
+		errItem,
+	}
+
+	got := displays(GroupAndOrder(items, false))
+	want := []string{"deploy", "zoxide error: command not found", "main:1 zsh"}
+
+	if !slices.Equal(got, want) {
+		t.Errorf("displays = %v, want %v", got, want)
+	}
+}
+
+func TestGroupAndOrder_SemanticItemWithUnknownSourceTypeAtEnd(t *testing.T) {
+	errItem := NewItem()
+	errItem.Type = "error"
+	errItem.Display = "custom error"
+	errItem.Data["source_type"] = "custom"
+
+	loading := NewItem()
+	loading.Type = "loading"
+	loading.Display = "Loading custom\u2026"
+	loading.Data["source_type"] = "custom"
+
+	items := []Item{
+		{Type: "window", Display: "main:1 zsh"},
+		errItem,
+		loading,
+	}
+
+	got := displays(GroupAndOrder(items, false))
+	want := []string{"main:1 zsh", "custom error", "Loading custom\u2026"}
+
+	if !slices.Equal(got, want) {
+		t.Errorf("displays = %v, want %v", got, want)
+	}
+}
+
 func TestGroupAndOrder_LoadingItemWithoutSourceType(t *testing.T) {
 	loading := NewItem()
 	loading.Type = "loading"
