@@ -22,6 +22,16 @@ const (
 	tmuxListWindowsFormat        = tmuxEscapedSessionNameFormat + "\t#{session_id}\t#{window_index}\t#{window_id}\t" + tmuxEscapedWindowNameFormat + "\t#{window_bell_flag}"
 )
 
+const (
+	windowLineSessionField = iota
+	windowLineSessionIDField
+	windowLineWindowIndexField
+	windowLineWindowIDField
+	windowLineWindowNameField
+	windowLineBellFlagField
+	windowLineFieldCount
+)
+
 var (
 	validTmuxSessionID = regexp.MustCompile(`^\$\d+$`)
 	validTmuxWindowID  = regexp.MustCompile(`^@\d+$`)
@@ -38,21 +48,41 @@ type windowLine struct {
 
 func parseWindowLine(line string) (windowLine, bool) {
 	fields := strings.Split(line, "\t")
-	if len(fields) != 6 {
+	if len(fields) != windowLineFieldCount {
 		return windowLine{}, false
 	}
-	if !validTmuxSessionID.MatchString(fields[1]) || !validTmuxWindowID.MatchString(fields[3]) {
+
+	sessionID := fields[windowLineSessionIDField]
+	windowID := fields[windowLineWindowIDField]
+	if !validTmuxSessionID.MatchString(sessionID) || !validTmuxWindowID.MatchString(windowID) {
 		return windowLine{}, false
 	}
 
 	return windowLine{
-		session:     fields[0],
-		sessionID:   fields[1],
-		windowIndex: fields[2],
-		windowID:    fields[3],
-		windowName:  fields[4],
-		bellFlag:    fields[5],
+		session:     fields[windowLineSessionField],
+		sessionID:   sessionID,
+		windowIndex: fields[windowLineWindowIndexField],
+		windowID:    windowID,
+		windowName:  fields[windowLineWindowNameField],
+		bellFlag:    fields[windowLineBellFlagField],
 	}, true
+}
+
+func newWindowItem(parsed windowLine, bell bool) item.Item {
+	it := item.NewItem()
+	it.Type = "window"
+	it.Source = "tmux"
+	it.Display = fmt.Sprintf("tmux: %s:%s %s", parsed.session, parsed.windowIndex, parsed.windowName)
+	it.Action = item.ActionExecute
+	it.Cmd = tmuxWindowSwitchCommand
+	it.Data["session"] = parsed.session
+	it.Data["session_id"] = parsed.sessionID
+	it.Data["window_index"] = parsed.windowIndex
+	it.Data["window_id"] = parsed.windowID
+	if bell {
+		it.Data["bell"] = "1"
+	}
+	return it
 }
 
 func ParseWindows(output string) []item.Item {
@@ -86,33 +116,24 @@ func ParseWindows(output string) []item.Item {
 		}
 
 		bell := parsed.bellFlag == "1"
-
-		it := item.NewItem()
-		it.Type = "window"
-		it.Source = "tmux"
-		it.Display = fmt.Sprintf("tmux: %s:%s %s", parsed.session, parsed.windowIndex, parsed.windowName)
-		it.Action = item.ActionExecute
-		it.Cmd = tmuxWindowSwitchCommand
-		it.Data["session"] = parsed.session
-		it.Data["session_id"] = parsed.sessionID
-		it.Data["window_index"] = parsed.windowIndex
-		it.Data["window_id"] = parsed.windowID
-		if bell {
-			it.Data["bell"] = "1"
-		}
-
-		entries = append(entries, entry{session: parsed.session, windowIndex: idx, bell: bell, item: it})
+		entries = append(entries, entry{
+			session:     parsed.session,
+			windowIndex: idx,
+			bell:        bell,
+			item:        newWindowItem(parsed, bell),
+		})
 	}
 
 	// Bell windows sort first: true sorts before false.
 	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].bell != entries[j].bell {
-			return entries[i].bell
+		left, right := entries[i], entries[j]
+		if left.bell != right.bell {
+			return left.bell
 		}
-		if entries[i].session != entries[j].session {
-			return entries[i].session < entries[j].session
+		if left.session != right.session {
+			return left.session < right.session
 		}
-		return entries[i].windowIndex < entries[j].windowIndex
+		return left.windowIndex < right.windowIndex
 	})
 
 	items := make([]item.Item, len(entries))
