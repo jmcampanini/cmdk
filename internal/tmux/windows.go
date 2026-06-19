@@ -31,17 +31,28 @@ func ParseWindows(output string) []item.Item {
 			continue
 		}
 
-		displayPart, bellFlag, _ := strings.Cut(line, "\t")
-
-		session, rest, ok := strings.Cut(displayPart, ":")
+		session, rest, ok := strings.Cut(line, "\t")
 		if !ok {
 			continue
 		}
-
-		windowIndex, _, ok := strings.Cut(rest, " ")
+		sessionID, rest, ok := strings.Cut(rest, "\t")
 		if !ok {
 			continue
 		}
+		windowIndex, rest, ok := strings.Cut(rest, "\t")
+		if !ok {
+			continue
+		}
+		windowID, rest, ok := strings.Cut(rest, "\t")
+		if !ok {
+			continue
+		}
+		bellSep := strings.LastIndex(rest, "\t")
+		if bellSep < 0 {
+			continue
+		}
+		windowName := rest[:bellSep]
+		bellFlag := rest[bellSep+1:]
 
 		idx, err := strconv.Atoi(windowIndex)
 		if err != nil {
@@ -53,11 +64,13 @@ func ParseWindows(output string) []item.Item {
 		it := item.NewItem()
 		it.Type = "window"
 		it.Source = "tmux"
-		it.Display = "tmux: " + displayPart
+		it.Display = fmt.Sprintf("tmux: %s:%s %s", session, windowIndex, windowName)
 		it.Action = item.ActionExecute
-		it.Cmd = "tmux switch-client -t '{{.session}}:{{.window_index}}'"
+		it.Cmd = "tmux switch-client -t '{{.session_id}}:{{.window_id}}'"
 		it.Data["session"] = session
+		it.Data["session_id"] = sessionID
 		it.Data["window_index"] = windowIndex
+		it.Data["window_id"] = windowID
 		if bell {
 			it.Data["bell"] = "1"
 		}
@@ -84,7 +97,7 @@ func ParseWindows(output string) []item.Item {
 }
 
 func ListWindows(ctx context.Context) ([]item.Item, error) {
-	out, err := exec.CommandContext(ctx, "tmux", "list-windows", "-a", "-F", "#{session_name}:#{window_index} #{window_name}\t#{window_bell_flag}").Output()
+	out, err := exec.CommandContext(ctx, "tmux", "list-windows", "-a", "-F", "#{session_name}\t#{session_id}\t#{window_index}\t#{window_id}\t#{window_name}\t#{window_bell_flag}").Output()
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, fmt.Errorf("tmux did not respond within the configured timeout: %w", err)

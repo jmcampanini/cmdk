@@ -38,7 +38,7 @@ func ConfigDocs() []SectionDoc {
 			Description: "Stages are declared inline within an action's stages array.\n  Each stage collects one piece of data before the action executes.",
 			Fields: []FieldDoc{
 				{Name: "type", Type: "string", Description: "Stage type: \"prompt\" (text input) or \"picker\" (shell command → fuzzy list).", Validation: "must be \"prompt\" or \"picker\""},
-				{Name: "key", Type: "string", Description: "Template variable name for the stage's output value.", Validation: "cannot be empty; must be unique within action; cannot be reserved (path, pane_id, session, window_index)"},
+				{Name: "key", Type: "string", Description: "Template variable name for the stage's output value.", Validation: "cannot be empty; must be unique within action; cannot be reserved (path, pane_id, session, session_id, window_index, window_id)"},
 				{Name: "text", Type: "string", Description: "Prompt label (Go template). Only for type = \"prompt\".", Validation: "required for prompt; forbidden for picker"},
 				{Name: "default", Type: "string", Description: "Default value pre-filled in prompt (Go template). Only for type = \"prompt\"."},
 				{Name: "source", Type: "string", Description: "Shell command run via sh -c that produces newline-separated entries (Go template). Only for type = \"picker\".", Validation: "required for picker; forbidden for prompt"},
@@ -136,7 +136,9 @@ TEMPLATE VARIABLES
       {{.path}}           directory path (for dir-matching actions)
       {{.pane_id}}        tmux pane ID (when --pane-id is set)
       {{.session}}        tmux session name (from window items in the selection stack)
+      {{.session_id}}     stable tmux session ID (from window items in the selection stack)
       {{.window_index}}   tmux window index (from window items in the selection stack)
+      {{.window_id}}      stable tmux window ID (from window items in the selection stack)
       {{.<key>}}          stage output keyed by the stage's key field
 
   Available functions:

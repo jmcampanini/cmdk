@@ -9,21 +9,21 @@ import (
 )
 
 func TestRenderCmd(t *testing.T) {
-	tmpl := "tmux switch-client -t '{{.session}}:{{.window_index}}'"
-	data := map[string]string{"session": "main", "window_index": "2"}
+	tmpl := "tmux switch-client -t '{{.session_id}}:{{.window_id}}'"
+	data := map[string]string{"session_id": "$1", "window_id": "@2"}
 
 	got, err := RenderCmd(tmpl, data)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != "tmux switch-client -t 'main:2'" {
+	if got != "tmux switch-client -t '$1:@2'" {
 		t.Errorf("got %q", got)
 	}
 }
 
 func TestRenderCmd_MissingKey(t *testing.T) {
-	tmpl := "tmux switch-client -t '{{.session}}:{{.window_index}}'"
-	data := map[string]string{"session": "main"}
+	tmpl := "tmux switch-client -t '{{.session_id}}:{{.window_id}}'"
+	data := map[string]string{"session_id": "$1"}
 
 	_, err := RenderCmd(tmpl, data)
 	if err == nil {
@@ -61,8 +61,8 @@ func TestFlattenData_Empty(t *testing.T) {
 
 func TestRun_PushesSelectedAndCallsExecFn(t *testing.T) {
 	selected := item.Item{
-		Cmd:  "tmux switch-client -t '{{.session}}:{{.window_index}}'",
-		Data: map[string]string{"session": "main", "window_index": "2"},
+		Cmd:  "tmux switch-client -t '{{.session_id}}:{{.window_id}}'",
+		Data: map[string]string{"session_id": "$1", "window_id": "@2"},
 	}
 
 	var capturedArgv0 string
@@ -87,7 +87,7 @@ func TestRun_PushesSelectedAndCallsExecFn(t *testing.T) {
 	if len(capturedArgv) != 3 || capturedArgv[0] != "sh" || capturedArgv[1] != "-c" {
 		t.Errorf("argv = %v, want [sh -c <cmd>]", capturedArgv)
 	}
-	if capturedArgv[2] != "tmux switch-client -t 'main:2'" {
+	if capturedArgv[2] != "tmux switch-client -t '$1:@2'" {
 		t.Errorf("rendered cmd = %q", capturedArgv[2])
 	}
 	if len(capturedEnvv) == 0 {
@@ -242,7 +242,7 @@ func TestNormalizeKey(t *testing.T) {
 
 func TestBuildCMDKEnvVars_Basic(t *testing.T) {
 	items := []item.Item{
-		{Data: map[string]string{"path": "/home/user", "session": "main"}},
+		{Data: map[string]string{"path": "/home/user", "session": "main", "session_id": "$1", "window_id": "@2"}},
 	}
 	envs := BuildCMDKEnvVars(items, "%1")
 	envMap := envSliceToMap(envs)
@@ -252,6 +252,12 @@ func TestBuildCMDKEnvVars_Basic(t *testing.T) {
 	}
 	if envMap["CMDK_SESSION"] != "main" {
 		t.Errorf("CMDK_SESSION = %q, want main", envMap["CMDK_SESSION"])
+	}
+	if envMap["CMDK_SESSION_ID"] != "$1" {
+		t.Errorf("CMDK_SESSION_ID = %q, want $1", envMap["CMDK_SESSION_ID"])
+	}
+	if envMap["CMDK_WINDOW_ID"] != "@2" {
+		t.Errorf("CMDK_WINDOW_ID = %q, want @2", envMap["CMDK_WINDOW_ID"])
 	}
 	if envMap["CMDK_PANE_ID"] != "%1" {
 		t.Errorf("CMDK_PANE_ID = %q, want %%1", envMap["CMDK_PANE_ID"])

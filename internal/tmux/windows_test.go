@@ -7,7 +7,7 @@ import (
 )
 
 func TestParseWindows_MultiSession(t *testing.T) {
-	output := "dev:1 node\t0\nmain:1 zsh\t0\nmain:2 vim\t0\n"
+	output := "dev\t$2\t1\t@3\tnode\t0\nmain\t$1\t1\t@1\tzsh\t0\nmain\t$1\t2\t@2\tvim\t0\n"
 	items := ParseWindows(output)
 
 	if len(items) != 3 {
@@ -15,13 +15,15 @@ func TestParseWindows_MultiSession(t *testing.T) {
 	}
 
 	want := []struct {
-		display string
-		session string
-		index   string
+		display   string
+		session   string
+		sessionID string
+		index     string
+		windowID  string
 	}{
-		{"tmux: dev:1 node", "dev", "1"},
-		{"tmux: main:1 zsh", "main", "1"},
-		{"tmux: main:2 vim", "main", "2"},
+		{"tmux: dev:1 node", "dev", "$2", "1", "@3"},
+		{"tmux: main:1 zsh", "main", "$1", "1", "@1"},
+		{"tmux: main:2 vim", "main", "$1", "2", "@2"},
 	}
 
 	for i, w := range want {
@@ -31,20 +33,26 @@ func TestParseWindows_MultiSession(t *testing.T) {
 		if items[i].Data["session"] != w.session {
 			t.Errorf("item[%d].Data[session] = %q, want %q", i, items[i].Data["session"], w.session)
 		}
+		if items[i].Data["session_id"] != w.sessionID {
+			t.Errorf("item[%d].Data[session_id] = %q, want %q", i, items[i].Data["session_id"], w.sessionID)
+		}
 		if items[i].Data["window_index"] != w.index {
 			t.Errorf("item[%d].Data[window_index] = %q, want %q", i, items[i].Data["window_index"], w.index)
+		}
+		if items[i].Data["window_id"] != w.windowID {
+			t.Errorf("item[%d].Data[window_id] = %q, want %q", i, items[i].Data["window_id"], w.windowID)
 		}
 		if items[i].Action != item.ActionExecute {
 			t.Errorf("item[%d].Action = %q, want %q", i, items[i].Action, item.ActionExecute)
 		}
-		if items[i].Cmd != "tmux switch-client -t '{{.session}}:{{.window_index}}'" {
+		if items[i].Cmd != "tmux switch-client -t '{{.session_id}}:{{.window_id}}'" {
 			t.Errorf("item[%d].Cmd = %q", i, items[i].Cmd)
 		}
 	}
 }
 
 func TestParseWindows_SortBySessionThenIndex(t *testing.T) {
-	output := "z:2 bash\t0\na:3 zsh\t0\na:1 vim\t0\nz:1 fish\t0\n"
+	output := "z\t$2\t2\t@4\tbash\t0\na\t$1\t3\t@3\tzsh\t0\na\t$1\t1\t@1\tvim\t0\nz\t$2\t1\t@2\tfish\t0\n"
 	items := ParseWindows(output)
 
 	if len(items) != 4 {
@@ -60,7 +68,7 @@ func TestParseWindows_SortBySessionThenIndex(t *testing.T) {
 }
 
 func TestParseWindows_WindowNameWithSpaces(t *testing.T) {
-	output := "work:1 my cool app\t0\n"
+	output := "work\t$9\t1\t@7\tmy cool app\t0\n"
 	items := ParseWindows(output)
 
 	if len(items) != 1 {
@@ -72,13 +80,31 @@ func TestParseWindows_WindowNameWithSpaces(t *testing.T) {
 	if items[0].Data["session"] != "work" {
 		t.Errorf("session = %q, want %q", items[0].Data["session"], "work")
 	}
+	if items[0].Data["session_id"] != "$9" {
+		t.Errorf("session_id = %q, want %q", items[0].Data["session_id"], "$9")
+	}
 	if items[0].Data["window_index"] != "1" {
 		t.Errorf("window_index = %q, want %q", items[0].Data["window_index"], "1")
+	}
+	if items[0].Data["window_id"] != "@7" {
+		t.Errorf("window_id = %q, want %q", items[0].Data["window_id"], "@7")
+	}
+}
+
+func TestParseWindows_WindowNameWithTabs(t *testing.T) {
+	output := "work\t$9\t1\t@7\tmy\tcool\tapp\t0\n"
+	items := ParseWindows(output)
+
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
+	}
+	if items[0].Display != "tmux: work:1 my\tcool\tapp" {
+		t.Errorf("Display = %q, want %q", items[0].Display, "tmux: work:1 my\tcool\tapp")
 	}
 }
 
 func TestParseWindows_BellFlag(t *testing.T) {
-	output := "main:1 zsh\t1\nmain:2 vim\t0\n"
+	output := "main\t$1\t1\t@1\tzsh\t1\nmain\t$1\t2\t@2\tvim\t0\n"
 	items := ParseWindows(output)
 
 	if len(items) != 2 {
@@ -96,7 +122,7 @@ func TestParseWindows_BellFlag(t *testing.T) {
 }
 
 func TestParseWindows_BellSortedFirst(t *testing.T) {
-	output := "main:1 zsh\t0\nmain:2 vim\t1\nmain:3 fish\t0\n"
+	output := "main\t$1\t1\t@1\tzsh\t0\nmain\t$1\t2\t@2\tvim\t1\nmain\t$1\t3\t@3\tfish\t0\n"
 	items := ParseWindows(output)
 
 	if len(items) != 3 {

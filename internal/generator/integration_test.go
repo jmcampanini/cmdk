@@ -25,8 +25,10 @@ func setupRegistry() *Registry {
 	windows := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute,
-				Cmd:  "tmux switch-client -t '{{.session}}:{{.window_index}}'",
-				Data: map[string]string{"session": "main", "window_index": "1"}},
+				Cmd: "tmux switch-client -t '{{.session_id}}:{{.window_id}}'",
+				Data: map[string]string{
+					"session": "main", "session_id": "$1", "window_index": "1", "window_id": "@1",
+				}},
 		}, nil
 	}}
 	dirs := Source{Name: "zoxide", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
