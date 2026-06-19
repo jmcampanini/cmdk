@@ -30,7 +30,7 @@ func testRegistry() *generator.Registry {
 	})
 	reg.Register("dir-actions", func(accumulated []item.Item, ctx generator.Context) []item.Item {
 		return []item.Item{
-			{Type: "cmd", Display: "New window", Action: item.ActionExecute, Cmd: "tmux new-window -c {{sq .path}}"},
+			{Type: "action", Display: "New window", Action: item.ActionExecute, Cmd: "tmux new-window -c {{sq .path}}"},
 		}
 	})
 	reg.MapType("", "root")

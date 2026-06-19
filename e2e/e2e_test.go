@@ -13,7 +13,7 @@ import (
 const (
 	iconWindow     = "\ueb7f"
 	iconDir        = "\ueaf7"
-	iconCmd        = "\uebc8"
+	iconAction     = "\ueb63"
 	defaultTimeout = 5 * time.Second
 )
 
@@ -164,8 +164,8 @@ func navigateToDirItem(t *testing.T, sess string) {
 	t.Helper()
 	exitFilterModeE2E(t, sess)
 	content := capturePane(t, sess)
-	cmdCount := strings.Count(content, iconCmd)
-	for range cmdCount {
+	actionCount := strings.Count(content, iconAction)
+	for range actionCount {
 		sendKeys(t, sess, "Down")
 		time.Sleep(50 * time.Millisecond)
 	}

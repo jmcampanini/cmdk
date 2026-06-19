@@ -150,11 +150,11 @@ func TestRootGenerator_ErrorItemInDirGroup(t *testing.T) {
 	badDirs := Source{Name: "zoxide", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
 		return nil, errors.New("command not found")
 	}}
-	cmds := Source{Name: "commands", Type: "cmd", Fetch: func(context.Context) ([]item.Item, error) {
-		return []item.Item{{Type: "cmd", Display: "htop", Action: item.ActionExecute}}, nil
+	actions := Source{Name: "actions", Type: "action", Fetch: func(context.Context) ([]item.Item, error) {
+		return []item.Item{{Type: "action", Display: "htop", Action: item.ActionExecute}}, nil
 	}}
 
-	gen := newRootTestGenerator(windows, badDirs, cmds)
+	gen := newRootTestGenerator(windows, badDirs, actions)
 	items := gen(nil, Context{})
 
 	if len(items) != 3 {
@@ -169,8 +169,8 @@ func TestRootGenerator_ErrorItemInDirGroup(t *testing.T) {
 	got1 := ordered[1].(item.Item)
 	got2 := ordered[2].(item.Item)
 
-	if got0.Type != "cmd" {
-		t.Errorf("ordered[0].Type = %q, want cmd", got0.Type)
+	if got0.Type != "action" {
+		t.Errorf("ordered[0].Type = %q, want action", got0.Type)
 	}
 	if got1.Type != "dir" {
 		t.Errorf("ordered[1].Type = %q, want dir (error item)", got1.Type)
@@ -214,10 +214,10 @@ func TestRootGenerator_PreservesSourceOrderWhenConcurrent(t *testing.T) {
 		}
 		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
 	}}
-	second := Source{Name: "commands", Type: "cmd", Fetch: func(context.Context) ([]item.Item, error) {
+	second := Source{Name: "actions", Type: "action", Fetch: func(context.Context) ([]item.Item, error) {
 		<-firstStarted
 		close(secondDone)
-		return []item.Item{{Type: "cmd", Display: "htop"}}, nil
+		return []item.Item{{Type: "action", Display: "htop"}}, nil
 	}}
 
 	go func() {

@@ -27,11 +27,12 @@ type Theme struct {
 	Mantle   color.Color
 	Crust    color.Color
 
-	TypeWindow color.Color
-	TypeDir    color.Color
-	TypeCmd    color.Color
-	Bell       color.Color
-	Error      color.Color
+	TypeWindow  color.Color
+	TypeDir     color.Color
+	TypeAction  color.Color
+	TypeUnknown color.Color
+	Bell        color.Color
+	Error       color.Color
 
 	MatchHighlight color.Color
 	TextboxBg      color.Color
@@ -63,11 +64,12 @@ func Light() Theme {
 		Mantle:    c("#e6e9ef"),
 		Crust:     c("#dce0e8"),
 
-		TypeWindow: c("#8839ef"),
-		TypeDir:    c("#1e66f5"),
-		TypeCmd:    c("#40a02b"),
-		Bell:       c("#df8e1d"),
-		Error:      c("#d20f39"),
+		TypeWindow:  c("#8839ef"),
+		TypeDir:     c("#1e66f5"),
+		TypeAction:  c("#40a02b"),
+		TypeUnknown: c("#8c8fa1"),
+		Bell:        c("#df8e1d"),
+		Error:       c("#d20f39"),
 
 		MatchHighlight: c("#e0c8f8"),
 		TextboxBg:      c("#dce0e8"),
@@ -92,11 +94,12 @@ func Dark() Theme {
 		Mantle:    c("#181825"),
 		Crust:     c("#11111b"),
 
-		TypeWindow: c("#cba6f7"),
-		TypeDir:    c("#89b4fa"),
-		TypeCmd:    c("#a6e3a1"),
-		Bell:       c("#f9e2af"),
-		Error:      c("#f38ba8"),
+		TypeWindow:  c("#cba6f7"),
+		TypeDir:     c("#89b4fa"),
+		TypeAction:  c("#a6e3a1"),
+		TypeUnknown: c("#7f849c"),
+		Bell:        c("#f9e2af"),
+		Error:       c("#f38ba8"),
 
 		MatchHighlight: c("#5b3d8f"),
 		TextboxBg:      c("#313244"),

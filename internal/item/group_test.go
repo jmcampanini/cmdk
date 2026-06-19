@@ -40,23 +40,6 @@ func TestGroupAndOrder_MixedTypes(t *testing.T) {
 	}
 }
 
-func TestGroupAndOrder_MixedTypesWithCmd(t *testing.T) {
-	items := []Item{
-		{Type: "dir", Display: "~/foo"},
-		{Type: "window", Display: "main:1 zsh"},
-		{Type: "cmd", Display: "htop"},
-		{Type: "action", Display: "deploy"},
-		{Type: "dir", Display: "~/bar"},
-	}
-
-	got := types(GroupAndOrder(items, false))
-	want := []string{"action", "cmd", "dir", "dir", "window"}
-
-	if !slices.Equal(got, want) {
-		t.Errorf("types = %v, want %v", got, want)
-	}
-}
-
 func TestGroupAndOrder_WithinGroupOrder(t *testing.T) {
 	items := []Item{
 		{Type: "window", Display: "a"},
@@ -86,7 +69,7 @@ func TestGroupAndOrder_BellToTop(t *testing.T) {
 	bellWindow.Data["bell"] = "1"
 
 	items := []Item{
-		{Type: "cmd", Display: "htop"},
+		{Type: "action", Display: "htop"},
 		{Type: "dir", Display: "~/foo"},
 		bellWindow,
 		{Type: "window", Display: "tmux: main:2 vim"},
@@ -107,13 +90,13 @@ func TestGroupAndOrder_BellToTopDisabled(t *testing.T) {
 	bellWindow.Data["bell"] = "1"
 
 	items := []Item{
-		{Type: "cmd", Display: "htop"},
+		{Type: "action", Display: "htop"},
 		bellWindow,
 		{Type: "window", Display: "tmux: main:2 vim"},
 	}
 
 	got := types(GroupAndOrder(items, false))
-	want := []string{"cmd", "window", "window"}
+	want := []string{"action", "window", "window"}
 
 	if !slices.Equal(got, want) {
 		t.Errorf("types = %v, want %v", got, want)
@@ -129,20 +112,6 @@ func TestGroupAndOrder_UnknownTypesAtEnd(t *testing.T) {
 
 	got := types(GroupAndOrder(items, false))
 	want := []string{"window", "custom", "alien"}
-
-	if !slices.Equal(got, want) {
-		t.Errorf("types = %v, want %v", got, want)
-	}
-}
-
-func TestGroupAndOrder_ActionBeforeCmd(t *testing.T) {
-	items := []Item{
-		{Type: "cmd", Display: "legacy"},
-		{Type: "action", Display: "new"},
-	}
-
-	got := types(GroupAndOrder(items, false))
-	want := []string{"action", "cmd"}
 
 	if !slices.Equal(got, want) {
 		t.Errorf("types = %v, want %v", got, want)
