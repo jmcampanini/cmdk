@@ -59,6 +59,16 @@ func contains(ss []string, target string) bool {
 	return false
 }
 
+func listItemByDisplay(m Model, display string) (item.Item, bool) {
+	for _, li := range m.list.Items() {
+		it, ok := li.(item.Item)
+		if ok && it.Display == display {
+			return it, true
+		}
+	}
+	return item.Item{}, false
+}
+
 func TestInit_NoAsyncSources_ReturnsNil(t *testing.T) {
 	m := newAsyncTestModel(
 		[]item.Item{{Type: "action", Display: "test", Action: item.ActionExecute}},
@@ -136,6 +146,19 @@ func TestSourceResult_ErrorReplacesPlaceholder(t *testing.T) {
 	}
 	if !contains(displays, "zoxide error: not installed") {
 		t.Errorf("expected error item, got %v", displays)
+	}
+	errItem, ok := listItemByDisplay(m, "zoxide error: not installed")
+	if !ok {
+		t.Fatal("expected zoxide error item")
+	}
+	if errItem.Type != "error" {
+		t.Errorf("error item Type = %q, want error", errItem.Type)
+	}
+	if errItem.Source != "zoxide" {
+		t.Errorf("error item Source = %q, want zoxide", errItem.Source)
+	}
+	if errItem.Data["source_type"] != "dir" {
+		t.Errorf("error item Data[source_type] = %q, want dir", errItem.Data["source_type"])
 	}
 }
 
@@ -289,6 +312,45 @@ func TestSourceResult_GroupAndOrderApplied(t *testing.T) {
 	if actionIdx >= dirIdx || dirIdx >= windowIdx {
 		t.Errorf("expected order action < dir < window, got action=%d dir=%d window=%d in %v",
 			actionIdx, dirIdx, windowIdx, displays)
+	}
+}
+
+func TestSourceResult_ErrorUsesSourceTypeBucket(t *testing.T) {
+	syncItems := []item.Item{
+		{Type: "action", Display: "my action", Action: item.ActionExecute},
+	}
+	m := newAsyncTestModel(syncItems, []AsyncSource{
+		{Name: "windows", Type: "window", Timeout: time.Second},
+		{Name: "zoxide", Type: "dir", Timeout: time.Second},
+	})
+	m = sizeModel(m, 80, 24)
+
+	result, _ := m.Update(sourceResultMsg{
+		Name:  "windows",
+		Items: []item.Item{{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute}},
+	})
+	m = result.(Model)
+	result, _ = m.Update(sourceResultMsg{
+		Name: "zoxide",
+		Err:  errors.New("not installed"),
+	})
+	m = result.(Model)
+
+	displays := itemDisplays(m)
+	actionIdx, errIdx, windowIdx := -1, -1, -1
+	for i, d := range displays {
+		switch d {
+		case "my action":
+			actionIdx = i
+		case "zoxide error: not installed":
+			errIdx = i
+		case "main:1 zsh":
+			windowIdx = i
+		}
+	}
+	if actionIdx >= errIdx || errIdx >= windowIdx {
+		t.Errorf("expected order action < source error in dir bucket < window, got action=%d err=%d window=%d in %v",
+			actionIdx, errIdx, windowIdx, displays)
 	}
 }
 

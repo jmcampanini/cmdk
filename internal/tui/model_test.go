@@ -30,7 +30,7 @@ func testRegistry() *generator.Registry {
 	})
 	reg.Register("dir-actions", func(accumulated []item.Item, ctx generator.Context) []item.Item {
 		return []item.Item{
-			{Type: "cmd", Display: "New window", Action: item.ActionExecute, Cmd: "tmux new-window -c {{sq .path}}"},
+			{Type: "action", Display: "New window", Action: item.ActionExecute, Cmd: "tmux new-window -c {{sq .path}}"},
 		}
 	})
 	reg.MapType("", "root")
@@ -399,7 +399,7 @@ func TestNextListWithUnmappedType_StaysOnCurrentList(t *testing.T) {
 func TestEnterOnErrorItem_NoAction(t *testing.T) {
 	items := []list.Item{
 		item.Item{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute},
-		item.Item{Type: "dir", Display: "zoxide error: command not found"},
+		item.Item{Type: "error", Display: "zoxide error: command not found", Data: map[string]string{"source_type": "dir"}},
 	}
 	reg := generator.NewRegistry()
 	reg.Register("root", func(accumulated []item.Item, ctx generator.Context) []item.Item { return nil })

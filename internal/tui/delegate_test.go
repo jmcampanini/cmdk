@@ -2,6 +2,8 @@ package tui
 
 import (
 	"bytes"
+	"image/color"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -23,6 +25,16 @@ func renderItem(d itemDelegate, items []list.Item, width int, index int) string 
 	var buf bytes.Buffer
 	d.Render(&buf, l, index, items[index])
 	return buf.String()
+}
+
+func assertIconInfo(t *testing.T, got iconInfo, wantIcon string, wantColor color.Color) {
+	t.Helper()
+	if got.icon != wantIcon {
+		t.Errorf("icon = %q, want %q", got.icon, wantIcon)
+	}
+	if !reflect.DeepEqual(got.color, wantColor) {
+		t.Errorf("color = %v, want %v", got.color, wantColor)
+	}
 }
 
 func TestDelegate_HeightAndSpacing(t *testing.T) {
@@ -78,31 +90,60 @@ func TestDelegate_RenderDirIcon(t *testing.T) {
 	}
 }
 
-func TestDelegate_RenderCmdIcon(t *testing.T) {
-	d := testDelegate()
-	items := []list.Item{
-		item.Item{Type: "cmd", Display: "echo hello"},
-	}
+func TestDelegate_RenderActionIcon(t *testing.T) {
+	dark := theme.Dark()
+	d := newItemDelegate(dark)
+	it := item.Item{Type: "action", Display: "echo hello"}
+	items := []list.Item{it}
 	out := renderItem(d, items, 80, 0)
 
-	if !strings.Contains(out, iconCmd) {
-		t.Errorf("expected cmd icon in output, got %q", out)
+	if !strings.Contains(out, iconAction) {
+		t.Errorf("expected action icon in output, got %q", out)
 	}
+	assertIconInfo(t, d.iconInfoForItem(it), iconAction, dark.TypeAction)
 }
 
-func TestDelegate_UnknownTypeFallsToCmdIcon(t *testing.T) {
-	d := testDelegate()
-	items := []list.Item{
-		item.Item{Type: "alien", Display: "some item"},
-	}
+func TestDelegate_UnknownTypeUsesDefaultPresentation(t *testing.T) {
+	dark := theme.Dark()
+	d := newItemDelegate(dark)
+	it := item.Item{Type: "alien", Display: "some item"}
+	items := []list.Item{it}
 	out := renderItem(d, items, 80, 0)
 
-	if !strings.Contains(out, iconCmd) {
-		t.Errorf("expected cmd icon fallback for unknown type, got %q", out)
+	if !strings.Contains(out, iconUnknown) {
+		t.Errorf("expected unknown fallback icon, got %q", out)
 	}
 	if !strings.Contains(out, "some item") {
 		t.Errorf("expected display text in output, got %q", out)
 	}
+	assertIconInfo(t, d.iconInfoForItem(it), iconUnknown, dark.TypeUnknown)
+}
+
+func TestDelegate_PickerUsesDefaultPresentation(t *testing.T) {
+	dark := theme.Dark()
+	d := newItemDelegate(dark)
+	it := item.Item{Type: "pick", Display: "alpha"}
+
+	assertIconInfo(t, d.iconInfoForItem(it), iconUnknown, dark.TypeUnknown)
+}
+
+func TestDelegate_ErrorUsesErrorPresentation(t *testing.T) {
+	dark := theme.Dark()
+	d := newItemDelegate(dark)
+	it := item.Item{Type: "error", Display: "zoxide error: command not found", Source: "zoxide", Data: map[string]string{"source_type": "dir"}}
+
+	assertIconInfo(t, d.iconInfoForItem(it), iconError, dark.Error)
+}
+
+func TestDelegate_LoadingUsesSourceDerivedColor(t *testing.T) {
+	dark := theme.Dark()
+	d := newItemDelegate(dark)
+
+	assertIconInfo(t, d.iconInfoForItem(item.Item{Type: "loading", Data: map[string]string{"source_type": "window"}}), iconLoading, dark.TypeWindow)
+	assertIconInfo(t, d.iconInfoForItem(item.Item{Type: "loading", Data: map[string]string{"source_type": "dir"}}), iconLoading, dark.TypeDir)
+	assertIconInfo(t, d.iconInfoForItem(item.Item{Type: "loading", Data: map[string]string{"source_type": "action"}}), iconLoading, dark.TypeAction)
+	assertIconInfo(t, d.iconInfoForItem(item.Item{Type: "loading", Data: map[string]string{"source_type": "alien"}}), iconLoading, dark.TypeUnknown)
+	assertIconInfo(t, d.iconInfoForItem(item.Item{Type: "loading"}), iconLoading, dark.TypeUnknown)
 }
 
 func TestDelegate_ZeroWidth_NoOutput(t *testing.T) {
@@ -152,35 +193,38 @@ func TestDelegate_RenderCustomIconOverridesType(t *testing.T) {
 	d := testDelegate()
 	customIcon := "\ue709"
 	items := []list.Item{
-		item.Item{Type: "cmd", Display: "GitHub", Icon: customIcon},
+		item.Item{Type: "action", Display: "GitHub", Icon: customIcon},
 	}
 	out := renderItem(d, items, 80, 0)
 
 	if !strings.Contains(out, customIcon) {
 		t.Errorf("expected custom icon %q in output, got %q", customIcon, out)
 	}
-	if strings.Contains(out, iconCmd) {
-		t.Errorf("custom icon should replace default cmd icon, got %q", out)
+	if strings.Contains(out, iconAction) {
+		t.Errorf("custom icon should replace default action icon, got %q", out)
 	}
 }
 
 func TestDelegate_EmptyIconUsesDefault(t *testing.T) {
 	d := testDelegate()
 	items := []list.Item{
-		item.Item{Type: "cmd", Display: "test", Icon: ""},
+		item.Item{Type: "action", Display: "test", Icon: ""},
 	}
 	out := renderItem(d, items, 80, 0)
 
-	if !strings.Contains(out, iconCmd) {
-		t.Errorf("expected default cmd icon when Icon is empty, got %q", out)
+	if !strings.Contains(out, iconAction) {
+		t.Errorf("expected default action icon when Icon is empty, got %q", out)
 	}
 }
 
 func TestDelegate_ConstructorWiresAllTypes(t *testing.T) {
 	d := testDelegate()
-	for _, typ := range []string{"window", "dir", "cmd"} {
+	for _, typ := range []string{"window", "dir", "action", "pick", "error", "loading"} {
 		if _, ok := d.icons[typ]; !ok {
 			t.Errorf("missing icon entry for type %q", typ)
 		}
+	}
+	if _, ok := d.icons["cmd"]; ok {
+		t.Error("cmd should not have a dedicated icon entry")
 	}
 }

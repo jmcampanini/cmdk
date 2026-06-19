@@ -2,21 +2,20 @@ package item
 
 import "charm.land/bubbles/v2/list"
 
-var TypeOrder = []string{"action", "cmd", "dir", "window"}
+var TypeOrder = []string{"action", "dir", "window"}
 
 func GroupAndOrder(items []Item, bellToTop bool) []list.Item {
 	var bellItems []Item
 	buckets := make(map[string][]Item)
+	var bucketOrder []string
 	for _, it := range items {
 		if bellToTop && it.Data["bell"] == "1" {
 			bellItems = append(bellItems, it)
 			continue
 		}
-		bucketKey := it.Type
-		if bucketKey == "loading" {
-			if st := it.Data["source_type"]; st != "" {
-				bucketKey = st
-			}
+		bucketKey := orderBucketKey(it)
+		if _, ok := buckets[bucketKey]; !ok {
+			bucketOrder = append(bucketOrder, bucketKey)
 		}
 		buckets[bucketKey] = append(buckets[bucketKey], it)
 	}
@@ -33,14 +32,24 @@ func GroupAndOrder(items []Item, bellToTop bool) []list.Item {
 		}
 	}
 
-	for _, it := range items {
-		if !seen[it.Type] {
-			seen[it.Type] = true
-			for _, unknown := range buckets[it.Type] {
+	for _, bucketKey := range bucketOrder {
+		if !seen[bucketKey] {
+			seen[bucketKey] = true
+			for _, unknown := range buckets[bucketKey] {
 				result = append(result, unknown)
 			}
 		}
 	}
 
 	return result
+}
+
+func orderBucketKey(it Item) string {
+	switch it.Type {
+	case "loading", "error":
+		if sourceType := it.Data["source_type"]; sourceType != "" {
+			return sourceType
+		}
+	}
+	return it.Type
 }
