@@ -414,7 +414,17 @@ func updateFilterableList(l list.Model, msg tea.Msg) (list.Model, tea.Cmd) {
 	filterTextBefore := l.FilterInput.Value()
 	updated, cmd := l.Update(msg)
 	if updated.FilterState() == list.Filtering && updated.FilterInput.Value() != filterTextBefore {
-		updated.GoToStart()
+		filterText := updated.FilterInput.Value()
+		cursorPos := updated.FilterInput.Position()
+
+		updated.SetFilterText(filterText)
+		updated.SetFilterState(list.Filtering)
+		updated.FilterInput.SetCursor(cursorPos)
+
+		// SetFilterText runs the filter synchronously. Drop Bubbles' async
+		// FilterMatchesMsg command so a stale result cannot update a later list
+		// or picker after navigation.
+		return updated, nil
 	}
 	return updated, cmd
 }

@@ -817,25 +817,22 @@ func TestTypingDuringNonEmptyFilter_ResetsHighlightToFirstResult(t *testing.T) {
 	}
 }
 
-func TestPendingFilterMatchesDoNotResetNavigation(t *testing.T) {
+func TestTypingFilterRunsSynchronously(t *testing.T) {
 	m := newTestModel(filterNavigationItems(), testRegistry())
 	m.list.SetSize(80, 40)
 
-	result, cmd := m.Update(tea.KeyPressMsg{Code: rune('a'), Text: "a"})
+	result, cmd := m.Update(tea.KeyPressMsg{Code: rune('b'), Text: "b"})
 	m = result.(Model)
-	if cmd == nil {
-		t.Fatal("expected filter command after typing")
+	if cmd != nil {
+		t.Fatal("typing in the filter should not return an async filter command")
 	}
 
-	result, _ = m.Update(downMsg)
-	m = result.(Model)
-	if m.list.Index() != 1 {
-		t.Fatalf("after Down: Index() = %d, want 1", m.list.Index())
+	visible := m.list.VisibleItems()
+	if len(visible) != 1 {
+		t.Fatalf("VisibleItems() = %d, want 1", len(visible))
 	}
-
-	m = runTestCmd(t, m, cmd)
-	if m.list.Index() != 1 {
-		t.Fatalf("after pending filter results: Index() = %d, want 1", m.list.Index())
+	if got := visible[0].(item.Item).Display; got != "bravo" {
+		t.Fatalf("visible item = %q, want bravo", got)
 	}
 }
 
@@ -1483,7 +1480,7 @@ func TestPickerStage_TypingDuringNonEmptyFilter_ResetsHighlightToFirstResult(t *
 	}
 }
 
-func TestPickerStage_PendingFilterMatchesDoNotResetNavigation(t *testing.T) {
+func TestPickerStage_TypingFilterRunsSynchronously(t *testing.T) {
 	m := newTestModel(pickerItems(), testRegistry())
 	m = setWindowSize(t, m, 80, 40)
 
@@ -1492,21 +1489,18 @@ func TestPickerStage_PendingFilterMatchesDoNotResetNavigation(t *testing.T) {
 		t.Fatal("expected viewPicker")
 	}
 
-	result, cmd := m.Update(tea.KeyPressMsg{Code: rune('a'), Text: "a"})
+	result, cmd := m.Update(tea.KeyPressMsg{Code: rune('b'), Text: "b"})
 	m = result.(Model)
-	if cmd == nil {
-		t.Fatal("expected filter command after typing")
+	if cmd != nil {
+		t.Fatal("typing in the picker filter should not return an async filter command")
 	}
 
-	result, _ = m.Update(downMsg)
-	m = result.(Model)
-	if m.pickerList.Index() != 1 {
-		t.Fatalf("after Down: Index() = %d, want 1", m.pickerList.Index())
+	visible := m.pickerList.VisibleItems()
+	if len(visible) != 1 {
+		t.Fatalf("VisibleItems() = %d, want 1", len(visible))
 	}
-
-	m = runTestCmd(t, m, cmd)
-	if m.pickerList.Index() != 1 {
-		t.Fatalf("after pending filter results: Index() = %d, want 1", m.pickerList.Index())
+	if got := visible[0].(item.Item).Display; got != "beta" {
+		t.Fatalf("visible item = %q, want beta", got)
 	}
 }
 
