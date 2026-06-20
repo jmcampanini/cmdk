@@ -5,51 +5,52 @@ import "charm.land/bubbles/v2/list"
 var TypeOrder = []string{"action", "dir", "window"}
 
 func GroupAndOrder(items []Item, bellToTop bool) []list.Item {
-	var bellItems []Item
 	buckets := make(map[string][]Item)
-	var bucketOrder []string
+	var bellItems []Item
+	var unknownOrder []string
+	known := knownTypes()
+
 	for _, it := range items {
-		if bellToTop && it.Data["bell"] == "1" {
+		if bellToTop && it.Type == "window" && it.Data["bell"] == "1" {
 			bellItems = append(bellItems, it)
 			continue
 		}
-		bucketKey := orderBucketKey(it)
-		if _, ok := buckets[bucketKey]; !ok {
-			bucketOrder = append(bucketOrder, bucketKey)
+		if !known[it.Type] {
+			if _, ok := buckets[it.Type]; !ok {
+				unknownOrder = append(unknownOrder, it.Type)
+			}
 		}
-		buckets[bucketKey] = append(buckets[bucketKey], it)
+		buckets[it.Type] = append(buckets[it.Type], it)
 	}
 
 	result := make([]list.Item, 0, len(items))
-	for _, it := range bellItems {
-		result = append(result, it)
-	}
-	seen := make(map[string]bool, len(TypeOrder))
-	for _, typ := range TypeOrder {
-		seen[typ] = true
+	appendBucket := func(typ string) {
 		for _, it := range buckets[typ] {
 			result = append(result, it)
 		}
 	}
 
-	for _, bucketKey := range bucketOrder {
-		if !seen[bucketKey] {
-			seen[bucketKey] = true
-			for _, unknown := range buckets[bucketKey] {
-				result = append(result, unknown)
-			}
-		}
+	appendBucket("error")
+	appendBucket("loading")
+	for _, it := range bellItems {
+		result = append(result, it)
+	}
+	for _, typ := range TypeOrder {
+		appendBucket(typ)
+	}
+	for _, typ := range unknownOrder {
+		appendBucket(typ)
 	}
 
 	return result
 }
 
-func orderBucketKey(it Item) string {
-	switch it.Type {
-	case "loading", "error":
-		if sourceType := it.Data["source_type"]; sourceType != "" {
-			return sourceType
-		}
+func knownTypes() map[string]bool {
+	known := make(map[string]bool, len(TypeOrder)+2)
+	known["error"] = true
+	known["loading"] = true
+	for _, typ := range TypeOrder {
+		known[typ] = true
 	}
-	return it.Type
+	return known
 }

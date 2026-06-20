@@ -118,89 +118,108 @@ func TestGroupAndOrder_UnknownTypesAtEnd(t *testing.T) {
 	}
 }
 
-func TestGroupAndOrder_LoadingItemInSourceTypeBucket(t *testing.T) {
-	loading := NewItem()
-	loading.Type = "loading"
-	loading.Display = "Loading windows\u2026"
-	loading.Data["source_type"] = "window"
+func TestGroupAndOrder_ErrorsBeforeLoading(t *testing.T) {
+	items := []Item{
+		{Type: "loading", Display: "Loading windows\u2026"},
+		{Type: "error", Display: "zoxide error: command not found"},
+	}
+
+	got := displays(GroupAndOrder(items, false))
+	want := []string{"zoxide error: command not found", "Loading windows\u2026"}
+
+	if !slices.Equal(got, want) {
+		t.Errorf("displays = %v, want %v", got, want)
+	}
+}
+
+func TestGroupAndOrder_LoadingBeforeBellAndNormalItems(t *testing.T) {
+	bellWindow := NewItem()
+	bellWindow.Type = "window"
+	bellWindow.Display = "tmux: main:1 zsh"
+	bellWindow.Data["bell"] = "1"
 
 	items := []Item{
 		{Type: "action", Display: "deploy"},
+		bellWindow,
+		{Type: "loading", Display: "Loading windows\u2026"},
 		{Type: "dir", Display: "~/foo"},
-		loading,
 	}
 
-	got := displays(GroupAndOrder(items, false))
-	want := []string{"deploy", "~/foo", "Loading windows\u2026"}
+	got := displays(GroupAndOrder(items, true))
+	want := []string{"Loading windows\u2026", "tmux: main:1 zsh", "deploy", "~/foo"}
 
 	if !slices.Equal(got, want) {
 		t.Errorf("displays = %v, want %v", got, want)
 	}
 }
 
-func TestGroupAndOrder_ErrorItemInSourceTypeBucket(t *testing.T) {
-	errItem := NewItem()
-	errItem.Type = "error"
-	errItem.Display = "zoxide error: command not found"
-	errItem.Data["source_type"] = "dir"
+func TestGroupAndOrder_ErrorsAndLoadingBeforeBellWindows(t *testing.T) {
+	bellWindow := NewItem()
+	bellWindow.Type = "window"
+	bellWindow.Display = "tmux: main:1 zsh"
+	bellWindow.Data["bell"] = "1"
 
 	items := []Item{
-		{Type: "action", Display: "deploy"},
-		{Type: "window", Display: "main:1 zsh"},
-		errItem,
+		bellWindow,
+		{Type: "loading", Display: "Loading windows\u2026"},
+		{Type: "error", Display: "zoxide error: command not found"},
 	}
 
-	got := displays(GroupAndOrder(items, false))
-	want := []string{"deploy", "zoxide error: command not found", "main:1 zsh"}
+	got := displays(GroupAndOrder(items, true))
+	want := []string{"zoxide error: command not found", "Loading windows\u2026", "tmux: main:1 zsh"}
 
 	if !slices.Equal(got, want) {
 		t.Errorf("displays = %v, want %v", got, want)
 	}
 }
 
-func TestGroupAndOrder_SemanticItemWithUnknownSourceTypeAtEnd(t *testing.T) {
-	errItem := NewItem()
-	errItem.Type = "error"
-	errItem.Display = "custom error"
-	errItem.Data["source_type"] = "custom"
-
-	loading := NewItem()
-	loading.Type = "loading"
-	loading.Display = "Loading custom\u2026"
-	loading.Data["source_type"] = "custom"
-
+func TestGroupAndOrder_KnownTypesAfterStatusItems(t *testing.T) {
 	items := []Item{
 		{Type: "window", Display: "main:1 zsh"},
-		errItem,
-		loading,
+		{Type: "dir", Display: "~/foo"},
+		{Type: "loading", Display: "Loading windows\u2026"},
+		{Type: "action", Display: "deploy"},
+		{Type: "error", Display: "zoxide error: command not found"},
 	}
 
 	got := displays(GroupAndOrder(items, false))
-	want := []string{"main:1 zsh", "custom error", "Loading custom\u2026"}
+	want := []string{"zoxide error: command not found", "Loading windows\u2026", "deploy", "~/foo", "main:1 zsh"}
 
 	if !slices.Equal(got, want) {
 		t.Errorf("displays = %v, want %v", got, want)
 	}
 }
 
-func TestGroupAndOrder_LoadingItemWithoutSourceType(t *testing.T) {
-	loading := NewItem()
-	loading.Type = "loading"
-	loading.Display = "Loading something\u2026"
-
+func TestGroupAndOrder_UnknownTypesAfterStatusAndKnownTypes(t *testing.T) {
 	items := []Item{
-		{Type: "action", Display: "deploy"},
-		loading,
+		{Type: "custom", Display: "custom 1"},
+		{Type: "loading", Display: "Loading windows\u2026"},
+		{Type: "window", Display: "main:1 zsh"},
+		{Type: "alien", Display: "alien 1"},
+		{Type: "custom", Display: "custom 2"},
+		{Type: "error", Display: "zoxide error: command not found"},
 	}
 
-	got := types(GroupAndOrder(items, false))
-	if len(got) != 2 {
-		t.Fatalf("len = %d, want 2", len(got))
+	got := displays(GroupAndOrder(items, false))
+	want := []string{"zoxide error: command not found", "Loading windows\u2026", "main:1 zsh", "custom 1", "custom 2", "alien 1"}
+
+	if !slices.Equal(got, want) {
+		t.Errorf("displays = %v, want %v", got, want)
 	}
-	if got[0] != "action" {
-		t.Errorf("got[0] = %q, want action", got[0])
+}
+
+func TestGroupAndOrder_StableOrderWithinStatusBuckets(t *testing.T) {
+	items := []Item{
+		{Type: "loading", Display: "Loading windows\u2026"},
+		{Type: "error", Display: "zoxide error: command not found"},
+		{Type: "loading", Display: "Loading zoxide\u2026"},
+		{Type: "error", Display: "config error: bad toml"},
 	}
-	if got[1] != "loading" {
-		t.Errorf("got[1] = %q, want loading", got[1])
+
+	got := displays(GroupAndOrder(items, false))
+	want := []string{"zoxide error: command not found", "config error: bad toml", "Loading windows\u2026", "Loading zoxide\u2026"}
+
+	if !slices.Equal(got, want) {
+		t.Errorf("displays = %v, want %v", got, want)
 	}
 }

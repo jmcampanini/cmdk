@@ -399,7 +399,7 @@ func TestNextListWithUnmappedType_StaysOnCurrentList(t *testing.T) {
 func TestEnterOnErrorItem_NoAction(t *testing.T) {
 	items := []list.Item{
 		item.Item{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute},
-		item.Item{Type: "error", Display: "zoxide error: command not found", Data: map[string]string{"source_type": "dir"}},
+		item.Item{Type: "error", Display: "zoxide error: command not found"},
 	}
 	reg := generator.NewRegistry()
 	reg.Register("root", func(accumulated []item.Item, ctx generator.Context) []item.Item { return nil })
@@ -2050,7 +2050,7 @@ func TestInline_AsyncRebuildExpands(t *testing.T) {
 		{Type: "action", Display: "htop", Action: item.ActionExecute, Cmd: "htop"},
 	}
 	asyncSources := []AsyncSource{
-		{Name: "zoxide", Type: "dir", Fetch: func(_ context.Context) ([]item.Item, error) {
+		{Name: "zoxide", Fetch: func(_ context.Context) ([]item.Item, error) {
 			return []item.Item{
 				{Type: "dir", Display: "~/async-dir", Action: item.ActionNextList, Data: map[string]string{"path": "/async"}},
 			}, nil
@@ -2060,7 +2060,7 @@ func TestInline_AsyncRebuildExpands(t *testing.T) {
 	var initialAll []item.Item
 	initialAll = append(initialAll, syncItems...)
 	for _, src := range asyncSources {
-		initialAll = append(initialAll, generator.LoadingItem(generator.Source{Name: src.Name, Type: src.Type}))
+		initialAll = append(initialAll, generator.LoadingItem(generator.Source{Name: src.Name}))
 	}
 	listItems := item.GroupAndOrder(initialAll, false)
 

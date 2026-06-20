@@ -13,7 +13,6 @@ import (
 
 type Source struct {
 	Name  string
-	Type  string
 	Limit int
 	Async bool
 	Fetch func(context.Context) ([]item.Item, error)
@@ -71,7 +70,6 @@ func ErrorItem(src Source, err error) item.Item {
 	errItem.Type = "error"
 	errItem.Source = src.Name
 	errItem.Display = fmt.Sprintf("%s error: %s", src.Name, err)
-	errItem.Data["source_type"] = src.Type
 	return errItem
 }
 
@@ -80,6 +78,5 @@ func LoadingItem(src Source) item.Item {
 	it.Type = "loading"
 	it.Source = src.Name
 	it.Display = fmt.Sprintf("Loading %s\u2026", src.Name)
-	it.Data["source_type"] = src.Type
 	return it
 }

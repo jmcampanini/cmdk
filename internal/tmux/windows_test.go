@@ -148,9 +148,6 @@ func TestParseWindows_PartialMalformedRowsAddsParseErrorItem(t *testing.T) {
 	if parseError.Display != "tmux parse error: 3 unparseable list-windows rows" {
 		t.Errorf("parse error Display = %q", parseError.Display)
 	}
-	if parseError.Data["source_type"] != "window" {
-		t.Errorf("parse error Data[source_type] = %q, want window", parseError.Data["source_type"])
-	}
 	if parseError.Action != "" {
 		t.Errorf("parse error Action = %q, want empty", parseError.Action)
 	}

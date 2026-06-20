@@ -28,7 +28,7 @@ func newAsyncTestModel(syncItems []item.Item, asyncSources []AsyncSource) Model 
 	var initialAll []item.Item
 	initialAll = append(initialAll, syncItems...)
 	for _, src := range asyncSources {
-		initialAll = append(initialAll, generator.LoadingItem(generator.Source{Name: src.Name, Type: src.Type}))
+		initialAll = append(initialAll, generator.LoadingItem(generator.Source{Name: src.Name}))
 	}
 	listItems := item.GroupAndOrder(initialAll, false)
 
@@ -83,7 +83,7 @@ func TestInit_WithAsyncSources_ReturnsBatch(t *testing.T) {
 	m := newAsyncTestModel(
 		[]item.Item{{Type: "action", Display: "test", Action: item.ActionExecute}},
 		[]AsyncSource{
-			{Name: "windows", Type: "window", Timeout: time.Second, Fetch: func(context.Context) ([]item.Item, error) {
+			{Name: "windows", Timeout: time.Second, Fetch: func(context.Context) ([]item.Item, error) {
 				return nil, nil
 			}},
 		},
@@ -97,7 +97,7 @@ func TestSourceResult_ReplacesPlaceholder(t *testing.T) {
 	m := newAsyncTestModel(
 		[]item.Item{{Type: "action", Display: "do stuff", Action: item.ActionExecute}},
 		[]AsyncSource{
-			{Name: "windows", Type: "window", Timeout: time.Second},
+			{Name: "windows", Timeout: time.Second},
 		},
 	)
 	m = sizeModel(m, 80, 24)
@@ -129,7 +129,7 @@ func TestSourceResult_ErrorReplacesPlaceholder(t *testing.T) {
 	m := newAsyncTestModel(
 		[]item.Item{{Type: "action", Display: "do stuff", Action: item.ActionExecute}},
 		[]AsyncSource{
-			{Name: "zoxide", Type: "dir", Timeout: time.Second},
+			{Name: "zoxide", Timeout: time.Second},
 		},
 	)
 	m = sizeModel(m, 80, 24)
@@ -157,16 +157,13 @@ func TestSourceResult_ErrorReplacesPlaceholder(t *testing.T) {
 	if errItem.Source != "zoxide" {
 		t.Errorf("error item Source = %q, want zoxide", errItem.Source)
 	}
-	if errItem.Data["source_type"] != "dir" {
-		t.Errorf("error item Data[source_type] = %q, want dir", errItem.Data["source_type"])
-	}
 }
 
 func TestSourceResult_PreservesFilterText(t *testing.T) {
 	m := newAsyncTestModel(
 		[]item.Item{{Type: "action", Display: "do stuff", Action: item.ActionExecute}},
 		[]AsyncSource{
-			{Name: "windows", Type: "window", Timeout: time.Second},
+			{Name: "windows", Timeout: time.Second},
 		},
 	)
 	m = sizeModel(m, 80, 24)
@@ -211,8 +208,8 @@ func TestSourceResult_IncrementalArrival(t *testing.T) {
 	m := newAsyncTestModel(
 		[]item.Item{{Type: "action", Display: "do stuff", Action: item.ActionExecute}},
 		[]AsyncSource{
-			{Name: "windows", Type: "window", Timeout: time.Second},
-			{Name: "zoxide", Type: "dir", Timeout: time.Second},
+			{Name: "windows", Timeout: time.Second},
+			{Name: "zoxide", Timeout: time.Second},
 		},
 	)
 	m = sizeModel(m, 80, 24)
@@ -260,7 +257,7 @@ func TestSourceResult_BaseItemsPreserved(t *testing.T) {
 		{Type: "action", Display: "sync action 2", Action: item.ActionExecute},
 	}
 	m := newAsyncTestModel(syncItems, []AsyncSource{
-		{Name: "windows", Type: "window", Timeout: time.Second},
+		{Name: "windows", Timeout: time.Second},
 	})
 	m = sizeModel(m, 80, 24)
 
@@ -281,8 +278,8 @@ func TestSourceResult_GroupAndOrderApplied(t *testing.T) {
 		{Type: "action", Display: "my action", Action: item.ActionExecute},
 	}
 	m := newAsyncTestModel(syncItems, []AsyncSource{
-		{Name: "windows", Type: "window", Timeout: time.Second},
-		{Name: "zoxide", Type: "dir", Timeout: time.Second},
+		{Name: "windows", Timeout: time.Second},
+		{Name: "zoxide", Timeout: time.Second},
 	})
 	m = sizeModel(m, 80, 24)
 
@@ -315,13 +312,13 @@ func TestSourceResult_GroupAndOrderApplied(t *testing.T) {
 	}
 }
 
-func TestSourceResult_ErrorUsesSourceTypeBucket(t *testing.T) {
+func TestSourceResult_ErrorSortedBeforeNormalItems(t *testing.T) {
 	syncItems := []item.Item{
 		{Type: "action", Display: "my action", Action: item.ActionExecute},
 	}
 	m := newAsyncTestModel(syncItems, []AsyncSource{
-		{Name: "windows", Type: "window", Timeout: time.Second},
-		{Name: "zoxide", Type: "dir", Timeout: time.Second},
+		{Name: "windows", Timeout: time.Second},
+		{Name: "zoxide", Timeout: time.Second},
 	})
 	m = sizeModel(m, 80, 24)
 
@@ -348,15 +345,15 @@ func TestSourceResult_ErrorUsesSourceTypeBucket(t *testing.T) {
 			windowIdx = i
 		}
 	}
-	if actionIdx >= errIdx || errIdx >= windowIdx {
-		t.Errorf("expected order action < source error in dir bucket < window, got action=%d err=%d window=%d in %v",
-			actionIdx, errIdx, windowIdx, displays)
+	if errIdx >= actionIdx || actionIdx >= windowIdx {
+		t.Errorf("expected order error < action < window, got err=%d action=%d window=%d in %v",
+			errIdx, actionIdx, windowIdx, displays)
 	}
 }
 
 func TestLoadingItem_InertOnEnter(t *testing.T) {
 	m := newAsyncTestModel(nil, []AsyncSource{
-		{Name: "windows", Type: "window", Timeout: time.Second},
+		{Name: "windows", Timeout: time.Second},
 	})
 	m = sizeModel(m, 80, 24)
 	m = exitFilterMode(t, m)
@@ -379,7 +376,7 @@ func TestSourceResult_WhileDrilledDown_DoesNotRebuild(t *testing.T) {
 		{Type: "dir", Display: "~/projects", Action: item.ActionNextList, Data: map[string]string{"path": "~/projects"}},
 	}
 	asyncSrcs := []AsyncSource{
-		{Name: "windows", Type: "window", Timeout: time.Second},
+		{Name: "windows", Timeout: time.Second},
 	}
 	th := theme.Light()
 	reg := generator.NewRegistry()
@@ -395,7 +392,7 @@ func TestSourceResult_WhileDrilledDown_DoesNotRebuild(t *testing.T) {
 	var initialAll []item.Item
 	initialAll = append(initialAll, syncItems...)
 	for _, src := range asyncSrcs {
-		initialAll = append(initialAll, generator.LoadingItem(generator.Source{Name: src.Name, Type: src.Type}))
+		initialAll = append(initialAll, generator.LoadingItem(generator.Source{Name: src.Name}))
 	}
 	listItems := item.GroupAndOrder(initialAll, false)
 
@@ -403,7 +400,9 @@ func TestSourceResult_WhileDrilledDown_DoesNotRebuild(t *testing.T) {
 	m = sizeModel(m, 80, 24)
 	m = exitFilterMode(t, m)
 
-	result, _ := m.Update(enterMsg)
+	result, _ := m.Update(downMsg)
+	m = result.(Model)
+	result, _ = m.Update(enterMsg)
 	m = result.(Model)
 
 	if len(m.accumulated) == 0 {
@@ -432,7 +431,6 @@ func TestSourceResult_WhileDrilledDown_DoesNotRebuild(t *testing.T) {
 func TestFetchSourceCmd_PanicRecovery(t *testing.T) {
 	src := AsyncSource{
 		Name:    "panicky",
-		Type:    "window",
 		Timeout: time.Second,
 		Fetch: func(context.Context) ([]item.Item, error) {
 			panic("test panic")
@@ -456,7 +454,6 @@ func TestFetchSourceCmd_PanicRecovery(t *testing.T) {
 func TestFetchSourceCmd_Limit(t *testing.T) {
 	src := AsyncSource{
 		Name:    "dirs",
-		Type:    "dir",
 		Limit:   2,
 		Timeout: time.Second,
 		Fetch: func(context.Context) ([]item.Item, error) {
