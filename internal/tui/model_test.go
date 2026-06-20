@@ -583,7 +583,7 @@ func TestView_StackDisappearsAfterBack(t *testing.T) {
 	}
 }
 
-func TestDownDuringEmptyFilter_ExitsFilterWithoutMoving(t *testing.T) {
+func TestDownDuringEmptyFilter_NavigatesVisibleResults(t *testing.T) {
 	m := newTestModel(testItems(), testRegistry())
 	m.list.SetSize(80, 40)
 
@@ -594,15 +594,15 @@ func TestDownDuringEmptyFilter_ExitsFilterWithoutMoving(t *testing.T) {
 	result, _ := m.Update(downMsg)
 	m = result.(Model)
 
-	if m.list.FilterState() != list.Unfiltered {
-		t.Errorf("FilterState() = %v, want %v", m.list.FilterState(), list.Unfiltered)
+	if m.list.FilterState() != list.Filtering {
+		t.Errorf("FilterState() = %v, want %v", m.list.FilterState(), list.Filtering)
 	}
-	if m.list.Index() != 0 {
-		t.Errorf("Index() = %d, want 0 (Down should only exit filter, not move cursor)", m.list.Index())
+	if m.list.Index() != 1 {
+		t.Errorf("Index() = %d, want 1", m.list.Index())
 	}
 }
 
-func TestEnterDuringEmptyFilter_ExitsFilterWithoutSelecting(t *testing.T) {
+func TestEnterDuringEmptyFilter_SelectsHighlightedItem(t *testing.T) {
 	m := newTestModel(testItems(), testRegistry())
 	m.list.SetSize(80, 40)
 
@@ -610,21 +610,21 @@ func TestEnterDuringEmptyFilter_ExitsFilterWithoutSelecting(t *testing.T) {
 		t.Fatal("could not enter filtering state")
 	}
 
-	result, _ := m.Update(enterMsg)
+	result, cmd := m.Update(enterMsg)
 	m = result.(Model)
 
-	if m.list.FilterState() != list.Unfiltered {
-		t.Errorf("FilterState() = %v, want %v", m.list.FilterState(), list.Unfiltered)
+	if m.Selected() == nil {
+		t.Fatal("Selected() should be set after Enter on highlighted item")
 	}
-	if m.list.Index() != 0 {
-		t.Errorf("Index() = %d, want 0 (Enter should only exit filter, not move cursor)", m.list.Index())
+	if m.Selected().Display != "main:1 zsh" {
+		t.Errorf("Selected().Display = %q, want %q", m.Selected().Display, "main:1 zsh")
 	}
-	if m.Selected() != nil {
-		t.Error("Selected() should be nil — blank enter should exit filter, not select")
+	if cmd == nil {
+		t.Error("expected Quit command")
 	}
 }
 
-func TestUpDuringEmptyFilter_ExitsFilter(t *testing.T) {
+func TestUpDuringEmptyFilter_NavigatesVisibleResults(t *testing.T) {
 	m := newTestModel(testItems(), testRegistry())
 	m.list.SetSize(80, 40)
 
@@ -635,11 +635,12 @@ func TestUpDuringEmptyFilter_ExitsFilter(t *testing.T) {
 	result, _ := m.Update(upMsg)
 	m = result.(Model)
 
-	if m.list.FilterState() != list.Unfiltered {
-		t.Errorf("FilterState() = %v, want %v", m.list.FilterState(), list.Unfiltered)
+	want := len(m.list.VisibleItems()) - 1
+	if m.list.FilterState() != list.Filtering {
+		t.Errorf("FilterState() = %v, want %v", m.list.FilterState(), list.Filtering)
 	}
-	if m.list.Index() != 0 {
-		t.Errorf("Index() = %d, want 0 (Up should only exit filter, not move cursor)", m.list.Index())
+	if m.list.Index() != want {
+		t.Errorf("Index() = %d, want %d", m.list.Index(), want)
 	}
 }
 
@@ -661,8 +662,177 @@ func TestDownDuringNonEmptyFilter_StaysInFilterMode(t *testing.T) {
 	result, _ = m.Update(downMsg)
 	m = result.(Model)
 
-	if m.list.FilterState() == list.Unfiltered {
-		t.Error("FilterState() should not be Unfiltered when filter has text")
+	if m.list.FilterState() != list.Filtering {
+		t.Errorf("FilterState() = %v, want %v", m.list.FilterState(), list.Filtering)
+	}
+	if header := ansi.Strip(m.headerView()); !strings.Contains(header, "m") {
+		t.Errorf("headerView() = %q, want visible filter text %q", header, "m")
+	}
+}
+
+func filterNavigationItems() []list.Item {
+	return []list.Item{
+		item.Item{Type: "window", Display: "alpha", Action: item.ActionExecute},
+		item.Item{Type: "window", Display: "alpine", Action: item.ActionExecute},
+		item.Item{Type: "window", Display: "bravo", Action: item.ActionExecute},
+	}
+}
+
+func typeFilterQuery(t *testing.T, m Model, text string) Model {
+	t.Helper()
+	for _, ch := range text {
+		result, cmd := m.Update(tea.KeyPressMsg{Code: ch, Text: string(ch)})
+		m = result.(Model)
+		m = runTestCmd(t, m, cmd)
+	}
+	return m
+}
+
+func runTestCmd(t *testing.T, m Model, cmd tea.Cmd) Model {
+	t.Helper()
+	if cmd == nil {
+		return m
+	}
+	msg := cmd()
+	switch msg := msg.(type) {
+	case nil:
+		return m
+	case tea.BatchMsg:
+		for _, c := range msg {
+			m = runTestCmd(t, m, c)
+		}
+		return m
+	default:
+		result, _ := m.Update(msg)
+		model, ok := result.(Model)
+		if !ok {
+			t.Fatalf("Update(%T) returned %T, want tui.Model", msg, result)
+		}
+		return model
+	}
+}
+
+func TestDownDuringNonEmptyFilter_MovesThroughVisibleResults(t *testing.T) {
+	m := newTestModel(filterNavigationItems(), testRegistry())
+	m.list.SetSize(80, 40)
+	m = typeFilterQuery(t, m, "al")
+
+	visible := m.list.VisibleItems()
+	if len(visible) < 2 {
+		t.Fatalf("VisibleItems() = %d, want at least 2", len(visible))
+	}
+
+	want := visible[1].(item.Item).Display
+
+	result, _ := m.Update(downMsg)
+	m = result.(Model)
+
+	if m.list.FilterState() != list.Filtering {
+		t.Errorf("FilterState() = %v, want %v", m.list.FilterState(), list.Filtering)
+	}
+	if m.list.Index() != 1 {
+		t.Fatalf("Index() = %d, want 1", m.list.Index())
+	}
+	got := m.list.SelectedItem().(item.Item).Display
+	if got != want {
+		t.Errorf("SelectedItem().Display = %q, want %q", got, want)
+	}
+}
+
+func TestUpDuringNonEmptyFilter_MovesThroughVisibleResults(t *testing.T) {
+	m := newTestModel(filterNavigationItems(), testRegistry())
+	m.list.SetSize(80, 40)
+	m = typeFilterQuery(t, m, "al")
+
+	visible := m.list.VisibleItems()
+	if len(visible) < 2 {
+		t.Fatalf("VisibleItems() = %d, want at least 2", len(visible))
+	}
+
+	wantIndex := len(visible) - 1
+	want := visible[wantIndex].(item.Item).Display
+
+	result, _ := m.Update(upMsg)
+	m = result.(Model)
+
+	if m.list.FilterState() != list.Filtering {
+		t.Errorf("FilterState() = %v, want %v", m.list.FilterState(), list.Filtering)
+	}
+	if m.list.Index() != wantIndex {
+		t.Fatalf("Index() = %d, want %d", m.list.Index(), wantIndex)
+	}
+	got := m.list.SelectedItem().(item.Item).Display
+	if got != want {
+		t.Errorf("SelectedItem().Display = %q, want %q", got, want)
+	}
+}
+
+func TestEnterDuringNonEmptyFilter_MultipleItemsActivatesHighlighted(t *testing.T) {
+	m := newTestModel(filterNavigationItems(), testRegistry())
+	m.list.SetSize(80, 40)
+	m = typeFilterQuery(t, m, "al")
+
+	result, _ := m.Update(downMsg)
+	m = result.(Model)
+	want := m.list.SelectedItem().(item.Item).Display
+
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.Selected() == nil {
+		t.Fatal("Selected() should be set after Enter on highlighted filtered item")
+	}
+	if m.Selected().Display != want {
+		t.Errorf("Selected().Display = %q, want %q", m.Selected().Display, want)
+	}
+	if cmd == nil {
+		t.Error("expected Quit command")
+	}
+}
+
+func TestTypingDuringNonEmptyFilter_ResetsHighlightToFirstResult(t *testing.T) {
+	m := newTestModel(filterNavigationItems(), testRegistry())
+	m.list.SetSize(80, 40)
+	m = typeFilterQuery(t, m, "al")
+
+	result, _ := m.Update(downMsg)
+	m = result.(Model)
+	if m.list.Index() != 1 {
+		t.Fatalf("after Down: Index() = %d, want 1", m.list.Index())
+	}
+
+	m = typeFilterQuery(t, m, "p")
+
+	visible := m.list.VisibleItems()
+	if len(visible) < 2 {
+		t.Fatalf("VisibleItems() = %d, want at least 2", len(visible))
+	}
+	if m.list.Index() != 0 {
+		t.Fatalf("Index() = %d, want 0 after typing refines the filter", m.list.Index())
+	}
+	got := m.list.SelectedItem().(item.Item).Display
+	want := visible[0].(item.Item).Display
+	if got != want {
+		t.Errorf("SelectedItem().Display = %q, want first visible item %q", got, want)
+	}
+}
+
+func TestTypingFilterRunsSynchronously(t *testing.T) {
+	m := newTestModel(filterNavigationItems(), testRegistry())
+	m.list.SetSize(80, 40)
+
+	result, cmd := m.Update(tea.KeyPressMsg{Code: rune('b'), Text: "b"})
+	m = result.(Model)
+	if cmd != nil {
+		t.Fatal("typing in the filter should not return an async filter command")
+	}
+
+	visible := m.list.VisibleItems()
+	if len(visible) != 1 {
+		t.Fatalf("VisibleItems() = %d, want 1", len(visible))
+	}
+	if got := visible[0].(item.Item).Display; got != "bravo" {
+		t.Fatalf("visible item = %q, want bravo", got)
 	}
 }
 
@@ -1179,7 +1349,7 @@ func TestPickerStage_EntersPickerMode(t *testing.T) {
 	}
 }
 
-func TestPickerStage_BlankEnterExitsFilter(t *testing.T) {
+func TestPickerStage_BlankEnterSelectsHighlightedItem(t *testing.T) {
 	m := newTestModel(pickerItems(), testRegistry())
 	m = setWindowSize(t, m, 80, 40)
 
@@ -1194,14 +1364,143 @@ func TestPickerStage_BlankEnterExitsFilter(t *testing.T) {
 	result, cmd := m.Update(enterMsg)
 	m = result.(Model)
 
-	if m.pickerList.FilterState() != list.Unfiltered {
-		t.Errorf("FilterState() = %v, want Unfiltered after blank enter in picker", m.pickerList.FilterState())
+	if m.Selected() == nil {
+		t.Fatal("Selected() should be set after blank Enter on highlighted picker item")
 	}
+	if cmd == nil {
+		t.Error("expected Quit command")
+	}
+	data := execute.FlattenData(m.Accumulated())
+	if data["file"] != "alpha" {
+		t.Errorf("data[file] = %q, want alpha", data["file"])
+	}
+}
+
+func TestPickerStage_BlankDownNavigatesVisibleResults(t *testing.T) {
+	m := newTestModel(pickerItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+
+	m = selectStagedItem(t, m)
 	if m.mode != viewPicker {
-		t.Errorf("mode = %d, want viewPicker — should stay in picker after exiting filter", m.mode)
+		t.Fatal("expected viewPicker")
 	}
+
+	result, _ := m.Update(downMsg)
+	m = result.(Model)
+
+	if m.pickerList.FilterState() != list.Filtering {
+		t.Errorf("FilterState() = %v, want %v", m.pickerList.FilterState(), list.Filtering)
+	}
+	if m.pickerList.Index() != 1 {
+		t.Fatalf("Index() = %d, want 1", m.pickerList.Index())
+	}
+	got := m.pickerList.SelectedItem().(item.Item).Display
+	if got != "beta" {
+		t.Errorf("SelectedItem().Display = %q, want beta", got)
+	}
+}
+
+func TestPickerStage_NonEmptyFilterNavigationAndEnter(t *testing.T) {
+	m := newTestModel(pickerItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+
+	m = selectStagedItem(t, m)
+	if m.mode != viewPicker {
+		t.Fatal("expected viewPicker")
+	}
+	m = typeFilterQuery(t, m, "a")
+
+	if visibleCount := len(m.pickerList.VisibleItems()); visibleCount < 2 {
+		t.Fatalf("VisibleItems() = %d, want at least 2", visibleCount)
+	}
+
+	result, _ := m.Update(downMsg)
+	m = result.(Model)
+	if m.pickerList.FilterState() != list.Filtering {
+		t.Errorf("FilterState() = %v, want %v", m.pickerList.FilterState(), list.Filtering)
+	}
+	if m.pickerList.Index() != 1 {
+		t.Fatalf("after Down: Index() = %d, want 1", m.pickerList.Index())
+	}
+
+	result, _ = m.Update(upMsg)
+	m = result.(Model)
+	if m.pickerList.FilterState() != list.Filtering {
+		t.Errorf("FilterState() = %v, want %v", m.pickerList.FilterState(), list.Filtering)
+	}
+	if m.pickerList.Index() != 0 {
+		t.Fatalf("after Up: Index() = %d, want 0", m.pickerList.Index())
+	}
+
+	result, _ = m.Update(downMsg)
+	m = result.(Model)
+	selected := m.pickerList.SelectedItem().(item.Item)
+
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if cmd == nil {
+		t.Error("expected Quit command")
+	}
+	data := execute.FlattenData(m.Accumulated())
+	if data["file"] != selected.Value {
+		t.Errorf("data[file] = %q, want %q", data["file"], selected.Value)
+	}
+}
+
+func TestPickerStage_TypingDuringNonEmptyFilter_ResetsHighlightToFirstResult(t *testing.T) {
+	m := newTestModel(pickerItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+
+	m = selectStagedItem(t, m)
+	if m.mode != viewPicker {
+		t.Fatal("expected viewPicker")
+	}
+	m = typeFilterQuery(t, m, "a")
+
+	result, _ := m.Update(downMsg)
+	m = result.(Model)
+	if m.pickerList.Index() != 1 {
+		t.Fatalf("after Down: Index() = %d, want 1", m.pickerList.Index())
+	}
+
+	m = typeFilterQuery(t, m, "l")
+
+	visible := m.pickerList.VisibleItems()
+	if len(visible) == 0 {
+		t.Fatal("VisibleItems() = 0, want at least 1")
+	}
+	if m.pickerList.Index() != 0 {
+		t.Fatalf("Index() = %d, want 0 after typing refines the picker filter", m.pickerList.Index())
+	}
+	got := m.pickerList.SelectedItem().(item.Item).Display
+	want := visible[0].(item.Item).Display
+	if got != want {
+		t.Errorf("SelectedItem().Display = %q, want first visible item %q", got, want)
+	}
+}
+
+func TestPickerStage_TypingFilterRunsSynchronously(t *testing.T) {
+	m := newTestModel(pickerItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+
+	m = selectStagedItem(t, m)
+	if m.mode != viewPicker {
+		t.Fatal("expected viewPicker")
+	}
+
+	result, cmd := m.Update(tea.KeyPressMsg{Code: rune('b'), Text: "b"})
+	m = result.(Model)
 	if cmd != nil {
-		t.Error("blank enter in picker filter should not produce a command")
+		t.Fatal("typing in the picker filter should not return an async filter command")
+	}
+
+	visible := m.pickerList.VisibleItems()
+	if len(visible) != 1 {
+		t.Fatalf("VisibleItems() = %d, want 1", len(visible))
+	}
+	if got := visible[0].(item.Item).Display; got != "beta" {
+		t.Fatalf("visible item = %q, want beta", got)
 	}
 }
 
@@ -1576,7 +1875,7 @@ func typeSpaces(t *testing.T, m Model) Model {
 	return m
 }
 
-func TestDownDuringWhitespaceOnlyFilter_ResetsFilter(t *testing.T) {
+func TestDownDuringWhitespaceOnlyFilter_NavigatesVisibleResults(t *testing.T) {
 	m := newTestModel(testItems(), testRegistry())
 	m.list.SetSize(80, 40)
 
@@ -1589,8 +1888,11 @@ func TestDownDuringWhitespaceOnlyFilter_ResetsFilter(t *testing.T) {
 	result, _ := m.Update(downMsg)
 	m = result.(Model)
 
-	if m.list.FilterState() != list.Unfiltered {
-		t.Errorf("FilterState() = %v, want Unfiltered after down on whitespace-only filter", m.list.FilterState())
+	if m.list.FilterState() != list.Filtering {
+		t.Errorf("FilterState() = %v, want Filtering after down on whitespace-only filter", m.list.FilterState())
+	}
+	if m.list.Index() != 1 {
+		t.Errorf("Index() = %d, want 1", m.list.Index())
 	}
 }
 
@@ -1682,7 +1984,7 @@ func TestWrapListDisabled_UpAtTopStays(t *testing.T) {
 	}
 }
 
-func TestEnterDuringWhitespaceOnlyFilter_ResetsFilter(t *testing.T) {
+func TestEnterDuringWhitespaceOnlyFilter_SelectsHighlightedItem(t *testing.T) {
 	m := newTestModel(testItems(), testRegistry())
 	m.list.SetSize(80, 40)
 
@@ -1695,14 +1997,14 @@ func TestEnterDuringWhitespaceOnlyFilter_ResetsFilter(t *testing.T) {
 	result, cmd := m.Update(enterMsg)
 	m = result.(Model)
 
-	if m.list.FilterState() != list.Unfiltered {
-		t.Errorf("FilterState() = %v, want Unfiltered after enter on whitespace-only filter", m.list.FilterState())
+	if m.Selected() == nil {
+		t.Fatal("Selected() should be set after Enter on whitespace-only filter")
 	}
-	if m.Selected() != nil {
-		t.Error("Selected() should be nil — whitespace-only enter should reset, not select")
+	if m.Selected().Display != "main:1 zsh" {
+		t.Errorf("Selected().Display = %q, want %q", m.Selected().Display, "main:1 zsh")
 	}
-	if cmd != nil {
-		t.Error("whitespace-only enter should not produce a command")
+	if cmd == nil {
+		t.Error("expected Quit command")
 	}
 }
 
