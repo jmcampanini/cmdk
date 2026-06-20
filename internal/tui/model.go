@@ -250,8 +250,8 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if key == "enter" {
-		hadActiveFilter := prepareActiveFilterSelection(&m.list)
-		sel, ok := resolveListTarget(m.list)
+		wasFiltering := refreshActiveFilter(&m.list)
+		sel, ok := selectedListItem(m.list)
 		if ok && sel.Type != "error" && sel.Type != "loading" {
 			// Reconstruct the accumulated stack as if the user drilled down,
 			// so template variables (e.g. {{.path}}) resolve correctly.
@@ -275,7 +275,7 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
-		if hadActiveFilter {
+		if wasFiltering {
 			return m, nil
 		}
 	}
@@ -344,12 +344,12 @@ func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	if key == "enter" {
-		hadActiveFilter := prepareActiveFilterSelection(&m.pickerList)
-		sel, ok := resolveListTarget(m.pickerList)
+		wasFiltering := refreshActiveFilter(&m.pickerList)
+		sel, ok := selectedListItem(m.pickerList)
 		if ok && sel.Type != "error" {
 			return m.pushStageResult(m.pickerKey, sel.Display, sel.Value)
 		}
-		if hadActiveFilter {
+		if wasFiltering {
 			return m, nil
 		}
 	}
@@ -423,17 +423,17 @@ func updateFilterableList(l list.Model, msg tea.Msg) (list.Model, tea.Cmd) {
 // effective filter shows all items, so navigation still moves through visible
 // results instead of accepting or resetting the filter.
 func navigateActiveFilter(l *list.Model, key string) bool {
-	if !isFiltering(l) {
-		return false
-	}
-
 	switch key {
 	case "down", "ctrl+j":
-		refreshActiveFilter(l)
+		if !refreshActiveFilter(l) {
+			return false
+		}
 		l.CursorDown()
 		return true
 	case "up", "ctrl+k":
-		refreshActiveFilter(l)
+		if !refreshActiveFilter(l) {
+			return false
+		}
 		l.CursorUp()
 		return true
 	default:
@@ -441,19 +441,11 @@ func navigateActiveFilter(l *list.Model, key string) bool {
 	}
 }
 
-func prepareActiveFilterSelection(l *list.Model) bool {
-	if !isFiltering(l) {
+func refreshActiveFilter(l *list.Model) bool {
+	if l.FilterState() != list.Filtering {
 		return false
 	}
-	refreshActiveFilter(l)
-	return true
-}
 
-func isFiltering(l *list.Model) bool {
-	return l.FilterState() == list.Filtering
-}
-
-func refreshActiveFilter(l *list.Model) {
 	filterText := l.FilterInput.Value()
 	cursorPos := l.FilterInput.Position()
 	selectedIndex := l.Index()
@@ -465,15 +457,16 @@ func refreshActiveFilter(l *list.Model) {
 	visibleCount := len(l.VisibleItems())
 	if visibleCount == 0 {
 		l.Select(0)
-		return
+		return true
 	}
 	if selectedIndex >= visibleCount {
 		selectedIndex = visibleCount - 1
 	}
 	l.Select(selectedIndex)
+	return true
 }
 
-func resolveListTarget(l list.Model) (item.Item, bool) {
+func selectedListItem(l list.Model) (item.Item, bool) {
 	sel, ok := l.SelectedItem().(item.Item)
 	return sel, ok
 }
