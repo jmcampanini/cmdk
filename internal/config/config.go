@@ -75,7 +75,14 @@ var validMatchTypes = []string{"root", "dir", "session"}
 // reservedKeys are set by the runtime (from the selection stack or CLI flags) and must not collide with stage keys.
 var reservedKeys = []string{"path", "pane_id", "session", "window_index"}
 
-var sessionReservedKeys = []string{"session_attached", "session_display", "session_id", "session_kind", "session_name", "session_windows"}
+var sessionActionReservedKeys = slices.Concat(reservedKeys, []string{
+	"session_attached",
+	"session_display",
+	"session_id",
+	"session_kind",
+	"session_name",
+	"session_windows",
+})
 
 var validStageKey = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
@@ -162,10 +169,10 @@ func validateActions(actions []Action) error {
 }
 
 func reservedKeysForMatch(matchType string) []string {
-	if matchType != "session" {
-		return reservedKeys
+	if matchType == "session" {
+		return sessionActionReservedKeys
 	}
-	return slices.Concat(reservedKeys, sessionReservedKeys)
+	return reservedKeys
 }
 
 func validateStages(actionIdx int, matchType string, stages []StageConfig) error {

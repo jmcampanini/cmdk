@@ -11,7 +11,10 @@ import (
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
-const SessionKindExternal = "external"
+const (
+	SessionKindExternal = "external"
+	sessionListFormat   = "#{session_id}\t#{session_name}\t#{session_windows}\t#{session_attached}"
+)
 
 func ParseSessions(output string) []item.Item {
 	lines := strings.Split(output, "\n")
@@ -75,7 +78,7 @@ func ParseSessions(output string) []item.Item {
 }
 
 func ListSessions(ctx context.Context) ([]item.Item, error) {
-	out, err := exec.CommandContext(ctx, "tmux", "list-sessions", "-F", "#{session_id}\t#{session_name}\t#{session_windows}\t#{session_attached}").Output()
+	out, err := exec.CommandContext(ctx, "tmux", "list-sessions", "-F", sessionListFormat).Output()
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, fmt.Errorf("tmux did not respond within the configured timeout: %w", err)

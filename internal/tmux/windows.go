@@ -95,6 +95,11 @@ func ListWindows(ctx context.Context) ([]item.Item, error) {
 	return ParseWindows(string(out)), nil
 }
 
+const (
+	windowsForSessionFormat = "#{window_index}\t#{window_name}\t#{window_bell_flag}"
+	sessionWindowCommand    = `tmux switch-client -t {{sq (printf "%s:%s" .session_id .window_index)}}`
+)
+
 func ParseWindowsForSession(output string, session item.Item) []item.Item {
 	lines := strings.Split(output, "\n")
 
@@ -133,7 +138,7 @@ func ParseWindowsForSession(output string, session item.Item) []item.Item {
 			it.Display += " " + windowName
 		}
 		it.Action = item.ActionExecute
-		it.Cmd = sessionWindowCmd()
+		it.Cmd = sessionWindowCommand
 		maps.Copy(it.Data, session.Data)
 		if sessionName := session.Data["session_name"]; sessionName != "" {
 			it.Data["session"] = sessionName
@@ -160,7 +165,7 @@ func ListWindowsForSession(ctx context.Context, session item.Item) ([]item.Item,
 		return nil, err
 	}
 
-	out, err := exec.CommandContext(ctx, "tmux", "list-windows", "-t", target, "-F", "#{window_index}\t#{window_name}\t#{window_bell_flag}").Output()
+	out, err := exec.CommandContext(ctx, "tmux", "list-windows", "-t", target, "-F", windowsForSessionFormat).Output()
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, fmt.Errorf("tmux did not respond within the configured timeout: %w", err)
@@ -175,8 +180,4 @@ func sessionTarget(session item.Item) (string, error) {
 		return sessionID, nil
 	}
 	return "", fmt.Errorf("session item is missing session_id")
-}
-
-func sessionWindowCmd() string {
-	return `tmux switch-client -t {{sq (printf "%s:%s" .session_id .window_index)}}`
 }
