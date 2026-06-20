@@ -252,6 +252,20 @@ func TestParseWindowsForSession(t *testing.T) {
 	}
 }
 
+func TestParseWindowsForSession_EscapedControlCharsInName(t *testing.T) {
+	session := item.NewItem()
+	session.Data["session_id"] = "$1"
+
+	items := ParseWindowsForSession("1\t@2\tmy"+tmuxEscapedTab+"cool"+tmuxEscapedNewline+"app\t0\n", session)
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
+	}
+	want := "window 1 my" + tmuxEscapedTab + "cool" + tmuxEscapedNewline + "app"
+	if items[0].Display != want {
+		t.Errorf("Display = %q, want %q", items[0].Display, want)
+	}
+}
+
 func TestParseWindowsForSession_SkipsMalformed(t *testing.T) {
 	session := item.NewItem()
 	session.Data["session_id"] = "$1"

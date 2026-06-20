@@ -191,7 +191,7 @@ func ListWindows(ctx context.Context) ([]item.Item, error) {
 }
 
 const (
-	windowsForSessionFormat = "#{window_index}\t#{window_id}\t#{window_name}\t#{window_bell_flag}"
+	windowsForSessionFormat = "#{window_index}\t#{window_id}\t" + tmuxEscapedWindowNameFormat + "\t#{window_bell_flag}"
 	sessionWindowCommand    = tmuxWindowSwitchCommand
 )
 
