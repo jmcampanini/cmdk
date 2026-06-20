@@ -411,9 +411,9 @@ func (m Model) stageEsc() (tea.Model, tea.Cmd) {
 }
 
 func updateFilterableList(l list.Model, msg tea.Msg) (list.Model, tea.Cmd) {
-	filterBefore := l.FilterInput.Value()
+	filterTextBefore := l.FilterInput.Value()
 	updated, cmd := l.Update(msg)
-	if updated.FilterState() == list.Filtering && updated.FilterInput.Value() != filterBefore {
+	if updated.FilterState() == list.Filtering && updated.FilterInput.Value() != filterTextBefore {
 		updated.GoToStart()
 	}
 	return updated, cmd
@@ -454,11 +454,11 @@ func isFiltering(l *list.Model) bool {
 }
 
 func refreshActiveFilter(l *list.Model) {
-	filter := l.FilterInput.Value()
+	filterText := l.FilterInput.Value()
 	cursorPos := l.FilterInput.Position()
-	index := l.Index()
+	selectedIndex := l.Index()
 
-	l.SetFilterText(filter)
+	l.SetFilterText(filterText)
 	l.SetFilterState(list.Filtering)
 	l.FilterInput.SetCursor(cursorPos)
 
@@ -467,10 +467,10 @@ func refreshActiveFilter(l *list.Model) {
 		l.Select(0)
 		return
 	}
-	if index >= visibleCount {
-		index = visibleCount - 1
+	if selectedIndex >= visibleCount {
+		selectedIndex = visibleCount - 1
 	}
-	l.Select(index)
+	l.Select(selectedIndex)
 }
 
 func resolveListTarget(l list.Model) (item.Item, bool) {

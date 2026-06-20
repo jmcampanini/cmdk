@@ -80,8 +80,7 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, li list.Item)
 	}
 
 	filterState := m.FilterState()
-	filtering := filterState == list.Filtering
-	filtered := filtering || filterState == list.FilterApplied
+	filtered := filterState == list.Filtering || filterState == list.FilterApplied
 
 	var matchedRunes []int
 	if filtered {
