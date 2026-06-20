@@ -138,8 +138,17 @@ func TestParseWindows_PartialMalformedRowsAddsParseErrorItem(t *testing.T) {
 	if items[0].Display != "tmux: main:3 fish" {
 		t.Errorf("Display = %q, want %q", items[0].Display, "tmux: main:3 fish")
 	}
+	if items[1].Type != "error" {
+		t.Errorf("parse error Type = %q, want error", items[1].Type)
+	}
+	if items[1].Source != "tmux" {
+		t.Errorf("parse error Source = %q, want tmux", items[1].Source)
+	}
 	if items[1].Display != "tmux parse error: 3 unparseable list-windows rows" {
 		t.Errorf("parse error Display = %q", items[1].Display)
+	}
+	if items[1].Data["source_type"] != "window" {
+		t.Errorf("parse error Data[source_type] = %q, want window", items[1].Data["source_type"])
 	}
 	if items[1].Action != "" {
 		t.Errorf("parse error Action = %q, want empty", items[1].Action)
