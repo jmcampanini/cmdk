@@ -14,29 +14,27 @@ When the user types a filter query and presses Down, the search textbox disappea
 
 ## Desired Behavior
 
+Use picker-style behavior, matching list pickers such as Snacks picker:
+
+- While the filter textbox is focused, `Down` / `Ctrl+J` move to the next visible result.
+- While the filter textbox is focused, `Up` / `Ctrl+K` move to the previous visible result.
+- The list remains in active filter mode while navigating.
+- The filter textbox remains visible and editable while navigating.
+- `Enter` activates the currently highlighted visible item.
+- An empty or whitespace-only effective filter is treated as an empty fuzzy pattern: all visible items are navigable, and `Enter` chooses the highlighted item.
+
 ### Main list and drill-down lists
 
-When the filter query is non-empty:
-
-- `Down` / `Ctrl+J` should move to the next visible filtered result.
-- `Up` / `Ctrl+K` should move to the previous visible filtered result.
-- The list should remain in active filter mode.
-- The filter textbox should remain visible and editable.
-- `Enter` should activate the currently highlighted filtered item.
-
-When the effective filter query is empty or whitespace-only:
-
-- Preserve existing behavior.
-- `Up`, `Down`, and `Enter` reset/exit filter mode without moving or selecting.
+Apply the picker-style behavior to root and drill-down lists.
 
 ### Picker-stage lists
 
 Apply the same behavior to picker-stage lists:
 
-- Filter textbox remains visible during filtered navigation.
-- `Up` / `Down` navigate visible filtered picker results.
+- Filter textbox remains visible during navigation.
+- `Up` / `Down` navigate visible picker results.
 - `Enter` chooses the highlighted visible picker result.
-- Empty or whitespace-only filter behavior remains unchanged.
+- Empty or whitespace-only input navigates/selects visible picker results instead of resetting the filter.
 
 ## Non-goals
 
@@ -47,15 +45,15 @@ Apply the same behavior to picker-stage lists:
 
 ## Implementation Sketch
 
-1. Add a small helper for active-filter navigation.
+1. Add a small helper for navigation while the list is in filter mode.
    - Detect `FilterState() == list.Filtering`.
-   - Require `strings.TrimSpace(FilterInput.Value()) != ""`.
    - Intercept navigation keys before Bubble's default filter-accept behavior runs.
+   - Treat empty and whitespace-only effective filters the same as any other filter-mode list.
 
 2. Handle keys while filtering:
-   - `down`, `ctrl+j`: move the list cursor to the next visible filtered item.
-   - `up`, `ctrl+k`: move the list cursor to the previous visible filtered item.
-   - `enter`: resolve and activate the currently highlighted visible item.
+   - `down`, `ctrl+j`: move the list cursor to the next visible item.
+   - `up`, `ctrl+k`: move the list cursor to the previous visible item.
+   - `enter`: refresh visible items and activate the currently highlighted item.
 
 3. Keep filter mode active:
    - Do not let Bubble's default `AcceptWhileFiltering` path convert the state to `FilterApplied` for these keys.
@@ -65,9 +63,7 @@ Apply the same behavior to picker-stage lists:
    - `updateList`
    - `updatePicker`
 
-5. Preserve current empty/whitespace reset behavior:
-   - Keep `resetWhitespaceFilter` behavior for `up`, `down`, and `enter`.
-   - Ensure this runs before non-empty filter navigation handling.
+5. Reset navigation to the first visible result when the filter text changes, but preserve explicit user navigation when pending async filter results arrive.
 
 ## Test Plan
 
@@ -78,8 +74,11 @@ Add/update unit tests under `internal/tui/model_test.go`:
 - `Down` moves selection through visible filtered results.
 - `Up` moves selection through visible filtered results.
 - `Enter` during a non-empty filter with multiple visible items activates the highlighted item.
+- Empty-filter `Down`/`Up` navigate visible results.
+- Empty-filter `Enter` activates the highlighted item.
+- Whitespace-only `Down`/`Up` navigate visible results.
+- Whitespace-only `Enter` activates the highlighted item.
 - Existing single-match Enter behavior still works.
-- Existing empty-filter and whitespace-only filter reset tests still pass.
 - Picker-stage list has the same Down/Up/Enter behavior.
 
 ## Verification

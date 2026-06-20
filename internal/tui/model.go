@@ -419,6 +419,9 @@ func updateFilterableList(l list.Model, msg tea.Msg) (list.Model, tea.Cmd) {
 	return updated, cmd
 }
 
+// While the filter input is focused, cmdk follows picker semantics: an empty
+// effective filter shows all items, so navigation still moves through visible
+// results instead of accepting or resetting the filter.
 func navigateActiveFilter(l *list.Model, key string) bool {
 	if !isFiltering(l) {
 		return false
