@@ -57,7 +57,7 @@ func TestGroupAndOrder_MixedTypesWithCmd(t *testing.T) {
 	}
 }
 
-func TestGroupAndOrder_SessionsAtBottom(t *testing.T) {
+func TestGroupAndOrder_SessionsFirst(t *testing.T) {
 	items := []Item{
 		{Type: "session", Display: "tmux: work"},
 		{Type: "window", Display: "tmux: work:1 zsh"},
@@ -66,7 +66,7 @@ func TestGroupAndOrder_SessionsAtBottom(t *testing.T) {
 	}
 
 	got := types(GroupAndOrder(items, false))
-	want := []string{"action", "dir", "window", "session"}
+	want := []string{"session", "action", "dir", "window"}
 
 	if !slices.Equal(got, want) {
 		t.Errorf("types = %v, want %v", got, want)
@@ -185,7 +185,7 @@ func TestGroupAndOrder_LoadingItemInSourceTypeBucket(t *testing.T) {
 	}
 }
 
-func TestGroupAndOrder_LoadingSessionAtBottom(t *testing.T) {
+func TestGroupAndOrder_LoadingSessionFirst(t *testing.T) {
 	loading := NewItem()
 	loading.Type = "loading"
 	loading.Display = "Loading sessions\u2026"
@@ -197,7 +197,7 @@ func TestGroupAndOrder_LoadingSessionAtBottom(t *testing.T) {
 	}
 
 	got := displays(GroupAndOrder(items, false))
-	want := []string{"tmux: main:1 zsh", "Loading sessions\u2026"}
+	want := []string{"Loading sessions\u2026", "tmux: main:1 zsh"}
 
 	if !slices.Equal(got, want) {
 		t.Errorf("displays = %v, want %v", got, want)

@@ -2,7 +2,7 @@ package item
 
 import "charm.land/bubbles/v2/list"
 
-var TypeOrder = []string{"action", "cmd", "dir", "window", "session"}
+var TypeOrder = []string{"session", "action", "cmd", "dir", "window"}
 
 func GroupAndOrder(items []Item, bellToTop bool) []list.Item {
 	var bellItems []Item

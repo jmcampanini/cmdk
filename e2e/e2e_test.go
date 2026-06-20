@@ -164,9 +164,11 @@ func requireZoxideEntries(t *testing.T) {
 func navigateToDirItem(t *testing.T, sess string) {
 	t.Helper()
 	exitFilterModeE2E(t, sess)
-	content := capturePane(t, sess)
-	cmdCount := strings.Count(content, iconCmd)
-	for range cmdCount {
+	content := waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, iconDir)
+	}, 3*time.Second)
+	itemsBeforeDirs := strings.Count(content, iconSession) + strings.Count(content, iconCmd)
+	for range itemsBeforeDirs {
 		sendKeys(t, sess, "Down")
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -183,14 +185,7 @@ func exitFilterModeE2E(t *testing.T, sess string) {
 
 func navigateToWindowItems(t *testing.T, sess string) string {
 	t.Helper()
-	// Sessions are ordered after windows, so jump to the bottom once sessions
-	// have loaded, then move up to the window group.
 	sendKeys(t, sess, "End")
-	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, iconSession)
-	}, defaultTimeout)
-	sendKeys(t, sess, "End")
-	sendKeys(t, sess, "Up")
 	return waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, iconWindow)
 	}, defaultTimeout)
@@ -213,15 +208,18 @@ func filterAndExecute(t *testing.T, sess string, query string) {
 
 func drillIntoSession(t *testing.T, sess string) {
 	t.Helper()
-	exitFilterModeE2E(t, sess)
-
-	// Sessions are ordered last in the root list. Waiting for the session icon
-	// ensures the async session source has loaded before selecting it.
-	sendKeys(t, sess, "End")
+	typeText(t, sess, sess)
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, iconSession) && strings.Contains(s, sess)
+		return strings.Contains(s, "apply filter")
 	}, defaultTimeout)
-	sendKeys(t, sess, "End")
+
+	// Applying the filter reveals the session and its matching window. Sessions
+	// sort before windows, so Home deterministically selects the session row.
+	sendKeys(t, sess, "Enter")
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "clear filter")
+	}, defaultTimeout)
+	sendKeys(t, sess, "Home")
 	sendKeys(t, sess, "Enter")
 
 	waitForContent(t, sess, func(s string) bool {
