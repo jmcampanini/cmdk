@@ -73,7 +73,14 @@ type Config struct {
 var validMatchTypes = []string{"root", "dir"}
 
 // reservedKeys are set by the runtime (from the selection stack or CLI flags) and must not collide with stage keys.
-var reservedKeys = []string{"path", "pane_id", "session", "session_id", "window_index", "window_id"}
+var reservedKeys = []string{
+	"path",
+	"pane_id",
+	"session",
+	"session_id",
+	"window_index",
+	"window_id",
+}
 
 var validStageKey = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 

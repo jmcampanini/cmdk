@@ -24,32 +24,32 @@ func TestParseWindows_MultiSession(t *testing.T) {
 	}
 
 	want := []struct {
-		display   string
-		session   string
-		sessionID string
-		index     string
-		windowID  string
+		display     string
+		session     string
+		sessionID   string
+		windowIndex string
+		windowID    string
 	}{
 		{"tmux: dev:1 node", "dev", "$2", "1", "@3"},
 		{"tmux: main:1 zsh", "main", "$1", "1", "@1"},
 		{"tmux: main:2 vim", "main", "$1", "2", "@2"},
 	}
 
-	for i, w := range want {
-		if items[i].Display != w.display {
-			t.Errorf("item[%d].Display = %q, want %q", i, items[i].Display, w.display)
+	for i, expected := range want {
+		if items[i].Display != expected.display {
+			t.Errorf("item[%d].Display = %q, want %q", i, items[i].Display, expected.display)
 		}
-		if items[i].Data["session"] != w.session {
-			t.Errorf("item[%d].Data[session] = %q, want %q", i, items[i].Data["session"], w.session)
+		if items[i].Data["session"] != expected.session {
+			t.Errorf("item[%d].Data[session] = %q, want %q", i, items[i].Data["session"], expected.session)
 		}
-		if items[i].Data["session_id"] != w.sessionID {
-			t.Errorf("item[%d].Data[session_id] = %q, want %q", i, items[i].Data["session_id"], w.sessionID)
+		if items[i].Data["session_id"] != expected.sessionID {
+			t.Errorf("item[%d].Data[session_id] = %q, want %q", i, items[i].Data["session_id"], expected.sessionID)
 		}
-		if items[i].Data["window_index"] != w.index {
-			t.Errorf("item[%d].Data[window_index] = %q, want %q", i, items[i].Data["window_index"], w.index)
+		if items[i].Data["window_index"] != expected.windowIndex {
+			t.Errorf("item[%d].Data[window_index] = %q, want %q", i, items[i].Data["window_index"], expected.windowIndex)
 		}
-		if items[i].Data["window_id"] != w.windowID {
-			t.Errorf("item[%d].Data[window_id] = %q, want %q", i, items[i].Data["window_id"], w.windowID)
+		if items[i].Data["window_id"] != expected.windowID {
+			t.Errorf("item[%d].Data[window_id] = %q, want %q", i, items[i].Data["window_id"], expected.windowID)
 		}
 		if items[i].Action != item.ActionExecute {
 			t.Errorf("item[%d].Action = %q, want %q", i, items[i].Action, item.ActionExecute)
@@ -69,9 +69,9 @@ func TestParseWindows_SortBySessionThenIndex(t *testing.T) {
 	}
 
 	wantOrder := []string{"tmux: a:1 vim", "tmux: a:3 zsh", "tmux: z:1 fish", "tmux: z:2 bash"}
-	for i, w := range wantOrder {
-		if items[i].Display != w {
-			t.Errorf("item[%d].Display = %q, want %q", i, items[i].Display, w)
+	for i, display := range wantOrder {
+		if items[i].Display != display {
+			t.Errorf("item[%d].Display = %q, want %q", i, items[i].Display, display)
 		}
 	}
 }
@@ -138,23 +138,24 @@ func TestParseWindows_PartialMalformedRowsAddsParseErrorItem(t *testing.T) {
 	if items[0].Display != "tmux: main:3 fish" {
 		t.Errorf("Display = %q, want %q", items[0].Display, "tmux: main:3 fish")
 	}
-	if items[1].Type != "error" {
-		t.Errorf("parse error Type = %q, want error", items[1].Type)
+	parseError := items[1]
+	if parseError.Type != "error" {
+		t.Errorf("parse error Type = %q, want error", parseError.Type)
 	}
-	if items[1].Source != "tmux" {
-		t.Errorf("parse error Source = %q, want tmux", items[1].Source)
+	if parseError.Source != "tmux" {
+		t.Errorf("parse error Source = %q, want tmux", parseError.Source)
 	}
-	if items[1].Display != "tmux parse error: 3 unparseable list-windows rows" {
-		t.Errorf("parse error Display = %q", items[1].Display)
+	if parseError.Display != "tmux parse error: 3 unparseable list-windows rows" {
+		t.Errorf("parse error Display = %q", parseError.Display)
 	}
-	if items[1].Data["source_type"] != "window" {
-		t.Errorf("parse error Data[source_type] = %q, want window", items[1].Data["source_type"])
+	if parseError.Data["source_type"] != "window" {
+		t.Errorf("parse error Data[source_type] = %q, want window", parseError.Data["source_type"])
 	}
-	if items[1].Action != "" {
-		t.Errorf("parse error Action = %q, want empty", items[1].Action)
+	if parseError.Action != "" {
+		t.Errorf("parse error Action = %q, want empty", parseError.Action)
 	}
-	if items[1].Cmd != "" {
-		t.Errorf("parse error Cmd = %q, want empty", items[1].Cmd)
+	if parseError.Cmd != "" {
+		t.Errorf("parse error Cmd = %q, want empty", parseError.Cmd)
 	}
 }
 

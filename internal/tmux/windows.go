@@ -122,7 +122,7 @@ func parseWindowEntries(output string) ([]windowEntry, int) {
 			continue
 		}
 
-		idx, err := strconv.Atoi(parsed.windowIndex)
+		windowIndex, err := strconv.Atoi(parsed.windowIndex)
 		if err != nil {
 			malformedRows++
 			continue
@@ -131,7 +131,7 @@ func parseWindowEntries(output string) ([]windowEntry, int) {
 		bell := parsed.bellFlag == "1"
 		entries = append(entries, windowEntry{
 			session:     parsed.session,
-			windowIndex: idx,
+			windowIndex: windowIndex,
 			bell:        bell,
 			item:        newWindowItem(parsed, bell),
 		})
