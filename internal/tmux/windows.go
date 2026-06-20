@@ -191,8 +191,8 @@ func ListWindows(ctx context.Context) ([]item.Item, error) {
 }
 
 const (
-	windowsForSessionFormat = "#{window_index}\t#{window_name}\t#{window_bell_flag}"
-	sessionWindowCommand    = `tmux switch-client -t {{sq (printf "%s:%s" .session_id .window_index)}}`
+	windowsForSessionFormat = "#{window_index}\t#{window_id}\t#{window_name}\t#{window_bell_flag}"
+	sessionWindowCommand    = tmuxWindowSwitchCommand
 )
 
 func ParseWindowsForSession(output string, session item.Item) []item.Item {
@@ -213,21 +213,22 @@ func ParseWindowsForSession(output string, session item.Item) []item.Item {
 		// Keep window_bell_flag as a sentinel field so empty window names preserve
 		// the expected tab count. TODO: surface this flag in the TUI for session
 		// child windows without setting Data["bell"] and reordering them above Connect.
-		parts := strings.SplitN(line, "\t", 3)
-		if len(parts) != 3 {
+		parts := strings.SplitN(line, "\t", 4)
+		if len(parts) != 4 {
 			continue
 		}
 
 		windowIndex := parts[0]
-		windowName := parts[1]
+		windowID := parts[1]
+		windowName := parts[2]
 		idx, err := strconv.Atoi(windowIndex)
-		if err != nil {
+		if err != nil || !validTmuxWindowID.MatchString(windowID) {
 			continue
 		}
 
 		entries = append(entries, entry{
 			index: idx,
-			item:  newSessionWindowItem(session, windowIndex, windowName),
+			item:  newSessionWindowItem(session, windowIndex, windowID, windowName),
 		})
 	}
 
@@ -242,7 +243,7 @@ func ParseWindowsForSession(output string, session item.Item) []item.Item {
 	return items
 }
 
-func newSessionWindowItem(session item.Item, windowIndex, windowName string) item.Item {
+func newSessionWindowItem(session item.Item, windowIndex, windowID, windowName string) item.Item {
 	it := item.NewItem()
 	it.Type = "window"
 	it.Source = "tmux"
@@ -257,6 +258,7 @@ func newSessionWindowItem(session item.Item, windowIndex, windowName string) ite
 		it.Data["session"] = sessionName
 	}
 	it.Data["window_index"] = windowIndex
+	it.Data["window_id"] = windowID
 	return it
 }
 
