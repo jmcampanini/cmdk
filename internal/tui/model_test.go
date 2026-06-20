@@ -789,6 +789,33 @@ func TestEnterDuringNonEmptyFilter_MultipleItemsActivatesHighlighted(t *testing.
 	}
 }
 
+func TestTypingDuringNonEmptyFilter_ResetsHighlightToFirstResult(t *testing.T) {
+	m := newTestModel(filterNavigationItems(), testRegistry())
+	m.list.SetSize(80, 40)
+	m = typeFilterQuery(t, m, "al")
+
+	result, _ := m.Update(downMsg)
+	m = result.(Model)
+	if m.list.Index() != 1 {
+		t.Fatalf("after Down: Index() = %d, want 1", m.list.Index())
+	}
+
+	m = typeFilterQuery(t, m, "p")
+
+	visible := m.list.VisibleItems()
+	if len(visible) < 2 {
+		t.Fatalf("VisibleItems() = %d, want at least 2", len(visible))
+	}
+	if m.list.Index() != 0 {
+		t.Fatalf("Index() = %d, want 0 after typing refines the filter", m.list.Index())
+	}
+	got := m.list.SelectedItem().(item.Item).Display
+	want := visible[0].(item.Item).Display
+	if got != want {
+		t.Errorf("SelectedItem().Display = %q, want first visible item %q", got, want)
+	}
+}
+
 func stagedItems() []list.Item {
 	return []list.Item{
 		item.Item{
@@ -1373,6 +1400,38 @@ func TestPickerStage_NonEmptyFilterNavigationAndEnter(t *testing.T) {
 	data := execute.FlattenData(m.Accumulated())
 	if data["file"] != selected.Value {
 		t.Errorf("data[file] = %q, want %q", data["file"], selected.Value)
+	}
+}
+
+func TestPickerStage_TypingDuringNonEmptyFilter_ResetsHighlightToFirstResult(t *testing.T) {
+	m := newTestModel(pickerItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+
+	m = selectStagedItem(t, m)
+	if m.mode != viewPicker {
+		t.Fatal("expected viewPicker")
+	}
+	m = typeFilterQuery(t, m, "a")
+
+	result, _ := m.Update(downMsg)
+	m = result.(Model)
+	if m.pickerList.Index() != 1 {
+		t.Fatalf("after Down: Index() = %d, want 1", m.pickerList.Index())
+	}
+
+	m = typeFilterQuery(t, m, "l")
+
+	visible := m.pickerList.VisibleItems()
+	if len(visible) == 0 {
+		t.Fatal("VisibleItems() = 0, want at least 1")
+	}
+	if m.pickerList.Index() != 0 {
+		t.Fatalf("Index() = %d, want 0 after typing refines the picker filter", m.pickerList.Index())
+	}
+	got := m.pickerList.SelectedItem().(item.Item).Display
+	want := visible[0].(item.Item).Display
+	if got != want {
+		t.Errorf("SelectedItem().Display = %q, want first visible item %q", got, want)
 	}
 }
 

@@ -100,7 +100,7 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, li list.Item)
 	display := ansi.Truncate(it.Display, availWidth, "…")
 
 	s := lipgloss.NewStyle().Inline(true)
-	selected := index == m.Index() && !filtering
+	selected := index == m.Index()
 
 	var content string
 	if selected {

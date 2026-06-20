@@ -239,7 +239,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	var cmd tea.Cmd
-	m.list, cmd = m.list.Update(msg)
+	m.list, cmd = updateFilterableList(m.list, msg)
 	return m, cmd
 }
 
@@ -337,7 +337,7 @@ func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 	keyMsg, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		var cmd tea.Cmd
-		m.pickerList, cmd = m.pickerList.Update(msg)
+		m.pickerList, cmd = updateFilterableList(m.pickerList, msg)
 		return m, cmd
 	}
 
@@ -414,6 +414,14 @@ func (m Model) stageEsc() (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func updateFilterableList(l list.Model, msg tea.Msg) (list.Model, tea.Cmd) {
+	updated, cmd := l.Update(msg)
+	if _, ok := msg.(list.FilterMatchesMsg); ok && updated.FilterState() == list.Filtering {
+		updated.GoToStart()
+	}
+	return updated, cmd
 }
 
 // resetWhitespaceFilter resets the filter on up/down/enter when the

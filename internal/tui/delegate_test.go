@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"charm.land/bubbles/v2/list"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/jmcampanini/cmdk/internal/item"
@@ -226,5 +227,32 @@ func TestDelegate_ConstructorWiresAllTypes(t *testing.T) {
 	}
 	if _, ok := d.icons["cmd"]; ok {
 		t.Error("cmd should not have a dedicated icon entry")
+	}
+}
+
+func TestDelegate_RenderHighlightsSelectedItemWhileFiltering(t *testing.T) {
+	dark := theme.Dark()
+	d := newItemDelegate(dark)
+	items := []list.Item{
+		item.Item{Type: "window", Display: "alpha"},
+		item.Item{Type: "window", Display: "alpine"},
+	}
+	l := list.New(items, d, 80, 10)
+	l.Filter = multiTermFilter
+	l.SetFilterText("al")
+	l.SetFilterState(list.Filtering)
+	l.Select(1)
+
+	visible := l.VisibleItems()
+	if len(visible) < 2 {
+		t.Fatalf("VisibleItems() = %d, want at least 2", len(visible))
+	}
+
+	var buf bytes.Buffer
+	d.Render(&buf, l, 1, visible[1])
+
+	selectedBackground := lipgloss.NewStyle().Background(dark.Surface1).Render(" ")
+	if !strings.Contains(buf.String(), selectedBackground) {
+		t.Errorf("filtered selected item was not highlighted; output %q does not contain %q", buf.String(), selectedBackground)
 	}
 }
