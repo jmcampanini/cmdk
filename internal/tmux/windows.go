@@ -130,22 +130,10 @@ func ParseWindowsForSession(output string, session item.Item) []item.Item {
 			continue
 		}
 
-		it := item.NewItem()
-		it.Type = "window"
-		it.Source = "tmux"
-		it.Display = "window " + windowIndex
-		if windowName != "" {
-			it.Display += " " + windowName
-		}
-		it.Action = item.ActionExecute
-		it.Cmd = sessionWindowCommand
-		maps.Copy(it.Data, session.Data)
-		if sessionName := session.Data["session_name"]; sessionName != "" {
-			it.Data["session"] = sessionName
-		}
-		it.Data["window_index"] = windowIndex
-
-		entries = append(entries, entry{index: idx, item: it})
+		entries = append(entries, entry{
+			index: idx,
+			item:  newSessionWindowItem(session, windowIndex, windowName),
+		})
 	}
 
 	sort.Slice(entries, func(i, j int) bool {
@@ -157,6 +145,24 @@ func ParseWindowsForSession(output string, session item.Item) []item.Item {
 		items[i] = e.item
 	}
 	return items
+}
+
+func newSessionWindowItem(session item.Item, windowIndex, windowName string) item.Item {
+	it := item.NewItem()
+	it.Type = "window"
+	it.Source = "tmux"
+	it.Display = "window " + windowIndex
+	if windowName != "" {
+		it.Display += " " + windowName
+	}
+	it.Action = item.ActionExecute
+	it.Cmd = sessionWindowCommand
+	maps.Copy(it.Data, session.Data)
+	if sessionName := session.Data["session_name"]; sessionName != "" {
+		it.Data["session"] = sessionName
+	}
+	it.Data["window_index"] = windowIndex
+	return it
 }
 
 func ListWindowsForSession(ctx context.Context, session item.Item) ([]item.Item, error) {

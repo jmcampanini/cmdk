@@ -12,7 +12,7 @@ const inlineSeparator = " » "
 func expandInline(items []item.Item, registry *generator.Registry, ctx generator.Context) []item.Item {
 	var result []item.Item
 	for _, it := range items {
-		if it.Action != item.ActionNextList || it.Type != "dir" {
+		if !canExpandInline(it) {
 			result = append(result, it)
 			continue
 		}
@@ -46,4 +46,8 @@ func expandInline(items []item.Item, registry *generator.Registry, ctx generator
 		}
 	}
 	return result
+}
+
+func canExpandInline(it item.Item) bool {
+	return it.Action == item.ActionNextList && it.Type == "dir"
 }

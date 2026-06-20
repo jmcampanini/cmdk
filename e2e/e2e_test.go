@@ -167,7 +167,9 @@ func navigateToDirItem(t *testing.T, sess string) {
 	content := waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, iconDir)
 	}, 3*time.Second)
-	itemsBeforeDirs := strings.Count(content, iconSession) + strings.Count(content, iconCmd)
+	firstDir := strings.Index(content, iconDir)
+	contentBeforeFirstDir := content[:firstDir]
+	itemsBeforeDirs := strings.Count(contentBeforeFirstDir, iconSession) + strings.Count(contentBeforeFirstDir, iconCmd)
 	for range itemsBeforeDirs {
 		sendKeys(t, sess, "Down")
 		time.Sleep(50 * time.Millisecond)

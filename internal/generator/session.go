@@ -24,40 +24,49 @@ func NewSessionGenerator(fetchWindows SessionWindowsFunc) GeneratorFunc {
 	actions := NewActionsGenerator()
 
 	return func(accumulated []item.Item, ctx Context) []item.Item {
-		if len(accumulated) == 0 {
-			return nil
-		}
-		session := accumulated[len(accumulated)-1]
-		if session.Type != "session" {
+		session, ok := selectedSession(accumulated)
+		if !ok {
 			return nil
 		}
 		if session.Data["session_id"] == "" {
 			return []item.Item{ErrorItem(Source{Name: "session", Type: "action"}, fmt.Errorf("missing session_id"))}
 		}
 
-		data := maps.Clone(session.Data)
-		if data == nil {
-			data = make(map[string]string)
-		}
-		if ctx.PaneID != "" {
-			data["pane_id"] = ctx.PaneID
-		}
-
-		items := []item.Item{
-			{
-				Type:    "action",
-				Source:  "builtin",
-				Display: "Connect",
-				Action:  item.ActionExecute,
-				Cmd:     sessionConnectCommand,
-				Data:    data,
-			},
-		}
-
+		items := []item.Item{sessionConnectItem(session, ctx.PaneID)}
 		items = append(items, actions(accumulated, ctx)...)
 		items = append(items, fetchSessionWindows(session, ctx, fetchWindows)...)
 		return items
 	}
+}
+
+func selectedSession(accumulated []item.Item) (item.Item, bool) {
+	if len(accumulated) == 0 {
+		return item.Item{}, false
+	}
+	session := accumulated[len(accumulated)-1]
+	return session, session.Type == "session"
+}
+
+func sessionConnectItem(session item.Item, paneID string) item.Item {
+	return item.Item{
+		Type:    "action",
+		Source:  "builtin",
+		Display: "Connect",
+		Action:  item.ActionExecute,
+		Cmd:     sessionConnectCommand,
+		Data:    sessionData(session, paneID),
+	}
+}
+
+func sessionData(session item.Item, paneID string) map[string]string {
+	data := maps.Clone(session.Data)
+	if data == nil {
+		data = make(map[string]string)
+	}
+	if paneID != "" {
+		data["pane_id"] = paneID
+	}
+	return data
 }
 
 func fetchSessionWindows(session item.Item, ctx Context, fetchWindows SessionWindowsFunc) []item.Item {

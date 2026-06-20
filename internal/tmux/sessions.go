@@ -50,20 +50,10 @@ func ParseSessions(output string) []item.Item {
 			continue
 		}
 
-		display := "tmux: " + sessionName
-		it := item.NewItem()
-		it.Type = "session"
-		it.Source = "tmux"
-		it.Display = display
-		it.Action = item.ActionNextList
-		it.Data["session_attached"] = sessionAttached
-		it.Data["session_display"] = display
-		it.Data["session_id"] = sessionID
-		it.Data["session_kind"] = SessionKindExternal
-		it.Data["session_name"] = sessionName
-		it.Data["session_windows"] = sessionWindows
-
-		entries = append(entries, entry{name: sessionName, item: it})
+		entries = append(entries, entry{
+			name: sessionName,
+			item: newSessionItem(sessionID, sessionName, sessionWindows, sessionAttached),
+		})
 	}
 
 	sort.SliceStable(entries, func(i, j int) bool {
@@ -75,6 +65,22 @@ func ParseSessions(output string) []item.Item {
 		items[i] = e.item
 	}
 	return items
+}
+
+func newSessionItem(sessionID, sessionName, sessionWindows, sessionAttached string) item.Item {
+	display := "tmux: " + sessionName
+	it := item.NewItem()
+	it.Type = "session"
+	it.Source = "tmux"
+	it.Display = display
+	it.Action = item.ActionNextList
+	it.Data["session_attached"] = sessionAttached
+	it.Data["session_display"] = display
+	it.Data["session_id"] = sessionID
+	it.Data["session_kind"] = SessionKindExternal
+	it.Data["session_name"] = sessionName
+	it.Data["session_windows"] = sessionWindows
+	return it
 }
 
 func ListSessions(ctx context.Context) ([]item.Item, error) {
