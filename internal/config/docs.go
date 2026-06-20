@@ -38,7 +38,7 @@ func ConfigDocs() []SectionDoc {
 			Description: "Stages are declared inline within an action's stages array.\n  Each stage collects one piece of data before the action executes.",
 			Fields: []FieldDoc{
 				{Name: "type", Type: "string", Description: "Stage type: \"prompt\" (text input) or \"picker\" (shell command → fuzzy list).", Validation: "must be \"prompt\" or \"picker\""},
-				{Name: "key", Type: "string", Description: "Template variable name for the stage's output value.", Validation: "cannot be empty; must be unique within action; cannot be reserved (path, pane_id, session, window_index; session actions also reserve session_attached, session_display, session_id, session_kind, session_name, session_windows)"},
+				{Name: "key", Type: "string", Description: "Template variable name for the stage's output value.", Validation: "cannot be empty; must be unique within action; cannot be reserved (path, pane_id, session, session_id, window_index, window_id; session actions also reserve session_attached, session_display, session_kind, session_name, session_windows)"},
 				{Name: "text", Type: "string", Description: "Prompt label (Go template). Only for type = \"prompt\".", Validation: "required for prompt; forbidden for picker"},
 				{Name: "default", Type: "string", Description: "Default value pre-filled in prompt (Go template). Only for type = \"prompt\"."},
 				{Name: "source", Type: "string", Description: "Shell command run via sh -c that produces newline-separated entries (Go template). Only for type = \"picker\".", Validation: "required for picker; forbidden for prompt"},
@@ -54,7 +54,7 @@ func ConfigDocs() []SectionDoc {
 			Description: "Global behavior settings.",
 			Fields: []FieldDoc{
 				{Name: "auto_select_single", Type: "bool", Description: "Skip the action list when only one action matches. Default: true."},
-				{Name: "bell_to_top", Type: "bool", Description: "Sort tmux windows with bell activity to the top of the list, above all other items. Default: true."},
+				{Name: "bell_to_top", Type: "bool", Description: "Sort tmux windows with bell activity above normal items, after errors and loading placeholders. Default: true."},
 				{Name: "wrap_list", Type: "bool", Description: "Wrap cursor to the opposite end when navigating past the first or last item. Default: true."},
 				{Name: "start_in_filter", Type: "bool", Description: "Open lists in filter mode, ready for typing. When false, lists open in browse mode; press / to filter. Default: true."},
 				{Name: "inline_actions", Type: "bool", Description: "Expand directory actions inline in the root list instead of requiring drill-down. Each directory gets one entry per action, displayed as \"path » action\". Default: false."},
@@ -136,10 +136,11 @@ TEMPLATE VARIABLES
       {{.path}}           directory path (for dir-matching actions)
       {{.pane_id}}        tmux pane ID (when --pane-id is set)
       {{.session}}        tmux session name (from window items in the selection stack)
+      {{.session_id}}     stable tmux session ID (from window or session items)
       {{.window_index}}   tmux window index (from window items in the selection stack)
+      {{.window_id}}      stable tmux window ID (from window items in the selection stack)
       {{.session_attached}} tmux attached client count (from session items)
       {{.session_display}}  display string for the selected session
-      {{.session_id}}       tmux session ID, e.g. $1 (from session items)
       {{.session_kind}}     session classification; "external" in this phase
       {{.session_name}}     tmux session name (from session items)
       {{.session_windows}}  tmux window count (from session items)

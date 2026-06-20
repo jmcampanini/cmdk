@@ -2,10 +2,13 @@ package tui
 
 import (
 	"bytes"
+	"image/color"
+	"reflect"
 	"strings"
 	"testing"
 
 	"charm.land/bubbles/v2/list"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/jmcampanini/cmdk/internal/item"
@@ -23,6 +26,16 @@ func renderItem(d itemDelegate, items []list.Item, width int, index int) string 
 	var buf bytes.Buffer
 	d.Render(&buf, l, index, items[index])
 	return buf.String()
+}
+
+func assertIconInfo(t *testing.T, got iconInfo, wantIcon string, wantColor color.Color) {
+	t.Helper()
+	if got.icon != wantIcon {
+		t.Errorf("icon = %q, want %q", got.icon, wantIcon)
+	}
+	if !reflect.DeepEqual(got.color, wantColor) {
+		t.Errorf("color = %v, want %v", got.color, wantColor)
+	}
 }
 
 func TestDelegate_HeightAndSpacing(t *testing.T) {
@@ -78,31 +91,56 @@ func TestDelegate_RenderDirIcon(t *testing.T) {
 	}
 }
 
-func TestDelegate_RenderCmdIcon(t *testing.T) {
-	d := testDelegate()
-	items := []list.Item{
-		item.Item{Type: "cmd", Display: "echo hello"},
-	}
+func TestDelegate_RenderActionIcon(t *testing.T) {
+	dark := theme.Dark()
+	d := newItemDelegate(dark)
+	it := item.Item{Type: "action", Display: "echo hello"}
+	items := []list.Item{it}
 	out := renderItem(d, items, 80, 0)
 
-	if !strings.Contains(out, iconCmd) {
-		t.Errorf("expected cmd icon in output, got %q", out)
+	if !strings.Contains(out, iconAction) {
+		t.Errorf("expected action icon in output, got %q", out)
 	}
+	assertIconInfo(t, d.iconInfoForItem(it), iconAction, dark.TypeAction)
 }
 
-func TestDelegate_UnknownTypeFallsToCmdIcon(t *testing.T) {
-	d := testDelegate()
-	items := []list.Item{
-		item.Item{Type: "alien", Display: "some item"},
-	}
+func TestDelegate_UnknownTypeUsesDefaultPresentation(t *testing.T) {
+	dark := theme.Dark()
+	d := newItemDelegate(dark)
+	it := item.Item{Type: "alien", Display: "some item"}
+	items := []list.Item{it}
 	out := renderItem(d, items, 80, 0)
 
-	if !strings.Contains(out, iconCmd) {
-		t.Errorf("expected cmd icon fallback for unknown type, got %q", out)
+	if !strings.Contains(out, iconUnknown) {
+		t.Errorf("expected unknown fallback icon, got %q", out)
 	}
 	if !strings.Contains(out, "some item") {
 		t.Errorf("expected display text in output, got %q", out)
 	}
+	assertIconInfo(t, d.iconInfoForItem(it), iconUnknown, dark.TypeUnknown)
+}
+
+func TestDelegate_PickerUsesDefaultPresentation(t *testing.T) {
+	dark := theme.Dark()
+	d := newItemDelegate(dark)
+	it := item.Item{Type: "pick", Display: "alpha"}
+
+	assertIconInfo(t, d.iconInfoForItem(it), iconUnknown, dark.TypeUnknown)
+}
+
+func TestDelegate_ErrorUsesErrorPresentation(t *testing.T) {
+	dark := theme.Dark()
+	d := newItemDelegate(dark)
+	it := item.Item{Type: "error", Display: "zoxide error: command not found", Source: "zoxide"}
+
+	assertIconInfo(t, d.iconInfoForItem(it), iconError, dark.Error)
+}
+
+func TestDelegate_LoadingUsesGenericPresentation(t *testing.T) {
+	dark := theme.Dark()
+	d := newItemDelegate(dark)
+
+	assertIconInfo(t, d.iconInfoForItem(item.Item{Type: "loading"}), iconLoading, dark.TypeUnknown)
 }
 
 func TestDelegate_ZeroWidth_NoOutput(t *testing.T) {
@@ -152,35 +190,65 @@ func TestDelegate_RenderCustomIconOverridesType(t *testing.T) {
 	d := testDelegate()
 	customIcon := "\ue709"
 	items := []list.Item{
-		item.Item{Type: "cmd", Display: "GitHub", Icon: customIcon},
+		item.Item{Type: "action", Display: "GitHub", Icon: customIcon},
 	}
 	out := renderItem(d, items, 80, 0)
 
 	if !strings.Contains(out, customIcon) {
 		t.Errorf("expected custom icon %q in output, got %q", customIcon, out)
 	}
-	if strings.Contains(out, iconCmd) {
-		t.Errorf("custom icon should replace default cmd icon, got %q", out)
+	if strings.Contains(out, iconAction) {
+		t.Errorf("custom icon should replace default action icon, got %q", out)
 	}
 }
 
 func TestDelegate_EmptyIconUsesDefault(t *testing.T) {
 	d := testDelegate()
 	items := []list.Item{
-		item.Item{Type: "cmd", Display: "test", Icon: ""},
+		item.Item{Type: "action", Display: "test", Icon: ""},
 	}
 	out := renderItem(d, items, 80, 0)
 
-	if !strings.Contains(out, iconCmd) {
-		t.Errorf("expected default cmd icon when Icon is empty, got %q", out)
+	if !strings.Contains(out, iconAction) {
+		t.Errorf("expected default action icon when Icon is empty, got %q", out)
 	}
 }
 
 func TestDelegate_ConstructorWiresAllTypes(t *testing.T) {
 	d := testDelegate()
-	for _, typ := range []string{"window", "dir", "cmd", "session"} {
+	for _, typ := range []string{"window", "dir", "action", "session", "pick", "error", "loading"} {
 		if _, ok := d.icons[typ]; !ok {
 			t.Errorf("missing icon entry for type %q", typ)
 		}
+	}
+	if _, ok := d.icons["cmd"]; ok {
+		t.Error("cmd should not have a dedicated icon entry")
+	}
+}
+
+func TestDelegate_RenderHighlightsSelectedItemWhileFiltering(t *testing.T) {
+	dark := theme.Dark()
+	d := newItemDelegate(dark)
+	items := []list.Item{
+		item.Item{Type: "window", Display: "alpha"},
+		item.Item{Type: "window", Display: "alpine"},
+	}
+	l := list.New(items, d, 80, 10)
+	l.Filter = multiTermFilter
+	l.SetFilterText("al")
+	l.SetFilterState(list.Filtering)
+	l.Select(1)
+
+	visible := l.VisibleItems()
+	if len(visible) < 2 {
+		t.Fatalf("VisibleItems() = %d, want at least 2", len(visible))
+	}
+
+	var buf bytes.Buffer
+	d.Render(&buf, l, 1, visible[1])
+
+	selectedBackground := lipgloss.NewStyle().Background(dark.Surface1).Render(" ")
+	if !strings.Contains(buf.String(), selectedBackground) {
+		t.Errorf("filtered selected item was not highlighted; output %q does not contain %q", buf.String(), selectedBackground)
 	}
 }

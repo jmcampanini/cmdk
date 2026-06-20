@@ -13,7 +13,6 @@ import (
 
 type Source struct {
 	Name  string
-	Type  string
 	Limit int
 	Async bool
 	Fetch func(context.Context) ([]item.Item, error)
@@ -68,7 +67,7 @@ func NewRootGenerator(timeout time.Duration, sources ...Source) GeneratorFunc {
 
 func ErrorItem(src Source, err error) item.Item {
 	errItem := item.NewItem()
-	errItem.Type = src.Type
+	errItem.Type = "error"
 	errItem.Source = src.Name
 	errItem.Display = fmt.Sprintf("%s error: %s", src.Name, err)
 	return errItem
@@ -79,6 +78,5 @@ func LoadingItem(src Source) item.Item {
 	it.Type = "loading"
 	it.Source = src.Name
 	it.Display = fmt.Sprintf("Loading %s\u2026", src.Name)
-	it.Data["source_type"] = src.Type
 	return it
 }

@@ -239,17 +239,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	var cmd tea.Cmd
-	m.list, cmd = m.list.Update(msg)
+	m.list, cmd = updateFilterableList(m.list, msg)
 	return m, cmd
 }
 
 func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if resetWhitespaceFilter(&m.list, msg.String()) {
+	key := msg.String()
+	if navigateActiveFilter(&m.list, key) {
 		return m, nil
 	}
 
-	if msg.String() == "enter" {
-		sel, ok := resolveListTarget(m.list)
+	if key == "enter" {
+		wasFiltering := refreshActiveFilter(&m.list)
+		sel, ok := selectedListItem(m.list)
 		if ok && sel.Type != "error" && sel.Type != "loading" {
 			// Reconstruct the accumulated stack as if the user drilled down,
 			// so template variables (e.g. {{.path}}) resolve correctly.
@@ -273,9 +275,12 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
+		if wasFiltering {
+			return m, nil
+		}
 	}
 
-	if msg.String() == "esc" && m.list.FilterState() == list.Unfiltered {
+	if key == "esc" && m.list.FilterState() == list.Unfiltered {
 		if len(m.accumulated) > 0 {
 			return m.handleBack(), nil
 		}
@@ -283,7 +288,7 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	var cmd tea.Cmd
-	m.list, cmd = m.list.Update(msg)
+	m.list, cmd = updateFilterableList(m.list, msg)
 	return m, cmd
 }
 
@@ -326,30 +331,35 @@ func (m Model) updatePrompt(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
-	key, ok := msg.(tea.KeyPressMsg)
+	keyMsg, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		var cmd tea.Cmd
-		m.pickerList, cmd = m.pickerList.Update(msg)
+		m.pickerList, cmd = updateFilterableList(m.pickerList, msg)
 		return m, cmd
 	}
 
-	if resetWhitespaceFilter(&m.pickerList, key.String()) {
+	key := keyMsg.String()
+	if navigateActiveFilter(&m.pickerList, key) {
 		return m, nil
 	}
 
-	if key.String() == "enter" {
-		sel, ok := resolveListTarget(m.pickerList)
+	if key == "enter" {
+		wasFiltering := refreshActiveFilter(&m.pickerList)
+		sel, ok := selectedListItem(m.pickerList)
 		if ok && sel.Type != "error" {
 			return m.pushStageResult(m.pickerKey, sel.Display, sel.Value)
 		}
+		if wasFiltering {
+			return m, nil
+		}
 	}
 
-	if key.String() == "esc" && m.pickerList.FilterState() == list.Unfiltered {
+	if key == "esc" && m.pickerList.FilterState() == list.Unfiltered {
 		return m.stageEsc()
 	}
 
 	var cmd tea.Cmd
-	m.pickerList, cmd = m.pickerList.Update(msg)
+	m.pickerList, cmd = updateFilterableList(m.pickerList, msg)
 	return m, cmd
 }
 
@@ -400,31 +410,75 @@ func (m Model) stageEsc() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// resetWhitespaceFilter resets the filter on up/down/enter when the
-// effective filter text is empty or whitespace-only.
-func resetWhitespaceFilter(l *list.Model, key string) bool {
-	if l.FilterState() != list.Filtering || strings.TrimSpace(l.FilterInput.Value()) != "" {
-		return false
+func updateFilterableList(l list.Model, msg tea.Msg) (list.Model, tea.Cmd) {
+	filterTextBefore := l.FilterInput.Value()
+	updated, cmd := l.Update(msg)
+	if updated.FilterState() == list.Filtering && updated.FilterInput.Value() != filterTextBefore {
+		filterText := updated.FilterInput.Value()
+		cursorPos := updated.FilterInput.Position()
+
+		updated.SetFilterText(filterText)
+		updated.SetFilterState(list.Filtering)
+		updated.FilterInput.SetCursor(cursorPos)
+
+		// SetFilterText runs the filter synchronously. Drop Bubbles' async
+		// FilterMatchesMsg command so a stale result cannot update a later list
+		// or picker after navigation.
+		return updated, nil
 	}
-	switch key {
-	case "up", "down", "enter":
-		l.ResetFilter()
-		return true
-	}
-	return false
+	return updated, cmd
 }
 
-func resolveListTarget(l list.Model) (item.Item, bool) {
-	switch {
-	case l.FilterState() == list.Filtering && len(l.VisibleItems()) == 1:
-		sel, ok := l.VisibleItems()[0].(item.Item)
-		return sel, ok
-	case l.FilterState() != list.Filtering:
-		sel, ok := l.SelectedItem().(item.Item)
-		return sel, ok
+// While the filter input is focused, cmdk follows picker semantics: an empty
+// effective filter shows all items, so navigation still moves through visible
+// results instead of accepting or resetting the filter.
+func navigateActiveFilter(l *list.Model, key string) bool {
+	switch key {
+	case "down", "ctrl+j":
+		if !refreshActiveFilter(l) {
+			return false
+		}
+		l.CursorDown()
+		return true
+	case "up", "ctrl+k":
+		if !refreshActiveFilter(l) {
+			return false
+		}
+		l.CursorUp()
+		return true
 	default:
-		return item.Item{}, false
+		return false
 	}
+}
+
+func refreshActiveFilter(l *list.Model) bool {
+	if l.FilterState() != list.Filtering {
+		return false
+	}
+
+	filterText := l.FilterInput.Value()
+	cursorPos := l.FilterInput.Position()
+	selectedIndex := l.Index()
+
+	l.SetFilterText(filterText)
+	l.SetFilterState(list.Filtering)
+	l.FilterInput.SetCursor(cursorPos)
+
+	visibleCount := len(l.VisibleItems())
+	if visibleCount == 0 {
+		l.Select(0)
+		return true
+	}
+	if selectedIndex >= visibleCount {
+		selectedIndex = visibleCount - 1
+	}
+	l.Select(selectedIndex)
+	return true
+}
+
+func selectedListItem(l list.Model) (item.Item, bool) {
+	sel, ok := l.SelectedItem().(item.Item)
+	return sel, ok
 }
 
 // findActionIndex returns the index of the last ActionStaged item in the accumulated stack.
@@ -645,7 +699,7 @@ func (m Model) handleSourceResult(result sourceResultMsg) (tea.Model, tea.Cmd) {
 	src := m.asyncSources[srcIdx]
 	if result.Err != nil {
 		log.Error("async source failed", "source", src.Name, "error", result.Err)
-		errItem := generator.ErrorItem(generator.Source{Name: src.Name, Type: src.Type}, result.Err)
+		errItem := generator.ErrorItem(generator.Source{Name: src.Name}, result.Err)
 		m.asyncResults[srcIdx] = []item.Item{errItem}
 	} else if result.Items != nil {
 		m.asyncResults[srcIdx] = result.Items
@@ -679,7 +733,7 @@ func (m Model) buildRootItems() []list.Item {
 		if m.asyncResults[i] != nil {
 			all = append(all, m.asyncResults[i]...)
 		} else {
-			all = append(all, generator.LoadingItem(generator.Source{Name: src.Name, Type: src.Type}))
+			all = append(all, generator.LoadingItem(generator.Source{Name: src.Name}))
 		}
 	}
 	if m.inline {

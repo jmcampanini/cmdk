@@ -13,7 +13,7 @@ import (
 const (
 	iconWindow     = "\ueb7f"
 	iconDir        = "\ueaf7"
-	iconCmd        = "\uebc8"
+	iconAction     = "\ueb63"
 	iconSession    = "\ueb23"
 	defaultTimeout = 5 * time.Second
 )
@@ -169,7 +169,7 @@ func navigateToDirItem(t *testing.T, sess string) {
 	}, 3*time.Second)
 	firstDir := strings.Index(content, iconDir)
 	contentBeforeFirstDir := content[:firstDir]
-	itemsBeforeDirs := strings.Count(contentBeforeFirstDir, iconSession) + strings.Count(contentBeforeFirstDir, iconCmd)
+	itemsBeforeDirs := strings.Count(contentBeforeFirstDir, iconSession) + strings.Count(contentBeforeFirstDir, iconAction)
 	for range itemsBeforeDirs {
 		sendKeys(t, sess, "Down")
 		time.Sleep(50 * time.Millisecond)
@@ -215,12 +215,17 @@ func drillIntoSession(t *testing.T, sess string) {
 		return strings.Contains(s, "apply filter")
 	}, defaultTimeout)
 
-	// Applying the filter reveals the session and its matching window. Sessions
-	// sort before windows, so Home deterministically selects the session row.
+	// Applying the filter usually reveals the session and its matching window.
+	// When only the session remains, auto-select may drill into it immediately.
 	sendKeys(t, sess, "Enter")
-	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "clear filter")
+	content := waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "clear filter") || strings.Contains(s, "Connect")
 	}, defaultTimeout)
+	if strings.Contains(content, "Connect") {
+		return
+	}
+
+	// Sessions sort before windows, so Home deterministically selects the session row.
 	sendKeys(t, sess, "Home")
 	sendKeys(t, sess, "Enter")
 

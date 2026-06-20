@@ -25,14 +25,16 @@ func newAsyncTestModel(syncItems []item.Item, asyncSources []AsyncSource) Model 
 	reg.Register("root", func([]item.Item, generator.Context) []item.Item { return syncItems })
 	reg.MapType("", "root")
 
-	var initialAll []item.Item
-	initialAll = append(initialAll, syncItems...)
-	for _, src := range asyncSources {
-		initialAll = append(initialAll, generator.LoadingItem(generator.Source{Name: src.Name, Type: src.Type}))
-	}
-	listItems := item.GroupAndOrder(initialAll, false)
+	return NewModel(rootItemsWithLoading(syncItems, asyncSources), "%1", nil, reg, generator.Context{Config: asyncTestConfig()}, t, asyncSources, syncItems)
+}
 
-	return NewModel(listItems, "%1", nil, reg, generator.Context{Config: asyncTestConfig()}, t, asyncSources, syncItems)
+func rootItemsWithLoading(syncItems []item.Item, asyncSources []AsyncSource) []list.Item {
+	var all []item.Item
+	all = append(all, syncItems...)
+	for _, src := range asyncSources {
+		all = append(all, generator.LoadingItem(generator.Source{Name: src.Name}))
+	}
+	return item.GroupAndOrder(all, false)
 }
 
 func sizeModel(m Model, width, height int) Model {
@@ -59,6 +61,16 @@ func contains(ss []string, target string) bool {
 	return false
 }
 
+func listItemByDisplay(m Model, display string) (item.Item, bool) {
+	for _, li := range m.list.Items() {
+		it, ok := li.(item.Item)
+		if ok && it.Display == display {
+			return it, true
+		}
+	}
+	return item.Item{}, false
+}
+
 func TestInit_NoAsyncSources_ReturnsNil(t *testing.T) {
 	m := newAsyncTestModel(
 		[]item.Item{{Type: "action", Display: "test", Action: item.ActionExecute}},
@@ -73,7 +85,7 @@ func TestInit_WithAsyncSources_ReturnsBatch(t *testing.T) {
 	m := newAsyncTestModel(
 		[]item.Item{{Type: "action", Display: "test", Action: item.ActionExecute}},
 		[]AsyncSource{
-			{Name: "windows", Type: "window", Timeout: time.Second, Fetch: func(context.Context) ([]item.Item, error) {
+			{Name: "windows", Timeout: time.Second, Fetch: func(context.Context) ([]item.Item, error) {
 				return nil, nil
 			}},
 		},
@@ -87,7 +99,7 @@ func TestSourceResult_ReplacesPlaceholder(t *testing.T) {
 	m := newAsyncTestModel(
 		[]item.Item{{Type: "action", Display: "do stuff", Action: item.ActionExecute}},
 		[]AsyncSource{
-			{Name: "windows", Type: "window", Timeout: time.Second},
+			{Name: "windows", Timeout: time.Second},
 		},
 	)
 	m = sizeModel(m, 80, 24)
@@ -119,7 +131,7 @@ func TestSourceResult_ErrorReplacesPlaceholder(t *testing.T) {
 	m := newAsyncTestModel(
 		[]item.Item{{Type: "action", Display: "do stuff", Action: item.ActionExecute}},
 		[]AsyncSource{
-			{Name: "zoxide", Type: "dir", Timeout: time.Second},
+			{Name: "zoxide", Timeout: time.Second},
 		},
 	)
 	m = sizeModel(m, 80, 24)
@@ -137,13 +149,23 @@ func TestSourceResult_ErrorReplacesPlaceholder(t *testing.T) {
 	if !contains(displays, "zoxide error: not installed") {
 		t.Errorf("expected error item, got %v", displays)
 	}
+	errItem, ok := listItemByDisplay(m, "zoxide error: not installed")
+	if !ok {
+		t.Fatal("expected zoxide error item")
+	}
+	if errItem.Type != "error" {
+		t.Errorf("error item Type = %q, want error", errItem.Type)
+	}
+	if errItem.Source != "zoxide" {
+		t.Errorf("error item Source = %q, want zoxide", errItem.Source)
+	}
 }
 
 func TestSourceResult_PreservesFilterText(t *testing.T) {
 	m := newAsyncTestModel(
 		[]item.Item{{Type: "action", Display: "do stuff", Action: item.ActionExecute}},
 		[]AsyncSource{
-			{Name: "windows", Type: "window", Timeout: time.Second},
+			{Name: "windows", Timeout: time.Second},
 		},
 	)
 	m = sizeModel(m, 80, 24)
@@ -188,8 +210,8 @@ func TestSourceResult_IncrementalArrival(t *testing.T) {
 	m := newAsyncTestModel(
 		[]item.Item{{Type: "action", Display: "do stuff", Action: item.ActionExecute}},
 		[]AsyncSource{
-			{Name: "windows", Type: "window", Timeout: time.Second},
-			{Name: "zoxide", Type: "dir", Timeout: time.Second},
+			{Name: "windows", Timeout: time.Second},
+			{Name: "zoxide", Timeout: time.Second},
 		},
 	)
 	m = sizeModel(m, 80, 24)
@@ -237,7 +259,7 @@ func TestSourceResult_BaseItemsPreserved(t *testing.T) {
 		{Type: "action", Display: "sync action 2", Action: item.ActionExecute},
 	}
 	m := newAsyncTestModel(syncItems, []AsyncSource{
-		{Name: "windows", Type: "window", Timeout: time.Second},
+		{Name: "windows", Timeout: time.Second},
 	})
 	m = sizeModel(m, 80, 24)
 
@@ -258,8 +280,8 @@ func TestSourceResult_GroupAndOrderApplied(t *testing.T) {
 		{Type: "action", Display: "my action", Action: item.ActionExecute},
 	}
 	m := newAsyncTestModel(syncItems, []AsyncSource{
-		{Name: "windows", Type: "window", Timeout: time.Second},
-		{Name: "zoxide", Type: "dir", Timeout: time.Second},
+		{Name: "windows", Timeout: time.Second},
+		{Name: "zoxide", Timeout: time.Second},
 	})
 	m = sizeModel(m, 80, 24)
 
@@ -292,9 +314,48 @@ func TestSourceResult_GroupAndOrderApplied(t *testing.T) {
 	}
 }
 
+func TestSourceResult_ErrorSortedBeforeNormalItems(t *testing.T) {
+	syncItems := []item.Item{
+		{Type: "action", Display: "my action", Action: item.ActionExecute},
+	}
+	m := newAsyncTestModel(syncItems, []AsyncSource{
+		{Name: "windows", Timeout: time.Second},
+		{Name: "zoxide", Timeout: time.Second},
+	})
+	m = sizeModel(m, 80, 24)
+
+	result, _ := m.Update(sourceResultMsg{
+		Name:  "windows",
+		Items: []item.Item{{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute}},
+	})
+	m = result.(Model)
+	result, _ = m.Update(sourceResultMsg{
+		Name: "zoxide",
+		Err:  errors.New("not installed"),
+	})
+	m = result.(Model)
+
+	displays := itemDisplays(m)
+	actionIdx, errIdx, windowIdx := -1, -1, -1
+	for i, d := range displays {
+		switch d {
+		case "my action":
+			actionIdx = i
+		case "zoxide error: not installed":
+			errIdx = i
+		case "main:1 zsh":
+			windowIdx = i
+		}
+	}
+	if errIdx >= actionIdx || actionIdx >= windowIdx {
+		t.Errorf("expected order error < action < window, got err=%d action=%d window=%d in %v",
+			errIdx, actionIdx, windowIdx, displays)
+	}
+}
+
 func TestLoadingItem_InertOnEnter(t *testing.T) {
 	m := newAsyncTestModel(nil, []AsyncSource{
-		{Name: "windows", Type: "window", Timeout: time.Second},
+		{Name: "windows", Timeout: time.Second},
 	})
 	m = sizeModel(m, 80, 24)
 	m = exitFilterMode(t, m)
@@ -317,7 +378,7 @@ func TestSourceResult_WhileDrilledDown_DoesNotRebuild(t *testing.T) {
 		{Type: "dir", Display: "~/projects", Action: item.ActionNextList, Data: map[string]string{"path": "~/projects"}},
 	}
 	asyncSrcs := []AsyncSource{
-		{Name: "windows", Type: "window", Timeout: time.Second},
+		{Name: "windows", Timeout: time.Second},
 	}
 	th := theme.Light()
 	reg := generator.NewRegistry()
@@ -330,18 +391,15 @@ func TestSourceResult_WhileDrilledDown_DoesNotRebuild(t *testing.T) {
 	reg.MapType("", "root")
 	reg.MapType("dir", "dir-actions")
 
-	var initialAll []item.Item
-	initialAll = append(initialAll, syncItems...)
-	for _, src := range asyncSrcs {
-		initialAll = append(initialAll, generator.LoadingItem(generator.Source{Name: src.Name, Type: src.Type}))
-	}
-	listItems := item.GroupAndOrder(initialAll, false)
+	listItems := rootItemsWithLoading(syncItems, asyncSrcs)
 
 	m := NewModel(listItems, "%1", nil, reg, generator.Context{Config: asyncTestConfig()}, th, asyncSrcs, syncItems)
 	m = sizeModel(m, 80, 24)
 	m = exitFilterMode(t, m)
 
-	result, _ := m.Update(enterMsg)
+	result, _ := m.Update(downMsg)
+	m = result.(Model)
+	result, _ = m.Update(enterMsg)
 	m = result.(Model)
 
 	if len(m.accumulated) == 0 {
@@ -370,7 +428,6 @@ func TestSourceResult_WhileDrilledDown_DoesNotRebuild(t *testing.T) {
 func TestFetchSourceCmd_PanicRecovery(t *testing.T) {
 	src := AsyncSource{
 		Name:    "panicky",
-		Type:    "window",
 		Timeout: time.Second,
 		Fetch: func(context.Context) ([]item.Item, error) {
 			panic("test panic")
@@ -394,7 +451,6 @@ func TestFetchSourceCmd_PanicRecovery(t *testing.T) {
 func TestFetchSourceCmd_Limit(t *testing.T) {
 	src := AsyncSource{
 		Name:    "dirs",
-		Type:    "dir",
 		Limit:   2,
 		Timeout: time.Second,
 		Fetch: func(context.Context) ([]item.Item, error) {

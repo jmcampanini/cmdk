@@ -29,7 +29,7 @@ func NewSessionGenerator(fetchWindows SessionWindowsFunc) GeneratorFunc {
 			return nil
 		}
 		if session.Data["session_id"] == "" {
-			return []item.Item{ErrorItem(Source{Name: "session", Type: "action"}, fmt.Errorf("missing session_id"))}
+			return []item.Item{ErrorItem(Source{Name: "session"}, fmt.Errorf("missing session_id"))}
 		}
 
 		items := []item.Item{sessionConnectItem(session, ctx.PaneID)}
@@ -71,7 +71,7 @@ func sessionData(session item.Item, paneID string) map[string]string {
 
 func fetchSessionWindows(session item.Item, ctx Context, fetchWindows SessionWindowsFunc) []item.Item {
 	if fetchWindows == nil {
-		return []item.Item{ErrorItem(Source{Name: "windows", Type: "window"}, fmt.Errorf("no fetch function"))}
+		return []item.Item{ErrorItem(Source{Name: "windows"}, fmt.Errorf("no fetch function"))}
 	}
 
 	timeout := ctx.Config.Timeout.Fetch
@@ -83,7 +83,7 @@ func fetchSessionWindows(session item.Item, ctx Context, fetchWindows SessionWin
 
 	windows, err := fetchWindows(fetchCtx, session)
 	if err != nil {
-		return []item.Item{ErrorItem(Source{Name: "windows", Type: "window"}, err)}
+		return []item.Item{ErrorItem(Source{Name: "windows"}, err)}
 	}
 	return windows
 }

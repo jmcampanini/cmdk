@@ -29,8 +29,9 @@ type Theme struct {
 
 	TypeWindow  color.Color
 	TypeDir     color.Color
-	TypeCmd     color.Color
+	TypeAction  color.Color
 	TypeSession color.Color
+	TypeUnknown color.Color
 	Bell        color.Color
 	Error       color.Color
 
@@ -66,8 +67,9 @@ func Light() Theme {
 
 		TypeWindow:  c("#8839ef"),
 		TypeDir:     c("#1e66f5"),
-		TypeCmd:     c("#40a02b"),
+		TypeAction:  c("#40a02b"),
 		TypeSession: c("#179299"),
+		TypeUnknown: c("#8c8fa1"),
 		Bell:        c("#df8e1d"),
 		Error:       c("#d20f39"),
 
@@ -96,8 +98,9 @@ func Dark() Theme {
 
 		TypeWindow:  c("#cba6f7"),
 		TypeDir:     c("#89b4fa"),
-		TypeCmd:     c("#a6e3a1"),
+		TypeAction:  c("#a6e3a1"),
 		TypeSession: c("#94e2d5"),
+		TypeUnknown: c("#7f849c"),
 		Bell:        c("#f9e2af"),
 		Error:       c("#f38ba8"),
 

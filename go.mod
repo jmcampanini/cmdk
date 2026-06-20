@@ -5,14 +5,14 @@ go 1.26.3
 require (
 	charm.land/bubbles/v2 v2.1.0
 	charm.land/bubbletea/v2 v2.0.7
-	charm.land/lipgloss/v2 v2.0.3
+	charm.land/lipgloss/v2 v2.0.4
 	charm.land/log/v2 v2.0.0
 	github.com/246859/tail v1.0.0
 	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/jmcampanini/go-config-loader v0.1.0
 	github.com/rivo/uniseg v0.4.7
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/sys v0.45.0
+	golang.org/x/sys v0.46.0
 )
 
 require (

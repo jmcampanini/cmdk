@@ -360,6 +360,17 @@ func TestValidate_StageReservedKey_Session(t *testing.T) {
 	}
 }
 
+func TestValidate_StageReservedKey_SessionID(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "session_id", Text: "Enter"}},
+	}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for reserved key 'session_id'")
+	}
+}
+
 func TestValidate_StageReservedKey_WindowIndex(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Actions = []Action{{
@@ -390,6 +401,17 @@ func TestValidate_StageKeySessionNameAllowedForRootAction(t *testing.T) {
 	}}
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_StageReservedKey_WindowID(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "window_id", Text: "Enter"}},
+	}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for reserved key 'window_id'")
 	}
 }
 

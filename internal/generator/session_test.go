@@ -107,8 +107,8 @@ func TestSessionGenerator_WindowFetchErrorAppended(t *testing.T) {
 	if items[0].Display != "Connect" {
 		t.Errorf("items[0].Display = %q, want Connect", items[0].Display)
 	}
-	if items[1].Type != "window" {
-		t.Errorf("error item Type = %q, want window", items[1].Type)
+	if items[1].Type != "error" {
+		t.Errorf("error item Type = %q, want error", items[1].Type)
 	}
 	if items[1].Display != "windows error: tmux failed" {
 		t.Errorf("error Display = %q", items[1].Display)

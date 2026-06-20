@@ -39,7 +39,7 @@ func expandInline(items []item.Item, registry *generator.Registry, ctx generator
 			// Preserve parent type so inline items sort with their directory group in GroupAndOrder.
 			inline.Type = parent.Type
 			if inline.Icon == "" {
-				inline.Icon = iconCmd
+				inline.Icon = iconAction
 			}
 			inline.InlineParent = &parent
 			result = append(result, inline)

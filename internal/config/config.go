@@ -73,12 +73,18 @@ type Config struct {
 var validMatchTypes = []string{"root", "dir", "session"}
 
 // reservedKeys are set by the runtime (from the selection stack or CLI flags) and must not collide with stage keys.
-var reservedKeys = []string{"path", "pane_id", "session", "window_index"}
+var reservedKeys = []string{
+	"path",
+	"pane_id",
+	"session",
+	"session_id",
+	"window_index",
+	"window_id",
+}
 
 var sessionActionReservedKeys = slices.Concat(reservedKeys, []string{
 	"session_attached",
 	"session_display",
-	"session_id",
 	"session_kind",
 	"session_name",
 	"session_windows",

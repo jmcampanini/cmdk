@@ -19,8 +19,11 @@ import (
 const (
 	iconWindow  = "\ueb7f"
 	iconDir     = "\ueaf7"
-	iconCmd     = "\uebc8"
+	iconAction  = "\ueb63"
 	iconSession = "\ueb23"
+	iconUnknown = "\ueb63"
+	iconLoading = "\uf4e3"
+	iconError   = "\uea87"
 	iconBell    = "\ueaa2"
 	itemGap     = "  "
 )
@@ -32,6 +35,7 @@ type iconInfo struct {
 
 type itemDelegate struct {
 	icons       map[string]iconInfo
+	unknown     iconInfo
 	textFg      color.Color
 	selBg       color.Color
 	bellColor   color.Color
@@ -39,17 +43,18 @@ type itemDelegate struct {
 }
 
 func newItemDelegate(t theme.Theme) itemDelegate {
+	unknown := iconInfo{iconUnknown, t.TypeUnknown}
 	return itemDelegate{
 		icons: map[string]iconInfo{
 			"window":  {iconWindow, t.TypeWindow},
 			"dir":     {iconDir, t.TypeDir},
-			"cmd":     {iconCmd, t.TypeCmd},
-			"action":  {iconCmd, t.TypeCmd},
+			"action":  {iconAction, t.TypeAction},
 			"session": {iconSession, t.TypeSession},
-			"pick":    {iconCmd, t.TypeCmd},
-			"error":   {iconCmd, t.TypeCmd},
-			"loading": {iconCmd, t.TypeCmd},
+			"pick":    unknown,
+			"error":   {iconError, t.Error},
+			"loading": {iconLoading, t.TypeUnknown},
 		},
+		unknown:     unknown,
 		textFg:      t.Text,
 		selBg:       t.Surface1,
 		bellColor:   t.Bell,
@@ -71,18 +76,13 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, li list.Item)
 		return
 	}
 
-	info, ok := d.icons[it.Type]
-	if !ok {
-		log.Warn("no icon for item type, using fallback", "type", it.Type)
-		info = d.icons["cmd"]
-	}
+	info := d.iconInfoForItem(it)
 	if it.Icon != "" {
 		info = iconInfo{icon: it.Icon, color: info.color}
 	}
 
 	filterState := m.FilterState()
-	filtering := filterState == list.Filtering
-	filtered := filtering || filterState == list.FilterApplied
+	filtered := filterState == list.Filtering || filterState == list.FilterApplied
 
 	var matchedRunes []int
 	if filtered {
@@ -101,7 +101,7 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, li list.Item)
 	display := ansi.Truncate(it.Display, availWidth, "…")
 
 	s := lipgloss.NewStyle().Inline(true)
-	selected := index == m.Index() && !filtering
+	selected := index == m.Index()
 
 	var content string
 	if selected {
@@ -129,6 +129,14 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, li list.Item)
 	}
 
 	_, _ = fmt.Fprint(w, content)
+}
+
+func (d itemDelegate) iconInfoForItem(it item.Item) iconInfo {
+	if info, ok := d.icons[it.Type]; ok {
+		return info
+	}
+	log.Warn("no icon for item type, using fallback", "type", it.Type)
+	return d.unknown
 }
 
 func (d itemDelegate) styledBell(s lipgloss.Style, selected bool) string {
