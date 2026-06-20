@@ -72,7 +72,8 @@ type Config struct {
 
 var validMatchTypes = []string{"root", "dir", "session"}
 
-// reservedKeys are set by the runtime (from the selection stack or CLI flags) and must not collide with stage keys.
+// reservedKeys must not be used by stage outputs because they are runtime-provided
+// variables or reserved names that should not be introduced as template aliases.
 var reservedKeys = []string{
 	"path",
 	"pane_id",

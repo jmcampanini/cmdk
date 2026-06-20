@@ -13,7 +13,7 @@ import (
 
 const (
 	SessionKindExternal = "external"
-	sessionListFormat   = "#{session_id}\t#{session_name}\t#{session_windows}\t#{session_attached}"
+	sessionListFormat   = "#{session_id}\t" + tmuxEscapedSessionNameFormat + "\t#{session_windows}\t#{session_attached}"
 )
 
 func ParseSessions(output string) []item.Item {
@@ -37,7 +37,7 @@ func ParseSessions(output string) []item.Item {
 		}
 
 		sessionID := parts[0]
-		sessionName := parts[1]
+		sessionName := displaySafeTmuxText(parts[1])
 		sessionWindows := parts[2]
 		sessionAttached := parts[3]
 		if sessionID == "" || sessionName == "" {

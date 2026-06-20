@@ -38,7 +38,7 @@ func ConfigDocs() []SectionDoc {
 			Description: "Stages are declared inline within an action's stages array.\n  Each stage collects one piece of data before the action executes.",
 			Fields: []FieldDoc{
 				{Name: "type", Type: "string", Description: "Stage type: \"prompt\" (text input) or \"picker\" (shell command → fuzzy list).", Validation: "must be \"prompt\" or \"picker\""},
-				{Name: "key", Type: "string", Description: "Template variable name for the stage's output value.", Validation: "cannot be empty; must be unique within action; cannot be reserved (path, pane_id, session, session_id, window_index, window_id; session actions also reserve session_attached, session_display, session_kind, session_name, session_windows)"},
+				{Name: "key", Type: "string", Description: "Template variable name for the stage's output value.", Validation: "cannot be empty; must be unique within action; cannot be reserved (path, pane_id, session, session_id, window_index, window_id; session actions also reserve session_attached, session_display, session_kind, session_name, session_windows). The reserved name session is not emitted; use session_name for tmux session names."},
 				{Name: "text", Type: "string", Description: "Prompt label (Go template). Only for type = \"prompt\".", Validation: "required for prompt; forbidden for picker"},
 				{Name: "default", Type: "string", Description: "Default value pre-filled in prompt (Go template). Only for type = \"prompt\"."},
 				{Name: "source", Type: "string", Description: "Shell command run via sh -c that produces newline-separated entries (Go template). Only for type = \"picker\".", Validation: "required for picker; forbidden for prompt"},
@@ -135,14 +135,13 @@ TEMPLATE VARIABLES
   Available variables (from stack):
       {{.path}}           directory path (for dir-matching actions)
       {{.pane_id}}        tmux pane ID (when --pane-id is set)
-      {{.session}}        tmux session name (from window items in the selection stack)
       {{.session_id}}     stable tmux session ID (from window or session items)
       {{.window_index}}   tmux window index (from window items in the selection stack)
       {{.window_id}}      stable tmux window ID (from window items in the selection stack)
       {{.session_attached}} tmux attached client count (from session items)
       {{.session_display}}  display string for the selected session
       {{.session_kind}}     session classification; "external" in this phase
-      {{.session_name}}     tmux session name (from session items)
+      {{.session_name}}     display-safe tmux session name (from window or session items)
       {{.session_windows}}  tmux window count (from session items)
       {{.<key>}}          stage output keyed by the stage's key field
 
@@ -151,10 +150,12 @@ TEMPLATE VARIABLES
 
   Security: variables such as path, session_name, and stage inputs
   come from external sources (tmux, zoxide, user input) and may
-  contain shell metacharacters. Wrap command arguments with {{sq .var}}
-  when interpolating them, e.g. {{sq .session_name}}, not
-  {{.session_name}}. Built-in session Connect and child-window actions
-  target by session_id and shell-quote the tmux target.
+  contain shell metacharacters. session_name renders tabs and newlines as
+  display glyphs (⇥, ↵), but it is not a stable tmux target and is not
+  shell-safe. Use session_id for tmux targets, and wrap command arguments with
+  {{sq .var}}, e.g. {{sq .session_name}}, not {{.session_name}}. Built-in
+  session Connect and child-window actions target by session_id and shell-quote
+  the tmux target.
 
   Environment variables CMDK_PATH, CMDK_PANE_ID, etc. are also
   set when executing commands.

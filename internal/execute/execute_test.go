@@ -243,10 +243,11 @@ func TestNormalizeKey(t *testing.T) {
 func TestBuildCMDKEnvVars_Basic(t *testing.T) {
 	items := []item.Item{
 		{Data: map[string]string{
-			"path":       "/home/user",
-			"session":    "main",
-			"session_id": "$1",
-			"window_id":  "@2",
+			"path":         "/home/user",
+			"session":      "legacy-alias",
+			"session_name": "main",
+			"session_id":   "$1",
+			"window_id":    "@2",
 		}},
 	}
 	envs := BuildCMDKEnvVars(items, "%1")
@@ -255,8 +256,11 @@ func TestBuildCMDKEnvVars_Basic(t *testing.T) {
 	if envMap["CMDK_PATH"] != "/home/user" {
 		t.Errorf("CMDK_PATH = %q, want /home/user", envMap["CMDK_PATH"])
 	}
-	if envMap["CMDK_SESSION"] != "main" {
-		t.Errorf("CMDK_SESSION = %q, want main", envMap["CMDK_SESSION"])
+	if envMap["CMDK_SESSION_NAME"] != "main" {
+		t.Errorf("CMDK_SESSION_NAME = %q, want main", envMap["CMDK_SESSION_NAME"])
+	}
+	if _, ok := envMap["CMDK_SESSION"]; ok {
+		t.Error("CMDK_SESSION should not be set; use CMDK_SESSION_NAME")
 	}
 	if envMap["CMDK_SESSION_ID"] != "$1" {
 		t.Errorf("CMDK_SESSION_ID = %q, want $1", envMap["CMDK_SESSION_ID"])
@@ -296,14 +300,17 @@ func TestBuildCMDKEnvVars_EmptyPaneID(t *testing.T) {
 
 func TestBuildCMDKEnvVars_MultipleItems(t *testing.T) {
 	items := []item.Item{
-		{Data: map[string]string{"session": "dev"}},
+		{Data: map[string]string{"session_name": "dev"}},
 		{Data: map[string]string{"path": "/projects"}},
 	}
 	envs := BuildCMDKEnvVars(items, "%5")
 	envMap := envSliceToMap(envs)
 
-	if envMap["CMDK_SESSION"] != "dev" {
-		t.Errorf("CMDK_SESSION = %q, want dev", envMap["CMDK_SESSION"])
+	if envMap["CMDK_SESSION_NAME"] != "dev" {
+		t.Errorf("CMDK_SESSION_NAME = %q, want dev", envMap["CMDK_SESSION_NAME"])
+	}
+	if _, ok := envMap["CMDK_SESSION"]; ok {
+		t.Error("CMDK_SESSION should not be set; use CMDK_SESSION_NAME")
 	}
 	if envMap["CMDK_PATH"] != "/projects" {
 		t.Errorf("CMDK_PATH = %q, want /projects", envMap["CMDK_PATH"])
@@ -316,7 +323,7 @@ func TestBuildCMDKEnvVars_MultipleItems(t *testing.T) {
 func TestRun_EnvVarsContainCMDK(t *testing.T) {
 	selected := item.Item{
 		Cmd:  "echo hi",
-		Data: map[string]string{"session": "main"},
+		Data: map[string]string{"session_name": "main"},
 	}
 
 	var capturedEnvv []string
@@ -331,8 +338,11 @@ func TestRun_EnvVarsContainCMDK(t *testing.T) {
 	}
 
 	envMap := envSliceToMap(capturedEnvv)
-	if envMap["CMDK_SESSION"] != "main" {
-		t.Errorf("CMDK_SESSION = %q, want main", envMap["CMDK_SESSION"])
+	if envMap["CMDK_SESSION_NAME"] != "main" {
+		t.Errorf("CMDK_SESSION_NAME = %q, want main", envMap["CMDK_SESSION_NAME"])
+	}
+	if _, ok := envMap["CMDK_SESSION"]; ok {
+		t.Error("CMDK_SESSION should not be set; use CMDK_SESSION_NAME")
 	}
 	if envMap["CMDK_PANE_ID"] != "%3" {
 		t.Errorf("CMDK_PANE_ID = %q, want %%3", envMap["CMDK_PANE_ID"])
@@ -344,7 +354,7 @@ func TestRun_StripsExistingCMDKVars(t *testing.T) {
 
 	selected := item.Item{
 		Cmd:  "echo hi",
-		Data: map[string]string{"session": "main"},
+		Data: map[string]string{"session_name": "main"},
 	}
 
 	var capturedEnvv []string
@@ -362,8 +372,11 @@ func TestRun_StripsExistingCMDKVars(t *testing.T) {
 	if _, ok := envMap["CMDK_STALE"]; ok {
 		t.Error("CMDK_STALE should be stripped from env")
 	}
-	if envMap["CMDK_SESSION"] != "main" {
-		t.Errorf("CMDK_SESSION = %q, want main", envMap["CMDK_SESSION"])
+	if envMap["CMDK_SESSION_NAME"] != "main" {
+		t.Errorf("CMDK_SESSION_NAME = %q, want main", envMap["CMDK_SESSION_NAME"])
+	}
+	if _, ok := envMap["CMDK_SESSION"]; ok {
+		t.Error("CMDK_SESSION should not be set; use CMDK_SESSION_NAME")
 	}
 	if envMap["CMDK_PANE_ID"] != "%1" {
 		t.Errorf("CMDK_PANE_ID = %q, want %%1", envMap["CMDK_PANE_ID"])

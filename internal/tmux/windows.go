@@ -17,8 +17,8 @@ const (
 	tmuxEscapedNewline = "↵"
 	tmuxEscapedTab     = "⇥"
 
-	tmuxEscapedSessionNameFormat = "#{s|\t|" + tmuxEscapedTab + "|:#{s|\n|" + tmuxEscapedNewline + "|:#{session_name}}}"
-	tmuxEscapedWindowNameFormat  = "#{s|\t|" + tmuxEscapedTab + "|:#{s|\n|" + tmuxEscapedNewline + "|:#{window_name}}}"
+	tmuxEscapedSessionNameFormat = "#{s|\\\\t|" + tmuxEscapedTab + "|:#{s|\\\\n|" + tmuxEscapedNewline + "|:#{session_name}}}"
+	tmuxEscapedWindowNameFormat  = "#{s|\\\\t|" + tmuxEscapedTab + "|:#{s|\\\\n|" + tmuxEscapedNewline + "|:#{window_name}}}"
 	tmuxWindowSwitchCommand      = "tmux switch-client -t {{sq .session_id}}:{{sq .window_id}}"
 	tmuxListWindowsFormat        = tmuxEscapedSessionNameFormat + "\t#{session_id}\t#{window_index}\t#{window_id}\t" + tmuxEscapedWindowNameFormat + "\t#{window_bell_flag}"
 )
@@ -37,6 +37,14 @@ var (
 	validTmuxSessionID = regexp.MustCompile(`^\$\d+$`)
 	validTmuxWindowID  = regexp.MustCompile(`^@\d+$`)
 )
+
+func displaySafeTmuxText(s string) string {
+	s = strings.ReplaceAll(s, `\t`, tmuxEscapedTab)
+	s = strings.ReplaceAll(s, "\t", tmuxEscapedTab)
+	s = strings.ReplaceAll(s, `\n`, tmuxEscapedNewline)
+	s = strings.ReplaceAll(s, "\n", tmuxEscapedNewline)
+	return s
+}
 
 type windowLine struct {
 	session     string
@@ -70,13 +78,16 @@ func parseWindowLine(line string) (windowLine, bool) {
 }
 
 func newWindowItem(parsed windowLine, bell bool) item.Item {
+	sessionName := displaySafeTmuxText(parsed.session)
+	windowName := displaySafeTmuxText(parsed.windowName)
+
 	it := item.NewItem()
 	it.Type = "window"
 	it.Source = "tmux"
-	it.Display = fmt.Sprintf("tmux: %s:%s %s", parsed.session, parsed.windowIndex, parsed.windowName)
+	it.Display = fmt.Sprintf("tmux: %s:%s %s", sessionName, parsed.windowIndex, windowName)
 	it.Action = item.ActionExecute
 	it.Cmd = tmuxWindowSwitchCommand
-	it.Data["session"] = parsed.session
+	it.Data["session_name"] = sessionName
 	it.Data["session_id"] = parsed.sessionID
 	it.Data["window_index"] = parsed.windowIndex
 	it.Data["window_id"] = parsed.windowID
@@ -257,6 +268,8 @@ func ParseWindowsForSession(output string, session item.Item) ([]item.Item, erro
 }
 
 func newSessionWindowItem(session item.Item, windowIndex, windowID, windowName string) item.Item {
+	windowName = displaySafeTmuxText(windowName)
+
 	it := item.NewItem()
 	it.Type = "window"
 	it.Source = "tmux"
@@ -267,9 +280,6 @@ func newSessionWindowItem(session item.Item, windowIndex, windowID, windowName s
 	it.Action = item.ActionExecute
 	it.Cmd = sessionWindowCommand
 	maps.Copy(it.Data, session.Data)
-	if sessionName := session.Data["session_name"]; sessionName != "" {
-		it.Data["session"] = sessionName
-	}
 	it.Data["window_index"] = windowIndex
 	it.Data["window_id"] = windowID
 	return it

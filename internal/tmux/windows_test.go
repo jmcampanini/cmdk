@@ -34,7 +34,7 @@ func TestParseWindows_MultiSession(t *testing.T) {
 
 	want := []struct {
 		display     string
-		session     string
+		sessionName string
 		sessionID   string
 		windowIndex string
 		windowID    string
@@ -48,8 +48,11 @@ func TestParseWindows_MultiSession(t *testing.T) {
 		if items[i].Display != expected.display {
 			t.Errorf("item[%d].Display = %q, want %q", i, items[i].Display, expected.display)
 		}
-		if items[i].Data["session"] != expected.session {
-			t.Errorf("item[%d].Data[session] = %q, want %q", i, items[i].Data["session"], expected.session)
+		if _, ok := items[i].Data["session"]; ok {
+			t.Errorf("item[%d].Data[session] should not be set; use session_name", i)
+		}
+		if items[i].Data["session_name"] != expected.sessionName {
+			t.Errorf("item[%d].Data[session_name] = %q, want %q", i, items[i].Data["session_name"], expected.sessionName)
 		}
 		if items[i].Data["session_id"] != expected.sessionID {
 			t.Errorf("item[%d].Data[session_id] = %q, want %q", i, items[i].Data["session_id"], expected.sessionID)
@@ -95,8 +98,11 @@ func TestParseWindows_WindowNameWithSpaces(t *testing.T) {
 	if items[0].Display != "tmux: work:1 my cool app" {
 		t.Errorf("Display = %q, want %q", items[0].Display, "tmux: work:1 my cool app")
 	}
-	if items[0].Data["session"] != "work" {
-		t.Errorf("session = %q, want %q", items[0].Data["session"], "work")
+	if _, ok := items[0].Data["session"]; ok {
+		t.Error("Data[session] should not be set; use session_name")
+	}
+	if items[0].Data["session_name"] != "work" {
+		t.Errorf("session_name = %q, want %q", items[0].Data["session_name"], "work")
 	}
 	if items[0].Data["session_id"] != "$9" {
 		t.Errorf("session_id = %q, want %q", items[0].Data["session_id"], "$9")
@@ -120,8 +126,11 @@ func TestParseWindows_EscapedControlCharsInNames(t *testing.T) {
 	if items[0].Display != wantDisplay {
 		t.Errorf("Display = %q, want %q", items[0].Display, wantDisplay)
 	}
-	if items[0].Data["session"] != "work"+tmuxEscapedNewline+"notes" {
-		t.Errorf("session = %q", items[0].Data["session"])
+	if _, ok := items[0].Data["session"]; ok {
+		t.Error("Data[session] should not be set; use session_name")
+	}
+	if items[0].Data["session_name"] != "work"+tmuxEscapedNewline+"notes" {
+		t.Errorf("session_name = %q", items[0].Data["session_name"])
 	}
 }
 
@@ -244,8 +253,11 @@ func TestParseWindowsForSession(t *testing.T) {
 	if items[0].Data["session_id"] != "$3" {
 		t.Errorf("session_id = %q, want $3", items[0].Data["session_id"])
 	}
-	if items[0].Data["session"] != "work" {
-		t.Errorf("session = %q, want work", items[0].Data["session"])
+	if _, ok := items[0].Data["session"]; ok {
+		t.Error("Data[session] should not be set; use session_name")
+	}
+	if items[0].Data["session_name"] != "work" {
+		t.Errorf("session_name = %q, want work", items[0].Data["session_name"])
 	}
 	if items[0].Data["window_index"] != "1" {
 		t.Errorf("window_index = %q, want 1", items[0].Data["window_index"])

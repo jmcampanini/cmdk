@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/jmcampanini/cmdk/internal/item"
@@ -85,7 +86,7 @@ func TestParseSessions_SkipsMalformedLines(t *testing.T) {
 	}
 }
 
-func TestParseSessions_PreservesSessionName(t *testing.T) {
+func TestParseSessions_PreservesDisplaySafeSessionName(t *testing.T) {
 	items := ParseSessions("$1\tfeature/foo bar\t1\t0\n")
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
@@ -95,5 +96,32 @@ func TestParseSessions_PreservesSessionName(t *testing.T) {
 	}
 	if items[0].Display != "tmux: feature/foo bar" {
 		t.Errorf("Display = %q, want tmux: feature/foo bar", items[0].Display)
+	}
+}
+
+func TestParseSessions_ReplacesEscapedControlCharsForDisplay(t *testing.T) {
+	items := ParseSessions(`$1	feature\tfoo\nbar	1	0` + "\n")
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
+	}
+
+	wantName := "feature" + tmuxEscapedTab + "foo" + tmuxEscapedNewline + "bar"
+	if items[0].Data["session_name"] != wantName {
+		t.Errorf("session_name = %q, want %q", items[0].Data["session_name"], wantName)
+	}
+	if _, ok := items[0].Data["session"]; ok {
+		t.Error("Data[session] should not be set; use session_name")
+	}
+	if items[0].Display != "tmux: "+wantName {
+		t.Errorf("Display = %q, want %q", items[0].Display, "tmux: "+wantName)
+	}
+}
+
+func TestSessionListFormatEscapesControlChars(t *testing.T) {
+	if !strings.Contains(sessionListFormat, `#{s|\\t|`+tmuxEscapedTab+`|`) {
+		t.Errorf("sessionListFormat should replace escaped tabs: %q", sessionListFormat)
+	}
+	if !strings.Contains(sessionListFormat, `#{s|\\n|`+tmuxEscapedNewline+`|`) {
+		t.Errorf("sessionListFormat should replace escaped newlines: %q", sessionListFormat)
 	}
 }

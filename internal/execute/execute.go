@@ -38,6 +38,9 @@ func FlattenData(accumulated []item.Item) map[string]string {
 	for _, it := range accumulated {
 		maps.Copy(merged, it.Data)
 	}
+	// Keep session names available only as session_name; session is reserved to
+	// avoid exposing two template/env names for the same tmux value.
+	delete(merged, "session")
 	return merged
 }
 
