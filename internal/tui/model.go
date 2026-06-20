@@ -645,7 +645,7 @@ func (m Model) handleSourceResult(result sourceResultMsg) (tea.Model, tea.Cmd) {
 	src := m.asyncSources[srcIdx]
 	if result.Err != nil {
 		log.Error("async source failed", "source", src.Name, "error", result.Err)
-		errItem := generator.ErrorItem(generator.Source{Name: src.Name, Type: src.Type}, result.Err)
+		errItem := generator.ErrorItem(generator.Source{Name: src.Name}, result.Err)
 		m.asyncResults[srcIdx] = []item.Item{errItem}
 	} else if result.Items != nil {
 		m.asyncResults[srcIdx] = result.Items
@@ -679,7 +679,7 @@ func (m Model) buildRootItems() []list.Item {
 		if m.asyncResults[i] != nil {
 			all = append(all, m.asyncResults[i]...)
 		} else {
-			all = append(all, generator.LoadingItem(generator.Source{Name: src.Name, Type: src.Type}))
+			all = append(all, generator.LoadingItem(generator.Source{Name: src.Name}))
 		}
 	}
 	if m.inline {

@@ -22,7 +22,7 @@ func newIntegrationRootGenerator(sources ...Source) GeneratorFunc {
 func setupRegistry() *Registry {
 	reg := NewRegistry()
 
-	windows := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
+	windows := Source{Name: "windows", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute,
 				Cmd: "tmux switch-client -t {{sq .session_id}}:{{sq .window_id}}",
@@ -34,7 +34,7 @@ func setupRegistry() *Registry {
 				}},
 		}, nil
 	}}
-	dirs := Source{Name: "zoxide", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
+	dirs := Source{Name: "zoxide", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "dir", Display: "/home/user/projects", Action: item.ActionNextList,
 				Data: map[string]string{"path": "/home/user/projects"}},
@@ -158,13 +158,13 @@ func TestIntegration_DataFlattening(t *testing.T) {
 	}
 }
 
-func TestIntegration_ThreeSourceTypes(t *testing.T) {
-	windows := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
+func TestIntegration_ThreeItemTypes(t *testing.T) {
+	windows := Source{Name: "windows", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "window", Display: "main:1 zsh"},
 		}, nil
 	}}
-	dirs := Source{Name: "zoxide", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
+	dirs := Source{Name: "zoxide", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "dir", Source: "zoxide", Display: "/projects"},
 		}, nil
@@ -175,7 +175,7 @@ func TestIntegration_ThreeSourceTypes(t *testing.T) {
 		},
 	}
 
-	gen := newIntegrationRootGenerator(windows, dirs, Source{Name: "actions", Type: "action", Fetch: config.MatchingActions(cfg, "root")})
+	gen := newIntegrationRootGenerator(windows, dirs, Source{Name: "actions", Fetch: config.MatchingActions(cfg, "root")})
 	items := gen(nil, Context{})
 
 	if len(items) != 3 {
@@ -197,11 +197,11 @@ func TestIntegration_ConfigActionsInOrder(t *testing.T) {
 			{Name: "gamma", Cmd: "echo gamma", Matches: "root"},
 		},
 	}
-	windows := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
+	windows := Source{Name: "windows", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
 	}}
 
-	gen := newIntegrationRootGenerator(windows, Source{Name: "actions", Type: "action", Fetch: config.MatchingActions(cfg, "root")})
+	gen := newIntegrationRootGenerator(windows, Source{Name: "actions", Fetch: config.MatchingActions(cfg, "root")})
 	items := gen(nil, Context{})
 
 	if len(items) != 4 {
@@ -220,11 +220,11 @@ func TestIntegration_ConfigActionsInOrder(t *testing.T) {
 }
 
 func TestIntegration_EmptyConfig(t *testing.T) {
-	windows := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
+	windows := Source{Name: "windows", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
 	}}
 
-	gen := newIntegrationRootGenerator(windows, Source{Name: "actions", Type: "action", Fetch: config.MatchingActions(config.Config{}, "root")})
+	gen := newIntegrationRootGenerator(windows, Source{Name: "actions", Fetch: config.MatchingActions(config.Config{}, "root")})
 	items := gen(nil, Context{})
 
 	if len(items) != 1 {
@@ -269,18 +269,18 @@ func TestIntegration_ExecuteWithEnvVars(t *testing.T) {
 }
 
 func TestIntegration_MalformedConfig(t *testing.T) {
-	windows := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
+	windows := Source{Name: "windows", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
 	}}
-	dirs := Source{Name: "zoxide", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
+	dirs := Source{Name: "zoxide", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{{Type: "dir", Display: "/projects"}}, nil
 	}}
 	cfgErr := errors.New("bad toml")
-	badConfig := Source{Name: "config", Type: "action", Fetch: func(context.Context) ([]item.Item, error) {
+	badConfig := Source{Name: "config", Fetch: func(context.Context) ([]item.Item, error) {
 		return nil, cfgErr
 	}}
 
-	gen := newIntegrationRootGenerator(windows, dirs, badConfig, Source{Name: "actions", Type: "action", Fetch: config.MatchingActions(config.Config{}, "root")})
+	gen := newIntegrationRootGenerator(windows, dirs, badConfig, Source{Name: "actions", Fetch: config.MatchingActions(config.Config{}, "root")})
 	items := gen(nil, Context{})
 
 	if len(items) != 3 {
@@ -296,9 +296,6 @@ func TestIntegration_MalformedConfig(t *testing.T) {
 	if errItem.Type != "error" {
 		t.Errorf("errItem.Type = %q, want error", errItem.Type)
 	}
-	if errItem.Data["source_type"] != "action" {
-		t.Errorf("errItem.Data[source_type] = %q, want action", errItem.Data["source_type"])
-	}
 	if errItem.Source != "config" {
 		t.Errorf("errItem.Source = %q, want config", errItem.Source)
 	}
@@ -308,13 +305,13 @@ func TestIntegration_MalformedConfig(t *testing.T) {
 }
 
 func TestIntegration_OneSourceFailsOthersWork(t *testing.T) {
-	windows := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
+	windows := Source{Name: "windows", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
 	}}
-	badDirs := Source{Name: "zoxide", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
+	badDirs := Source{Name: "zoxide", Fetch: func(context.Context) ([]item.Item, error) {
 		return nil, errors.New("command not found")
 	}}
-	actions := Source{Name: "actions", Type: "action", Fetch: func(context.Context) ([]item.Item, error) {
+	actions := Source{Name: "actions", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{{Type: "action", Display: "htop", Action: item.ActionExecute}}, nil
 	}}
 
@@ -329,9 +326,6 @@ func TestIntegration_OneSourceFailsOthersWork(t *testing.T) {
 	}
 	if items[1].Type != "error" {
 		t.Errorf("items[1].Type = %q, want error", items[1].Type)
-	}
-	if items[1].Data["source_type"] != "dir" {
-		t.Errorf("items[1].Data[source_type] = %q, want dir", items[1].Data["source_type"])
 	}
 	if items[1].Display != "zoxide error: command not found" {
 		t.Errorf("items[1].Display = %q", items[1].Display)

@@ -95,7 +95,6 @@ func newWindowParseErrorItem(malformedRows int) item.Item {
 	it.Type = "error"
 	it.Source = "tmux"
 	it.Display = fmt.Sprintf("tmux parse error: %d unparseable list-windows %s", malformedRows, rowWord)
-	it.Data["source_type"] = "window"
 	return it
 }
 
