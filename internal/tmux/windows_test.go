@@ -287,6 +287,19 @@ func TestParseWindowsForSession_EscapedControlCharsInName(t *testing.T) {
 	}
 }
 
+func TestParseWindowsForSession_RawTabInNameReturnsError(t *testing.T) {
+	session := item.NewItem()
+	session.Data["session_id"] = "$1"
+
+	items, err := ParseWindowsForSession("1\t@2\tmy\tcool\t0\n", session)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if len(items) != 0 {
+		t.Fatalf("got %d items, want 0", len(items))
+	}
+}
+
 func TestParseWindowsForSession_PartialMalformedAppendsError(t *testing.T) {
 	session := item.NewItem()
 	session.Data["session_id"] = "$1"

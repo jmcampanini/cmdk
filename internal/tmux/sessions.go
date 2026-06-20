@@ -11,9 +11,21 @@ import (
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
+const SessionKindExternal = "external"
+
 const (
-	SessionKindExternal = "external"
-	sessionListFormat   = "#{session_id}\t" + tmuxEscapedSessionNameFormat + "\t#{session_windows}\t#{session_attached}"
+	sessionLineIDField = iota
+	sessionLineNameField
+	sessionLineWindowsField
+	sessionLineAttachedField
+	sessionLineFieldCount
+)
+
+var sessionListFormat = tmuxFormatFields(
+	"#{session_id}",
+	tmuxEscapedSessionNameFormat,
+	"#{session_windows}",
+	"#{session_attached}",
 )
 
 func ParseSessions(output string) []item.Item {
@@ -26,20 +38,20 @@ func ParseSessions(output string) []item.Item {
 
 	var entries []entry
 	for _, line := range lines {
-		line = strings.TrimRight(line, "\r")
+		line = cleanTmuxLine(line)
 		if line == "" {
 			continue
 		}
 
-		parts := strings.Split(line, "\t")
-		if len(parts) != 4 {
+		fields, ok := splitTmuxFields(line, sessionLineFieldCount)
+		if !ok {
 			continue
 		}
 
-		sessionID := parts[0]
-		sessionName := displaySafeTmuxText(parts[1])
-		sessionWindows := parts[2]
-		sessionAttached := parts[3]
+		sessionID := fields[sessionLineIDField]
+		sessionName := displaySafeTmuxText(fields[sessionLineNameField])
+		sessionWindows := fields[sessionLineWindowsField]
+		sessionAttached := fields[sessionLineAttachedField]
 		if sessionID == "" || sessionName == "" {
 			continue
 		}

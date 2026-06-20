@@ -13,14 +13,15 @@ import (
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
-const (
-	tmuxEscapedNewline = "↵"
-	tmuxEscapedTab     = "⇥"
+const tmuxWindowSwitchCommand = "tmux switch-client -t {{sq .session_id}}:{{sq .window_id}}"
 
-	tmuxEscapedSessionNameFormat = "#{s|\\\\t|" + tmuxEscapedTab + "|:#{s|\\\\n|" + tmuxEscapedNewline + "|:#{session_name}}}"
-	tmuxEscapedWindowNameFormat  = "#{s|\\\\t|" + tmuxEscapedTab + "|:#{s|\\\\n|" + tmuxEscapedNewline + "|:#{window_name}}}"
-	tmuxWindowSwitchCommand      = "tmux switch-client -t {{sq .session_id}}:{{sq .window_id}}"
-	tmuxListWindowsFormat        = tmuxEscapedSessionNameFormat + "\t#{session_id}\t#{window_index}\t#{window_id}\t" + tmuxEscapedWindowNameFormat + "\t#{window_bell_flag}"
+var tmuxListWindowsFormat = tmuxFormatFields(
+	tmuxEscapedSessionNameFormat,
+	"#{session_id}",
+	"#{window_index}",
+	"#{window_id}",
+	tmuxEscapedWindowNameFormat,
+	"#{window_bell_flag}",
 )
 
 const (
@@ -38,14 +39,6 @@ var (
 	validTmuxWindowID  = regexp.MustCompile(`^@\d+$`)
 )
 
-func displaySafeTmuxText(s string) string {
-	s = strings.ReplaceAll(s, `\t`, tmuxEscapedTab)
-	s = strings.ReplaceAll(s, "\t", tmuxEscapedTab)
-	s = strings.ReplaceAll(s, `\n`, tmuxEscapedNewline)
-	s = strings.ReplaceAll(s, "\n", tmuxEscapedNewline)
-	return s
-}
-
 type windowLine struct {
 	session     string
 	sessionID   string
@@ -56,8 +49,8 @@ type windowLine struct {
 }
 
 func parseWindowLine(line string) (windowLine, bool) {
-	fields := strings.Split(line, "\t")
-	if len(fields) != windowLineFieldCount {
+	fields, ok := splitTmuxFields(line, windowLineFieldCount)
+	if !ok {
 		return windowLine{}, false
 	}
 
@@ -123,6 +116,7 @@ func parseWindowEntries(output string) ([]windowEntry, int) {
 	malformedRows := 0
 
 	for _, line := range lines {
+		line = cleanTmuxLine(line)
 		if line == "" {
 			continue
 		}
@@ -201,9 +195,21 @@ func ListWindows(ctx context.Context) ([]item.Item, error) {
 	return ParseWindows(string(out))
 }
 
+const sessionWindowCommand = tmuxWindowSwitchCommand
+
 const (
-	windowsForSessionFormat = "#{window_index}\t#{window_id}\t" + tmuxEscapedWindowNameFormat + "\t#{window_bell_flag}"
-	sessionWindowCommand    = tmuxWindowSwitchCommand
+	sessionWindowLineIndexField = iota
+	sessionWindowLineIDField
+	sessionWindowLineNameField
+	sessionWindowLineBellFlagField
+	sessionWindowLineFieldCount
+)
+
+var windowsForSessionFormat = tmuxFormatFields(
+	"#{window_index}",
+	"#{window_id}",
+	tmuxEscapedWindowNameFormat,
+	"#{window_bell_flag}",
 )
 
 func ParseWindowsForSession(output string, session item.Item) ([]item.Item, error) {
@@ -217,7 +223,7 @@ func ParseWindowsForSession(output string, session item.Item) ([]item.Item, erro
 	var entries []entry
 	malformedRows := 0
 	for _, line := range lines {
-		line = strings.TrimRight(line, "\r")
+		line = cleanTmuxLine(line)
 		if line == "" {
 			continue
 		}
@@ -225,15 +231,15 @@ func ParseWindowsForSession(output string, session item.Item) ([]item.Item, erro
 		// Keep window_bell_flag as a sentinel field so empty window names preserve
 		// the expected tab count. TODO: surface this flag in the TUI for session
 		// child windows without setting Data["bell"] and reordering them above Connect.
-		parts := strings.SplitN(line, "\t", 4)
-		if len(parts) != 4 {
+		fields, ok := splitTmuxFields(line, sessionWindowLineFieldCount)
+		if !ok {
 			malformedRows++
 			continue
 		}
 
-		windowIndex := parts[0]
-		windowID := parts[1]
-		windowName := parts[2]
+		windowIndex := fields[sessionWindowLineIndexField]
+		windowID := fields[sessionWindowLineIDField]
+		windowName := fields[sessionWindowLineNameField]
 		idx, err := strconv.Atoi(windowIndex)
 		if err != nil || !validTmuxWindowID.MatchString(windowID) {
 			malformedRows++
