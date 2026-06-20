@@ -244,11 +244,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if resetWhitespaceFilter(&m.list, msg.String()) {
+	key := msg.String()
+	if resetWhitespaceFilter(&m.list, key) {
+		return m, nil
+	}
+	if navigateActiveFilter(&m.list, key) {
 		return m, nil
 	}
 
-	if msg.String() == "enter" {
+	if key == "enter" {
+		activeFilter := prepareActiveFilterSelection(&m.list)
 		sel, ok := resolveListTarget(m.list)
 		if ok && sel.Type != "error" && sel.Type != "loading" {
 			// Reconstruct the accumulated stack as if the user drilled down,
@@ -273,9 +278,12 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
+		if activeFilter {
+			return m, nil
+		}
 	}
 
-	if msg.String() == "esc" && m.list.FilterState() == list.Unfiltered {
+	if key == "esc" && m.list.FilterState() == list.Unfiltered {
 		if len(m.accumulated) > 0 {
 			return m.handleBack(), nil
 		}
@@ -333,18 +341,26 @@ func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	if resetWhitespaceFilter(&m.pickerList, key.String()) {
+	keyString := key.String()
+	if resetWhitespaceFilter(&m.pickerList, keyString) {
+		return m, nil
+	}
+	if navigateActiveFilter(&m.pickerList, keyString) {
 		return m, nil
 	}
 
-	if key.String() == "enter" {
+	if keyString == "enter" {
+		activeFilter := prepareActiveFilterSelection(&m.pickerList)
 		sel, ok := resolveListTarget(m.pickerList)
 		if ok && sel.Type != "error" {
 			return m.pushStageResult(m.pickerKey, sel.Display, sel.Value)
 		}
+		if activeFilter {
+			return m, nil
+		}
 	}
 
-	if key.String() == "esc" && m.pickerList.FilterState() == list.Unfiltered {
+	if keyString == "esc" && m.pickerList.FilterState() == list.Unfiltered {
 		return m.stageEsc()
 	}
 
@@ -414,17 +430,60 @@ func resetWhitespaceFilter(l *list.Model, key string) bool {
 	return false
 }
 
-func resolveListTarget(l list.Model) (item.Item, bool) {
-	switch {
-	case l.FilterState() == list.Filtering && len(l.VisibleItems()) == 1:
-		sel, ok := l.VisibleItems()[0].(item.Item)
-		return sel, ok
-	case l.FilterState() != list.Filtering:
-		sel, ok := l.SelectedItem().(item.Item)
-		return sel, ok
-	default:
-		return item.Item{}, false
+func navigateActiveFilter(l *list.Model, key string) bool {
+	if !hasActiveFilterQuery(*l) {
+		return false
 	}
+
+	switch key {
+	case "down", "ctrl+j":
+		refreshActiveFilter(l)
+		l.CursorDown()
+		return true
+	case "up", "ctrl+k":
+		refreshActiveFilter(l)
+		l.CursorUp()
+		return true
+	default:
+		return false
+	}
+}
+
+func prepareActiveFilterSelection(l *list.Model) bool {
+	if !hasActiveFilterQuery(*l) {
+		return false
+	}
+	refreshActiveFilter(l)
+	return true
+}
+
+func hasActiveFilterQuery(l list.Model) bool {
+	return l.FilterState() == list.Filtering && strings.TrimSpace(l.FilterInput.Value()) != ""
+}
+
+func refreshActiveFilter(l *list.Model) {
+	filter := l.FilterInput.Value()
+	cursorPos := l.FilterInput.Position()
+	index := l.Index()
+
+	l.SetFilterText(filter)
+	l.SetFilterState(list.Filtering)
+	l.FilterInput.SetCursor(cursorPos)
+
+	visibleCount := len(l.VisibleItems())
+	if visibleCount == 0 {
+		l.Select(0)
+		return
+	}
+	if index >= visibleCount {
+		index = visibleCount - 1
+	}
+	l.Select(index)
+}
+
+func resolveListTarget(l list.Model) (item.Item, bool) {
+	sel, ok := l.SelectedItem().(item.Item)
+	return sel, ok
 }
 
 // findActionIndex returns the index of the last ActionStaged item in the accumulated stack.

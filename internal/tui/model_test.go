@@ -661,8 +661,129 @@ func TestDownDuringNonEmptyFilter_StaysInFilterMode(t *testing.T) {
 	result, _ = m.Update(downMsg)
 	m = result.(Model)
 
-	if m.list.FilterState() == list.Unfiltered {
-		t.Error("FilterState() should not be Unfiltered when filter has text")
+	if m.list.FilterState() != list.Filtering {
+		t.Errorf("FilterState() = %v, want %v", m.list.FilterState(), list.Filtering)
+	}
+	if header := ansi.Strip(m.headerView()); !strings.Contains(header, "m") {
+		t.Errorf("headerView() = %q, want visible filter text %q", header, "m")
+	}
+}
+
+func filterNavigationItems() []list.Item {
+	return []list.Item{
+		item.Item{Type: "window", Display: "alpha", Action: item.ActionExecute},
+		item.Item{Type: "window", Display: "alpine", Action: item.ActionExecute},
+		item.Item{Type: "window", Display: "bravo", Action: item.ActionExecute},
+	}
+}
+
+func typeFilterQuery(t *testing.T, m Model, text string) Model {
+	t.Helper()
+	for _, ch := range text {
+		result, cmd := m.Update(tea.KeyPressMsg{Code: ch, Text: string(ch)})
+		m = result.(Model)
+		m = runTestCmd(t, m, cmd)
+	}
+	return m
+}
+
+func runTestCmd(t *testing.T, m Model, cmd tea.Cmd) Model {
+	t.Helper()
+	if cmd == nil {
+		return m
+	}
+	msg := cmd()
+	switch msg := msg.(type) {
+	case nil:
+		return m
+	case tea.BatchMsg:
+		for _, c := range msg {
+			m = runTestCmd(t, m, c)
+		}
+		return m
+	default:
+		result, _ := m.Update(msg)
+		model, ok := result.(Model)
+		if !ok {
+			t.Fatalf("Update(%T) returned %T, want tui.Model", msg, result)
+		}
+		return model
+	}
+}
+
+func TestDownDuringNonEmptyFilter_MovesThroughVisibleResults(t *testing.T) {
+	m := newTestModel(filterNavigationItems(), testRegistry())
+	m.list.SetSize(80, 40)
+	m = typeFilterQuery(t, m, "al")
+
+	visible := m.list.VisibleItems()
+	if len(visible) < 2 {
+		t.Fatalf("VisibleItems() = %d, want at least 2", len(visible))
+	}
+
+	result, _ := m.Update(downMsg)
+	m = result.(Model)
+
+	if m.list.FilterState() != list.Filtering {
+		t.Errorf("FilterState() = %v, want %v", m.list.FilterState(), list.Filtering)
+	}
+	if m.list.Index() != 1 {
+		t.Fatalf("Index() = %d, want 1", m.list.Index())
+	}
+	got := m.list.SelectedItem().(item.Item).Display
+	want := visible[1].(item.Item).Display
+	if got != want {
+		t.Errorf("SelectedItem().Display = %q, want %q", got, want)
+	}
+}
+
+func TestUpDuringNonEmptyFilter_MovesThroughVisibleResults(t *testing.T) {
+	m := newTestModel(filterNavigationItems(), testRegistry())
+	m.list.SetSize(80, 40)
+	m = typeFilterQuery(t, m, "al")
+
+	visible := m.list.VisibleItems()
+	if len(visible) < 2 {
+		t.Fatalf("VisibleItems() = %d, want at least 2", len(visible))
+	}
+
+	result, _ := m.Update(upMsg)
+	m = result.(Model)
+
+	wantIndex := len(visible) - 1
+	if m.list.FilterState() != list.Filtering {
+		t.Errorf("FilterState() = %v, want %v", m.list.FilterState(), list.Filtering)
+	}
+	if m.list.Index() != wantIndex {
+		t.Fatalf("Index() = %d, want %d", m.list.Index(), wantIndex)
+	}
+	got := m.list.SelectedItem().(item.Item).Display
+	want := visible[wantIndex].(item.Item).Display
+	if got != want {
+		t.Errorf("SelectedItem().Display = %q, want %q", got, want)
+	}
+}
+
+func TestEnterDuringNonEmptyFilter_MultipleItemsActivatesHighlighted(t *testing.T) {
+	m := newTestModel(filterNavigationItems(), testRegistry())
+	m.list.SetSize(80, 40)
+	m = typeFilterQuery(t, m, "al")
+
+	result, _ := m.Update(downMsg)
+	m = result.(Model)
+	want := m.list.SelectedItem().(item.Item).Display
+
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if m.Selected() == nil {
+		t.Fatal("Selected() should be set after Enter on highlighted filtered item")
+	}
+	if m.Selected().Display != want {
+		t.Errorf("Selected().Display = %q, want %q", m.Selected().Display, want)
+	}
+	if cmd == nil {
+		t.Error("expected Quit command")
 	}
 }
 
@@ -1202,6 +1323,55 @@ func TestPickerStage_BlankEnterExitsFilter(t *testing.T) {
 	}
 	if cmd != nil {
 		t.Error("blank enter in picker filter should not produce a command")
+	}
+}
+
+func TestPickerStage_NonEmptyFilterNavigationAndEnter(t *testing.T) {
+	m := newTestModel(pickerItems(), testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+
+	m = selectStagedItem(t, m)
+	if m.mode != viewPicker {
+		t.Fatal("expected viewPicker")
+	}
+	m = typeFilterQuery(t, m, "a")
+
+	visible := m.pickerList.VisibleItems()
+	if len(visible) < 2 {
+		t.Fatalf("VisibleItems() = %d, want at least 2", len(visible))
+	}
+
+	result, _ := m.Update(downMsg)
+	m = result.(Model)
+	if m.pickerList.FilterState() != list.Filtering {
+		t.Errorf("FilterState() = %v, want %v", m.pickerList.FilterState(), list.Filtering)
+	}
+	if m.pickerList.Index() != 1 {
+		t.Fatalf("after Down: Index() = %d, want 1", m.pickerList.Index())
+	}
+
+	result, _ = m.Update(upMsg)
+	m = result.(Model)
+	if m.pickerList.FilterState() != list.Filtering {
+		t.Errorf("FilterState() = %v, want %v", m.pickerList.FilterState(), list.Filtering)
+	}
+	if m.pickerList.Index() != 0 {
+		t.Fatalf("after Up: Index() = %d, want 0", m.pickerList.Index())
+	}
+
+	result, _ = m.Update(downMsg)
+	m = result.(Model)
+	selected := m.pickerList.SelectedItem().(item.Item)
+
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if cmd == nil {
+		t.Error("expected Quit command")
+	}
+	data := execute.FlattenData(m.Accumulated())
+	if data["file"] != selected.Value {
+		t.Errorf("data[file] = %q, want %q", data["file"], selected.Value)
 	}
 }
 
