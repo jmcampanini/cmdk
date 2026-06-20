@@ -15,6 +15,15 @@ func mustParseWindows(t *testing.T, output string) []item.Item {
 	return items
 }
 
+func mustParseWindowsForSession(t *testing.T, output string, session item.Item) []item.Item {
+	t.Helper()
+	items, err := ParseWindowsForSession(output, session)
+	if err != nil {
+		t.Fatalf("ParseWindowsForSession returned error: %v", err)
+	}
+	return items
+}
+
 func TestParseWindows_MultiSession(t *testing.T) {
 	output := "dev\t$2\t1\t@3\tnode\t0\nmain\t$1\t1\t@1\tzsh\t0\nmain\t$1\t2\t@2\tvim\t0\n"
 	items := mustParseWindows(t, output)
@@ -221,7 +230,7 @@ func TestParseWindowsForSession(t *testing.T) {
 	session.Data["session_name"] = "work"
 	session.Data["session_kind"] = "external"
 
-	items := ParseWindowsForSession("2\t@8\tvim\t0\n1\t@7\tzsh\t1\n", session)
+	items := mustParseWindowsForSession(t, "2\t@8\tvim\t0\n1\t@7\tzsh\t1\n", session)
 
 	if len(items) != 2 {
 		t.Fatalf("got %d items, want 2", len(items))
@@ -256,7 +265,7 @@ func TestParseWindowsForSession_EscapedControlCharsInName(t *testing.T) {
 	session := item.NewItem()
 	session.Data["session_id"] = "$1"
 
-	items := ParseWindowsForSession("1\t@2\tmy"+tmuxEscapedTab+"cool"+tmuxEscapedNewline+"app\t0\n", session)
+	items := mustParseWindowsForSession(t, "1\t@2\tmy"+tmuxEscapedTab+"cool"+tmuxEscapedNewline+"app\t0\n", session)
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
@@ -266,16 +275,38 @@ func TestParseWindowsForSession_EscapedControlCharsInName(t *testing.T) {
 	}
 }
 
-func TestParseWindowsForSession_SkipsMalformed(t *testing.T) {
+func TestParseWindowsForSession_PartialMalformedAppendsError(t *testing.T) {
 	session := item.NewItem()
 	session.Data["session_id"] = "$1"
 
-	items := ParseWindowsForSession("bad\nnope\t@1\tname\t0\n1\tbogus\tinvalid-id\t0\n1\t@2\tvalid\t0\n", session)
-	if len(items) != 1 {
-		t.Fatalf("got %d items, want 1", len(items))
+	items := mustParseWindowsForSession(t, "bad\nnope\t@1\tname\t0\n1\tbogus\tinvalid-id\t0\n1\t@2\tvalid\t0\n", session)
+	if len(items) != 2 {
+		t.Fatalf("got %d items, want 2", len(items))
 	}
 	if items[0].Display != "window 1 valid" {
 		t.Errorf("Display = %q, want window 1 valid", items[0].Display)
+	}
+	if items[1].Type != "error" {
+		t.Errorf("items[1].Type = %q, want error", items[1].Type)
+	}
+	if items[1].Display != "tmux parse error: 3 unparseable list-windows rows" {
+		t.Errorf("items[1].Display = %q", items[1].Display)
+	}
+}
+
+func TestParseWindowsForSession_AllMalformedReturnsError(t *testing.T) {
+	session := item.NewItem()
+	session.Data["session_id"] = "$1"
+
+	items, err := ParseWindowsForSession("bad\nnope\t@1\tname\t0\n", session)
+	if err == nil {
+		t.Fatal("expected error for all malformed rows")
+	}
+	if err.Error() != "could not parse any tmux list-windows rows (2 unparseable)" {
+		t.Errorf("error = %q", err)
+	}
+	if len(items) != 0 {
+		t.Errorf("got %d items, want 0", len(items))
 	}
 }
 

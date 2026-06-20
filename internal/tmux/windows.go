@@ -195,7 +195,7 @@ const (
 	sessionWindowCommand    = tmuxWindowSwitchCommand
 )
 
-func ParseWindowsForSession(output string, session item.Item) []item.Item {
+func ParseWindowsForSession(output string, session item.Item) ([]item.Item, error) {
 	lines := strings.Split(output, "\n")
 
 	type entry struct {
@@ -204,6 +204,7 @@ func ParseWindowsForSession(output string, session item.Item) []item.Item {
 	}
 
 	var entries []entry
+	malformedRows := 0
 	for _, line := range lines {
 		line = strings.TrimRight(line, "\r")
 		if line == "" {
@@ -215,6 +216,7 @@ func ParseWindowsForSession(output string, session item.Item) []item.Item {
 		// child windows without setting Data["bell"] and reordering them above Connect.
 		parts := strings.SplitN(line, "\t", 4)
 		if len(parts) != 4 {
+			malformedRows++
 			continue
 		}
 
@@ -223,6 +225,7 @@ func ParseWindowsForSession(output string, session item.Item) []item.Item {
 		windowName := parts[2]
 		idx, err := strconv.Atoi(windowIndex)
 		if err != nil || !validTmuxWindowID.MatchString(windowID) {
+			malformedRows++
 			continue
 		}
 
@@ -230,6 +233,13 @@ func ParseWindowsForSession(output string, session item.Item) []item.Item {
 			index: idx,
 			item:  newSessionWindowItem(session, windowIndex, windowID, windowName),
 		})
+	}
+
+	if len(entries) == 0 {
+		if malformedRows > 0 {
+			return nil, fmt.Errorf("could not parse any tmux list-windows rows (%d unparseable)", malformedRows)
+		}
+		return nil, nil
 	}
 
 	sort.Slice(entries, func(i, j int) bool {
@@ -240,7 +250,10 @@ func ParseWindowsForSession(output string, session item.Item) []item.Item {
 	for i, e := range entries {
 		items[i] = e.item
 	}
-	return items
+	if malformedRows > 0 {
+		items = append(items, newWindowParseErrorItem(malformedRows))
+	}
+	return items, nil
 }
 
 func newSessionWindowItem(session item.Item, windowIndex, windowID, windowName string) item.Item {
@@ -275,7 +288,7 @@ func ListWindowsForSession(ctx context.Context, session item.Item) ([]item.Item,
 		}
 		return nil, err
 	}
-	return ParseWindowsForSession(string(out), session), nil
+	return ParseWindowsForSession(string(out), session)
 }
 
 func sessionTarget(session item.Item) (string, error) {
