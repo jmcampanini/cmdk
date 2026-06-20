@@ -28,7 +28,7 @@ var sessionListFormat = tmuxFormatFields(
 	"#{session_attached}",
 )
 
-func ParseSessions(output string) []item.Item {
+func ParseSessions(output string) ([]item.Item, error) {
 	lines := strings.Split(output, "\n")
 
 	type entry struct {
@@ -37,6 +37,7 @@ func ParseSessions(output string) []item.Item {
 	}
 
 	var entries []entry
+	malformedRows := 0
 	for _, line := range lines {
 		line = cleanTmuxLine(line)
 		if line == "" {
@@ -45,6 +46,7 @@ func ParseSessions(output string) []item.Item {
 
 		fields, ok := splitTmuxFields(line, sessionLineFieldCount)
 		if !ok {
+			malformedRows++
 			continue
 		}
 
@@ -53,12 +55,15 @@ func ParseSessions(output string) []item.Item {
 		sessionWindows := fields[sessionLineWindowsField]
 		sessionAttached := fields[sessionLineAttachedField]
 		if sessionID == "" || sessionName == "" {
+			malformedRows++
 			continue
 		}
 		if _, err := strconv.Atoi(sessionWindows); err != nil {
+			malformedRows++
 			continue
 		}
 		if _, err := strconv.Atoi(sessionAttached); err != nil {
+			malformedRows++
 			continue
 		}
 
@@ -66,6 +71,13 @@ func ParseSessions(output string) []item.Item {
 			name: sessionName,
 			item: newSessionItem(sessionID, sessionName, sessionWindows, sessionAttached),
 		})
+	}
+
+	if len(entries) == 0 {
+		if malformedRows > 0 {
+			return nil, fmt.Errorf("could not parse any tmux list-sessions rows (%d unparseable)", malformedRows)
+		}
+		return nil, nil
 	}
 
 	sort.SliceStable(entries, func(i, j int) bool {
@@ -76,7 +88,10 @@ func ParseSessions(output string) []item.Item {
 	for i, e := range entries {
 		items[i] = e.item
 	}
-	return items
+	if malformedRows > 0 {
+		items = append(items, newSessionParseErrorItem(malformedRows))
+	}
+	return items, nil
 }
 
 func newSessionItem(sessionID, sessionName, sessionWindows, sessionAttached string) item.Item {
@@ -95,6 +110,19 @@ func newSessionItem(sessionID, sessionName, sessionWindows, sessionAttached stri
 	return it
 }
 
+func newSessionParseErrorItem(malformedRows int) item.Item {
+	rowWord := "row"
+	if malformedRows != 1 {
+		rowWord = "rows"
+	}
+
+	it := item.NewItem()
+	it.Type = "error"
+	it.Source = "tmux"
+	it.Display = fmt.Sprintf("tmux parse error: %d unparseable list-sessions %s", malformedRows, rowWord)
+	return it
+}
+
 func ListSessions(ctx context.Context) ([]item.Item, error) {
 	out, err := exec.CommandContext(ctx, "tmux", "list-sessions", "-F", sessionListFormat).Output()
 	if err != nil {
@@ -103,5 +131,5 @@ func ListSessions(ctx context.Context) ([]item.Item, error) {
 		}
 		return nil, err
 	}
-	return ParseSessions(string(out)), nil
+	return ParseSessions(string(out))
 }

@@ -8,9 +8,18 @@ import (
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
+func mustParseSessions(t *testing.T, output string) []item.Item {
+	t.Helper()
+	items, err := ParseSessions(output)
+	if err != nil {
+		t.Fatalf("ParseSessions returned error: %v", err)
+	}
+	return items
+}
+
 func TestParseSessions_MultiSessionSortedByName(t *testing.T) {
 	output := "$2\tcmdk\t3\t1\n$1\tdotfiles\t2\t0\n$3\tscratch\t1\t0\n"
-	items := ParseSessions(output)
+	items := mustParseSessions(t, output)
 
 	if len(items) != 3 {
 		t.Fatalf("got %d items, want 3", len(items))
@@ -33,7 +42,7 @@ func TestParseSessions_MultiSessionSortedByName(t *testing.T) {
 }
 
 func TestParseSessions_ItemFields(t *testing.T) {
-	items := ParseSessions("$7\twork/main\t4\t2\n")
+	items := mustParseSessions(t, "$7\twork/main\t4\t2\n")
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
@@ -68,26 +77,45 @@ func TestParseSessions_ItemFields(t *testing.T) {
 }
 
 func TestParseSessions_EmptyOutput(t *testing.T) {
-	items := ParseSessions("")
+	items := mustParseSessions(t, "")
 	if len(items) != 0 {
 		t.Errorf("got %d items, want 0", len(items))
 	}
 }
 
-func TestParseSessions_SkipsMalformedLines(t *testing.T) {
+func TestParseSessions_PartialMalformedAppendsError(t *testing.T) {
 	output := "not enough fields\n$1\tvalid\t2\t0\n$2\tbad-windows\tnope\t0\n$3\tbad-attached\t1\tnope\n$4\t\t1\t0\n\tmissing-id\t1\t0\n"
-	items := ParseSessions(output)
+	items := mustParseSessions(t, output)
 
-	if len(items) != 1 {
-		t.Fatalf("got %d items, want 1", len(items))
+	if len(items) != 2 {
+		t.Fatalf("got %d items, want 2", len(items))
 	}
 	if items[0].Data["session_name"] != "valid" {
 		t.Errorf("session_name = %q, want valid", items[0].Data["session_name"])
 	}
+	if items[1].Type != "error" {
+		t.Errorf("items[1].Type = %q, want error", items[1].Type)
+	}
+	if items[1].Display != "tmux parse error: 5 unparseable list-sessions rows" {
+		t.Errorf("items[1].Display = %q", items[1].Display)
+	}
+}
+
+func TestParseSessions_AllMalformedReturnsError(t *testing.T) {
+	items, err := ParseSessions("not enough fields\n$2\tbad-windows\tnope\t0\n")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if err.Error() != "could not parse any tmux list-sessions rows (2 unparseable)" {
+		t.Errorf("error = %q", err)
+	}
+	if len(items) != 0 {
+		t.Errorf("got %d items, want 0", len(items))
+	}
 }
 
 func TestParseSessions_PreservesDisplaySafeSessionName(t *testing.T) {
-	items := ParseSessions("$1\tfeature/foo bar\t1\t0\n")
+	items := mustParseSessions(t, "$1\tfeature/foo bar\t1\t0\n")
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
@@ -100,7 +128,7 @@ func TestParseSessions_PreservesDisplaySafeSessionName(t *testing.T) {
 }
 
 func TestParseSessions_ReplacesEscapedControlCharsForDisplay(t *testing.T) {
-	items := ParseSessions(`$1	feature\tfoo\nbar	1	0` + "\n")
+	items := mustParseSessions(t, `$1	feature\tfoo\nbar	1	0`+"\n")
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
