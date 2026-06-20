@@ -17,7 +17,7 @@ func newRootTestGenerator(sources ...Source) GeneratorFunc {
 }
 
 func TestRootGenerator_ReturnsWindows(t *testing.T) {
-	src := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
+	src := Source{Name: "windows", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "window", Display: "a:1 zsh"},
 			{Type: "window", Display: "b:1 vim"},
@@ -39,7 +39,7 @@ func TestRootGenerator_ReturnsWindows(t *testing.T) {
 }
 
 func TestRootGenerator_ErrorProducesErrorItem(t *testing.T) {
-	src := Source{Name: "zoxide", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
+	src := Source{Name: "zoxide", Fetch: func(context.Context) ([]item.Item, error) {
 		return nil, errors.New("not installed")
 	}}
 
@@ -52,9 +52,6 @@ func TestRootGenerator_ErrorProducesErrorItem(t *testing.T) {
 	errItem := items[0]
 	if errItem.Type != "error" {
 		t.Errorf("Type = %q, want error", errItem.Type)
-	}
-	if errItem.Data["source_type"] != "dir" {
-		t.Errorf("Data[source_type] = %q, want dir", errItem.Data["source_type"])
 	}
 	if errItem.Source != "zoxide" {
 		t.Errorf("Source = %q, want zoxide", errItem.Source)
@@ -71,12 +68,12 @@ func TestRootGenerator_ErrorProducesErrorItem(t *testing.T) {
 }
 
 func TestRootGenerator_MultipleSources(t *testing.T) {
-	windows := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
+	windows := Source{Name: "windows", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "window", Display: "main:1 zsh"},
 		}, nil
 	}}
-	dirs := Source{Name: "zoxide", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
+	dirs := Source{Name: "zoxide", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "dir", Display: "/home/user"},
 			{Type: "dir", Display: "/tmp"},
@@ -98,12 +95,12 @@ func TestRootGenerator_MultipleSources(t *testing.T) {
 }
 
 func TestRootGenerator_OneSourceErrors(t *testing.T) {
-	good := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
+	good := Source{Name: "windows", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "window", Display: "main:1 zsh"},
 		}, nil
 	}}
-	bad := Source{Name: "zoxide", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
+	bad := Source{Name: "zoxide", Fetch: func(context.Context) ([]item.Item, error) {
 		return nil, errors.New("zoxide not installed")
 	}}
 
@@ -119,19 +116,16 @@ func TestRootGenerator_OneSourceErrors(t *testing.T) {
 	if items[1].Type != "error" {
 		t.Errorf("items[1].Type = %q, want error", items[1].Type)
 	}
-	if items[1].Data["source_type"] != "dir" {
-		t.Errorf("items[1].Data[source_type] = %q, want dir", items[1].Data["source_type"])
-	}
 	if items[1].Action != "" {
 		t.Errorf("items[1].Action = %q, want empty", items[1].Action)
 	}
 }
 
 func TestRootGenerator_AllSourcesError(t *testing.T) {
-	bad1 := Source{Name: "src1", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
+	bad1 := Source{Name: "src1", Fetch: func(context.Context) ([]item.Item, error) {
 		return nil, errors.New("fail 1")
 	}}
-	bad2 := Source{Name: "src2", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
+	bad2 := Source{Name: "src2", Fetch: func(context.Context) ([]item.Item, error) {
 		return nil, errors.New("fail 2")
 	}}
 
@@ -144,25 +138,19 @@ func TestRootGenerator_AllSourcesError(t *testing.T) {
 	if items[0].Type != "error" {
 		t.Errorf("items[0].Type = %q, want error", items[0].Type)
 	}
-	if items[0].Data["source_type"] != "window" {
-		t.Errorf("items[0].Data[source_type] = %q, want window", items[0].Data["source_type"])
-	}
 	if items[1].Type != "error" {
 		t.Errorf("items[1].Type = %q, want error", items[1].Type)
 	}
-	if items[1].Data["source_type"] != "dir" {
-		t.Errorf("items[1].Data[source_type] = %q, want dir", items[1].Data["source_type"])
-	}
 }
 
-func TestRootGenerator_ErrorItemInDirGroup(t *testing.T) {
-	windows := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
+func TestRootGenerator_ErrorItemSortedFirst(t *testing.T) {
+	windows := Source{Name: "windows", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
 	}}
-	badDirs := Source{Name: "zoxide", Type: "dir", Fetch: func(context.Context) ([]item.Item, error) {
+	badDirs := Source{Name: "zoxide", Fetch: func(context.Context) ([]item.Item, error) {
 		return nil, errors.New("command not found")
 	}}
-	actions := Source{Name: "actions", Type: "action", Fetch: func(context.Context) ([]item.Item, error) {
+	actions := Source{Name: "actions", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{{Type: "action", Display: "htop", Action: item.ActionExecute}}, nil
 	}}
 
@@ -181,14 +169,11 @@ func TestRootGenerator_ErrorItemInDirGroup(t *testing.T) {
 	got1 := ordered[1].(item.Item)
 	got2 := ordered[2].(item.Item)
 
-	if got0.Type != "action" {
-		t.Errorf("ordered[0].Type = %q, want action", got0.Type)
+	if got0.Type != "error" {
+		t.Errorf("ordered[0].Type = %q, want error", got0.Type)
 	}
-	if got1.Type != "error" {
-		t.Errorf("ordered[1].Type = %q, want error", got1.Type)
-	}
-	if got1.Data["source_type"] != "dir" {
-		t.Errorf("ordered[1].Data[source_type] = %q, want dir", got1.Data["source_type"])
+	if got1.Type != "action" {
+		t.Errorf("ordered[1].Type = %q, want action", got1.Type)
 	}
 	if got2.Type != "window" {
 		t.Errorf("ordered[2].Type = %q, want window", got2.Type)
@@ -196,7 +181,7 @@ func TestRootGenerator_ErrorItemInDirGroup(t *testing.T) {
 }
 
 func TestRootGenerator_NilFetchProducesErrorItem(t *testing.T) {
-	src := Source{Name: "zoxide", Type: "dir", Fetch: nil}
+	src := Source{Name: "zoxide", Fetch: nil}
 
 	gen := newRootTestGenerator(src)
 	items := gen(nil, Context{})
@@ -206,9 +191,6 @@ func TestRootGenerator_NilFetchProducesErrorItem(t *testing.T) {
 	}
 	if items[0].Type != "error" {
 		t.Errorf("Type = %q, want error", items[0].Type)
-	}
-	if items[0].Data["source_type"] != "dir" {
-		t.Errorf("Data[source_type] = %q, want dir", items[0].Data["source_type"])
 	}
 	if items[0].Source != "zoxide" {
 		t.Errorf("Source = %q, want zoxide", items[0].Source)
@@ -223,7 +205,7 @@ func TestRootGenerator_PreservesSourceOrderWhenConcurrent(t *testing.T) {
 	secondDone := make(chan struct{})
 	releaseFirst := make(chan struct{})
 
-	first := Source{Name: "windows", Type: "window", Fetch: func(ctx context.Context) ([]item.Item, error) {
+	first := Source{Name: "windows", Fetch: func(ctx context.Context) ([]item.Item, error) {
 		close(firstStarted)
 		select {
 		case <-releaseFirst:
@@ -232,7 +214,7 @@ func TestRootGenerator_PreservesSourceOrderWhenConcurrent(t *testing.T) {
 		}
 		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
 	}}
-	second := Source{Name: "actions", Type: "action", Fetch: func(context.Context) ([]item.Item, error) {
+	second := Source{Name: "actions", Fetch: func(context.Context) ([]item.Item, error) {
 		<-firstStarted
 		close(secondDone)
 		return []item.Item{{Type: "action", Display: "htop"}}, nil
@@ -258,11 +240,11 @@ func TestRootGenerator_PreservesSourceOrderWhenConcurrent(t *testing.T) {
 }
 
 func TestRootGenerator_TimeoutProducesErrorItem(t *testing.T) {
-	slow := Source{Name: "zoxide", Type: "dir", Fetch: func(ctx context.Context) ([]item.Item, error) {
+	slow := Source{Name: "zoxide", Fetch: func(ctx context.Context) ([]item.Item, error) {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}}
-	fast := Source{Name: "windows", Type: "window", Fetch: func(context.Context) ([]item.Item, error) {
+	fast := Source{Name: "windows", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
 	}}
 
@@ -278,16 +260,13 @@ func TestRootGenerator_TimeoutProducesErrorItem(t *testing.T) {
 	if items[1].Type != "error" {
 		t.Errorf("items[1].Type = %q, want error", items[1].Type)
 	}
-	if items[1].Data["source_type"] != "dir" {
-		t.Errorf("items[1].Data[source_type] = %q, want dir", items[1].Data["source_type"])
-	}
 	if !strings.HasPrefix(items[1].Display, "zoxide error:") {
 		t.Errorf("items[1].Display = %q, want prefix %q", items[1].Display, "zoxide error:")
 	}
 }
 
 func TestRootGenerator_LimitTruncatesResults(t *testing.T) {
-	src := Source{Name: "zoxide", Type: "dir", Limit: 2, Fetch: func(context.Context) ([]item.Item, error) {
+	src := Source{Name: "zoxide", Limit: 2, Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "dir", Display: "/a"},
 			{Type: "dir", Display: "/b"},
@@ -312,7 +291,7 @@ func TestRootGenerator_LimitTruncatesResults(t *testing.T) {
 }
 
 func TestRootGenerator_ZeroLimitReturnsAll(t *testing.T) {
-	src := Source{Name: "zoxide", Type: "dir", Limit: 0, Fetch: func(context.Context) ([]item.Item, error) {
+	src := Source{Name: "zoxide", Limit: 0, Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "dir", Display: "/a"},
 			{Type: "dir", Display: "/b"},
@@ -329,14 +308,11 @@ func TestRootGenerator_ZeroLimitReturnsAll(t *testing.T) {
 }
 
 func TestErrorItem_Fields(t *testing.T) {
-	src := Source{Name: "zoxide", Type: "dir"}
+	src := Source{Name: "zoxide"}
 	errItem := ErrorItem(src, errors.New("not found"))
 
 	if errItem.Type != "error" {
 		t.Errorf("Type = %q, want error", errItem.Type)
-	}
-	if errItem.Data["source_type"] != "dir" {
-		t.Errorf("Data[source_type] = %q, want dir", errItem.Data["source_type"])
 	}
 	if errItem.Source != "zoxide" {
 		t.Errorf("Source = %q, want zoxide", errItem.Source)
@@ -350,7 +326,7 @@ func TestErrorItem_Fields(t *testing.T) {
 }
 
 func TestLoadingItem_Fields(t *testing.T) {
-	src := Source{Name: "windows", Type: "window"}
+	src := Source{Name: "windows"}
 	loading := LoadingItem(src)
 
 	if loading.Type != "loading" {
@@ -365,13 +341,10 @@ func TestLoadingItem_Fields(t *testing.T) {
 	if loading.Action != "" {
 		t.Errorf("Action = %q, want empty", loading.Action)
 	}
-	if loading.Data["source_type"] != "window" {
-		t.Errorf("Data[source_type] = %q, want window", loading.Data["source_type"])
-	}
 }
 
 func TestRootGenerator_LimitCapsScoreFilteredResults(t *testing.T) {
-	src := Source{Name: "zoxide", Type: "dir", Limit: 3, Fetch: func(context.Context) ([]item.Item, error) {
+	src := Source{Name: "zoxide", Limit: 3, Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "dir", Display: "/a"},
 			{Type: "dir", Display: "/b"},

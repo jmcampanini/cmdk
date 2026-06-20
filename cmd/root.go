@@ -85,17 +85,17 @@ var rootCmd = &cobra.Command{
 		stop()
 
 		sources := []generator.Source{
-			traceSource(tr, "source/windows", generator.Source{Name: "windows", Type: "window", Async: true, Fetch: tmux.ListWindows}),
-			traceSource(tr, "source/zoxide", generator.Source{Name: "zoxide", Type: "dir", Limit: zoxideCfg.Limit, Async: true, Fetch: func(ctx context.Context) ([]item.Item, error) {
+			traceSource(tr, "source/windows", generator.Source{Name: "windows", Async: true, Fetch: tmux.ListWindows}),
+			traceSource(tr, "source/zoxide", generator.Source{Name: "zoxide", Limit: zoxideCfg.Limit, Async: true, Fetch: func(ctx context.Context) ([]item.Item, error) {
 				return zoxide.ListDirs(ctx, zoxideCfg.MinScore, home, shortenHome, rules, trunc)
 			}}),
 		}
 		if cfgErr != nil {
-			sources = append(sources, traceSource(tr, "source/config", generator.Source{Name: "config", Type: "action", Fetch: func(context.Context) ([]item.Item, error) {
+			sources = append(sources, traceSource(tr, "source/config", generator.Source{Name: "config", Fetch: func(context.Context) ([]item.Item, error) {
 				return nil, cfgErr
 			}}))
 		}
-		sources = append(sources, traceSource(tr, "source/actions", generator.Source{Name: "actions", Type: "action", Fetch: config.MatchingActions(cfg, "root")}))
+		sources = append(sources, traceSource(tr, "source/actions", generator.Source{Name: "actions", Fetch: config.MatchingActions(cfg, "root")}))
 
 		reg := generator.NewRegistry()
 		reg.Register("dir-actions", generator.NewActionsGenerator())
@@ -186,7 +186,6 @@ var rootCmd = &cobra.Command{
 		for i, src := range asyncSources {
 			tuiAsync[i] = tui.AsyncSource{
 				Name:    src.Name,
-				Type:    src.Type,
 				Limit:   src.Limit,
 				Timeout: cfg.Timeout.Fetch,
 				Fetch:   src.Fetch,

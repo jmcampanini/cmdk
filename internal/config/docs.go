@@ -54,7 +54,7 @@ func ConfigDocs() []SectionDoc {
 			Description: "Global behavior settings.",
 			Fields: []FieldDoc{
 				{Name: "auto_select_single", Type: "bool", Description: "Skip the action list when only one action matches. Default: true."},
-				{Name: "bell_to_top", Type: "bool", Description: "Sort tmux windows with bell activity to the top of the list, above all other items. Default: true."},
+				{Name: "bell_to_top", Type: "bool", Description: "Sort tmux windows with bell activity above normal items, after errors and loading placeholders. Default: true."},
 				{Name: "wrap_list", Type: "bool", Description: "Wrap cursor to the opposite end when navigating past the first or last item. Default: true."},
 				{Name: "start_in_filter", Type: "bool", Description: "Open lists in filter mode, ready for typing. When false, lists open in browse mode; press / to filter. Default: true."},
 				{Name: "inline_actions", Type: "bool", Description: "Expand directory actions inline in the root list instead of requiring drill-down. Each directory gets one entry per action, displayed as \"path » action\". Default: false."},

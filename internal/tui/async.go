@@ -14,7 +14,6 @@ import (
 
 type AsyncSource struct {
 	Name    string
-	Type    string
 	Limit   int
 	Timeout time.Duration
 	Fetch   func(context.Context) ([]item.Item, error)

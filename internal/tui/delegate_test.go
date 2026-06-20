@@ -131,19 +131,15 @@ func TestDelegate_PickerUsesDefaultPresentation(t *testing.T) {
 func TestDelegate_ErrorUsesErrorPresentation(t *testing.T) {
 	dark := theme.Dark()
 	d := newItemDelegate(dark)
-	it := item.Item{Type: "error", Display: "zoxide error: command not found", Source: "zoxide", Data: map[string]string{"source_type": "dir"}}
+	it := item.Item{Type: "error", Display: "zoxide error: command not found", Source: "zoxide"}
 
 	assertIconInfo(t, d.iconInfoForItem(it), iconError, dark.Error)
 }
 
-func TestDelegate_LoadingUsesSourceDerivedColor(t *testing.T) {
+func TestDelegate_LoadingUsesGenericPresentation(t *testing.T) {
 	dark := theme.Dark()
 	d := newItemDelegate(dark)
 
-	assertIconInfo(t, d.iconInfoForItem(item.Item{Type: "loading", Data: map[string]string{"source_type": "window"}}), iconLoading, dark.TypeWindow)
-	assertIconInfo(t, d.iconInfoForItem(item.Item{Type: "loading", Data: map[string]string{"source_type": "dir"}}), iconLoading, dark.TypeDir)
-	assertIconInfo(t, d.iconInfoForItem(item.Item{Type: "loading", Data: map[string]string{"source_type": "action"}}), iconLoading, dark.TypeAction)
-	assertIconInfo(t, d.iconInfoForItem(item.Item{Type: "loading", Data: map[string]string{"source_type": "alien"}}), iconLoading, dark.TypeUnknown)
 	assertIconInfo(t, d.iconInfoForItem(item.Item{Type: "loading"}), iconLoading, dark.TypeUnknown)
 }
 

@@ -130,23 +130,11 @@ func (d itemDelegate) Render(w io.Writer, m list.Model, index int, li list.Item)
 }
 
 func (d itemDelegate) iconInfoForItem(it item.Item) iconInfo {
-	if it.Type == "loading" {
-		return iconInfo{icon: iconLoading, color: d.colorForSourceType(it.Data["source_type"])}
-	}
 	if info, ok := d.icons[it.Type]; ok {
 		return info
 	}
 	log.Warn("no icon for item type, using fallback", "type", it.Type)
 	return d.unknown
-}
-
-func (d itemDelegate) colorForSourceType(typ string) color.Color {
-	switch typ {
-	case "window", "dir", "action":
-		return d.icons[typ].color
-	default:
-		return d.unknown.color
-	}
 }
 
 func (d itemDelegate) styledBell(s lipgloss.Style, selected bool) string {
