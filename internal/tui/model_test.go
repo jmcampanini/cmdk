@@ -721,6 +721,8 @@ func TestDownDuringNonEmptyFilter_MovesThroughVisibleResults(t *testing.T) {
 		t.Fatalf("VisibleItems() = %d, want at least 2", len(visible))
 	}
 
+	want := visible[1].(item.Item).Display
+
 	result, _ := m.Update(downMsg)
 	m = result.(Model)
 
@@ -731,7 +733,6 @@ func TestDownDuringNonEmptyFilter_MovesThroughVisibleResults(t *testing.T) {
 		t.Fatalf("Index() = %d, want 1", m.list.Index())
 	}
 	got := m.list.SelectedItem().(item.Item).Display
-	want := visible[1].(item.Item).Display
 	if got != want {
 		t.Errorf("SelectedItem().Display = %q, want %q", got, want)
 	}
@@ -747,10 +748,12 @@ func TestUpDuringNonEmptyFilter_MovesThroughVisibleResults(t *testing.T) {
 		t.Fatalf("VisibleItems() = %d, want at least 2", len(visible))
 	}
 
+	wantIndex := len(visible) - 1
+	want := visible[wantIndex].(item.Item).Display
+
 	result, _ := m.Update(upMsg)
 	m = result.(Model)
 
-	wantIndex := len(visible) - 1
 	if m.list.FilterState() != list.Filtering {
 		t.Errorf("FilterState() = %v, want %v", m.list.FilterState(), list.Filtering)
 	}
@@ -758,7 +761,6 @@ func TestUpDuringNonEmptyFilter_MovesThroughVisibleResults(t *testing.T) {
 		t.Fatalf("Index() = %d, want %d", m.list.Index(), wantIndex)
 	}
 	got := m.list.SelectedItem().(item.Item).Display
-	want := visible[wantIndex].(item.Item).Display
 	if got != want {
 		t.Errorf("SelectedItem().Display = %q, want %q", got, want)
 	}
@@ -1336,9 +1338,8 @@ func TestPickerStage_NonEmptyFilterNavigationAndEnter(t *testing.T) {
 	}
 	m = typeFilterQuery(t, m, "a")
 
-	visible := m.pickerList.VisibleItems()
-	if len(visible) < 2 {
-		t.Fatalf("VisibleItems() = %d, want at least 2", len(visible))
+	if visibleCount := len(m.pickerList.VisibleItems()); visibleCount < 2 {
+		t.Fatalf("VisibleItems() = %d, want at least 2", visibleCount)
 	}
 
 	result, _ := m.Update(downMsg)

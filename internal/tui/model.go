@@ -253,7 +253,7 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	if key == "enter" {
-		activeFilter := prepareActiveFilterSelection(&m.list)
+		hadActiveFilter := prepareActiveFilterSelection(&m.list)
 		sel, ok := resolveListTarget(m.list)
 		if ok && sel.Type != "error" && sel.Type != "loading" {
 			// Reconstruct the accumulated stack as if the user drilled down,
@@ -278,7 +278,7 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
-		if activeFilter {
+		if hadActiveFilter {
 			return m, nil
 		}
 	}
@@ -334,33 +334,33 @@ func (m Model) updatePrompt(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
-	key, ok := msg.(tea.KeyPressMsg)
+	keyMsg, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		var cmd tea.Cmd
 		m.pickerList, cmd = m.pickerList.Update(msg)
 		return m, cmd
 	}
 
-	keyString := key.String()
-	if resetWhitespaceFilter(&m.pickerList, keyString) {
+	key := keyMsg.String()
+	if resetWhitespaceFilter(&m.pickerList, key) {
 		return m, nil
 	}
-	if navigateActiveFilter(&m.pickerList, keyString) {
+	if navigateActiveFilter(&m.pickerList, key) {
 		return m, nil
 	}
 
-	if keyString == "enter" {
-		activeFilter := prepareActiveFilterSelection(&m.pickerList)
+	if key == "enter" {
+		hadActiveFilter := prepareActiveFilterSelection(&m.pickerList)
 		sel, ok := resolveListTarget(m.pickerList)
 		if ok && sel.Type != "error" {
 			return m.pushStageResult(m.pickerKey, sel.Display, sel.Value)
 		}
-		if activeFilter {
+		if hadActiveFilter {
 			return m, nil
 		}
 	}
 
-	if keyString == "esc" && m.pickerList.FilterState() == list.Unfiltered {
+	if key == "esc" && m.pickerList.FilterState() == list.Unfiltered {
 		return m.stageEsc()
 	}
 
@@ -431,7 +431,7 @@ func resetWhitespaceFilter(l *list.Model, key string) bool {
 }
 
 func navigateActiveFilter(l *list.Model, key string) bool {
-	if !hasActiveFilterQuery(*l) {
+	if !hasActiveFilterQuery(l) {
 		return false
 	}
 
@@ -450,14 +450,14 @@ func navigateActiveFilter(l *list.Model, key string) bool {
 }
 
 func prepareActiveFilterSelection(l *list.Model) bool {
-	if !hasActiveFilterQuery(*l) {
+	if !hasActiveFilterQuery(l) {
 		return false
 	}
 	refreshActiveFilter(l)
 	return true
 }
 
-func hasActiveFilterQuery(l list.Model) bool {
+func hasActiveFilterQuery(l *list.Model) bool {
 	return l.FilterState() == list.Filtering && strings.TrimSpace(l.FilterInput.Value()) != ""
 }
 
