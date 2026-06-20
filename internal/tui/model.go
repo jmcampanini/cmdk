@@ -245,9 +245,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
-	if resetWhitespaceFilter(&m.list, key) {
-		return m, nil
-	}
 	if navigateActiveFilter(&m.list, key) {
 		return m, nil
 	}
@@ -291,7 +288,7 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	var cmd tea.Cmd
-	m.list, cmd = m.list.Update(msg)
+	m.list, cmd = updateFilterableList(m.list, msg)
 	return m, cmd
 }
 
@@ -342,9 +339,6 @@ func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	key := keyMsg.String()
-	if resetWhitespaceFilter(&m.pickerList, key) {
-		return m, nil
-	}
 	if navigateActiveFilter(&m.pickerList, key) {
 		return m, nil
 	}
@@ -365,7 +359,7 @@ func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	var cmd tea.Cmd
-	m.pickerList, cmd = m.pickerList.Update(msg)
+	m.pickerList, cmd = updateFilterableList(m.pickerList, msg)
 	return m, cmd
 }
 
@@ -417,29 +411,16 @@ func (m Model) stageEsc() (tea.Model, tea.Cmd) {
 }
 
 func updateFilterableList(l list.Model, msg tea.Msg) (list.Model, tea.Cmd) {
+	filterBefore := l.FilterInput.Value()
 	updated, cmd := l.Update(msg)
-	if _, ok := msg.(list.FilterMatchesMsg); ok && updated.FilterState() == list.Filtering {
+	if updated.FilterState() == list.Filtering && updated.FilterInput.Value() != filterBefore {
 		updated.GoToStart()
 	}
 	return updated, cmd
 }
 
-// resetWhitespaceFilter resets the filter on up/down/enter when the
-// effective filter text is empty or whitespace-only.
-func resetWhitespaceFilter(l *list.Model, key string) bool {
-	if l.FilterState() != list.Filtering || strings.TrimSpace(l.FilterInput.Value()) != "" {
-		return false
-	}
-	switch key {
-	case "up", "down", "enter":
-		l.ResetFilter()
-		return true
-	}
-	return false
-}
-
 func navigateActiveFilter(l *list.Model, key string) bool {
-	if !hasActiveFilterQuery(l) {
+	if !isFiltering(l) {
 		return false
 	}
 
@@ -458,15 +439,15 @@ func navigateActiveFilter(l *list.Model, key string) bool {
 }
 
 func prepareActiveFilterSelection(l *list.Model) bool {
-	if !hasActiveFilterQuery(l) {
+	if !isFiltering(l) {
 		return false
 	}
 	refreshActiveFilter(l)
 	return true
 }
 
-func hasActiveFilterQuery(l *list.Model) bool {
-	return l.FilterState() == list.Filtering && strings.TrimSpace(l.FilterInput.Value()) != ""
+func isFiltering(l *list.Model) bool {
+	return l.FilterState() == list.Filtering
 }
 
 func refreshActiveFilter(l *list.Model) {
