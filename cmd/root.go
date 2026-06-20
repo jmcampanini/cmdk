@@ -100,9 +100,9 @@ var rootCmd = &cobra.Command{
 
 		reg := generator.NewRegistry()
 		reg.Register("dir-actions", generator.NewActionsGenerator())
-		reg.Register("session", generator.NewSessionGenerator(tmux.ListWindowsForSession))
+		reg.Register("session-children", generator.NewSessionGenerator(tmux.ListWindowsForSession))
 		reg.MapType("dir", "dir-actions")
-		reg.MapType("session", "session")
+		reg.MapType("session", "session-children")
 
 		ctx := generator.Context{PaneID: paneID, Config: cfg}
 

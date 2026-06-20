@@ -37,7 +37,7 @@ func ParseSessions(output string) []item.Item {
 		sessionName := parts[1]
 		sessionWindows := parts[2]
 		sessionAttached := parts[3]
-		if sessionName == "" {
+		if sessionID == "" || sessionName == "" {
 			continue
 		}
 		if _, err := strconv.Atoi(sessionWindows); err != nil {
@@ -63,7 +63,7 @@ func ParseSessions(output string) []item.Item {
 		entries = append(entries, entry{name: sessionName, item: it})
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
+	sort.SliceStable(entries, func(i, j int) bool {
 		return entries[i].name < entries[j].name
 	})
 

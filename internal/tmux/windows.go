@@ -110,6 +110,9 @@ func ParseWindowsForSession(output string, session item.Item) []item.Item {
 			continue
 		}
 
+		// Keep window_bell_flag as a sentinel field so empty window names preserve
+		// the expected tab count. TODO: surface this flag in the TUI for session
+		// child windows without setting Data["bell"] and reordering them above Connect.
 		parts := strings.SplitN(line, "\t", 3)
 		if len(parts) != 3 {
 			continue
@@ -130,7 +133,7 @@ func ParseWindowsForSession(output string, session item.Item) []item.Item {
 			it.Display += " " + windowName
 		}
 		it.Action = item.ActionExecute
-		it.Cmd = sessionWindowCmd(session)
+		it.Cmd = sessionWindowCmd()
 		maps.Copy(it.Data, session.Data)
 		if sessionName := session.Data["session_name"]; sessionName != "" {
 			it.Data["session"] = sessionName
@@ -171,15 +174,9 @@ func sessionTarget(session item.Item) (string, error) {
 	if sessionID := session.Data["session_id"]; sessionID != "" {
 		return sessionID, nil
 	}
-	if sessionName := session.Data["session_name"]; sessionName != "" {
-		return "=" + sessionName, nil
-	}
-	return "", fmt.Errorf("session item is missing session_id and session_name")
+	return "", fmt.Errorf("session item is missing session_id")
 }
 
-func sessionWindowCmd(session item.Item) string {
-	if session.Data["session_id"] != "" {
-		return `tmux switch-client -t {{sq (printf "%s:%s" .session_id .window_index)}}`
-	}
-	return `tmux switch-client -t {{sq (printf "=%s:%s" .session_name .window_index)}}`
+func sessionWindowCmd() string {
+	return `tmux switch-client -t {{sq (printf "%s:%s" .session_id .window_index)}}`
 }

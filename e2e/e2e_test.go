@@ -14,6 +14,7 @@ const (
 	iconWindow     = "\ueb7f"
 	iconDir        = "\ueaf7"
 	iconCmd        = "\uebc8"
+	iconSession    = "\ueb23"
 	defaultTimeout = 5 * time.Second
 )
 
@@ -180,13 +181,25 @@ func exitFilterModeE2E(t *testing.T, sess string) {
 	time.Sleep(200 * time.Millisecond)
 }
 
-func scrollToWindowItems(t *testing.T, sess string) string {
+func navigateToWindowItems(t *testing.T, sess string) string {
 	t.Helper()
-	exitFilterModeE2E(t, sess)
+	// Sessions are ordered after windows, so jump to the bottom once sessions
+	// have loaded, then move up to the window group.
 	sendKeys(t, sess, "End")
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, iconSession)
+	}, defaultTimeout)
+	sendKeys(t, sess, "End")
+	sendKeys(t, sess, "Up")
 	return waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, iconWindow)
 	}, defaultTimeout)
+}
+
+func scrollToWindowItems(t *testing.T, sess string) string {
+	t.Helper()
+	exitFilterModeE2E(t, sess)
+	return navigateToWindowItems(t, sess)
 }
 
 func filterAndExecute(t *testing.T, sess string, query string) {
@@ -196,6 +209,24 @@ func filterAndExecute(t *testing.T, sess string, query string) {
 		return strings.Contains(s, "apply filter")
 	}, defaultTimeout)
 	sendKeys(t, sess, "Enter")
+}
+
+func drillIntoSession(t *testing.T, sess string) {
+	t.Helper()
+	exitFilterModeE2E(t, sess)
+
+	// Sessions are ordered last in the root list. Waiting for the session icon
+	// ensures the async session source has loaded before selecting it.
+	sendKeys(t, sess, "End")
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, iconSession) && strings.Contains(s, sess)
+	}, defaultTimeout)
+	sendKeys(t, sess, "End")
+	sendKeys(t, sess, "Enter")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "Connect")
+	}, defaultTimeout)
 }
 
 func selectDirAction(t *testing.T, sess string, actionName string) {
@@ -289,6 +320,62 @@ func TestE2E_EnterExecutesAndExits(t *testing.T) {
 	waitForReady(t, sess)
 
 	filterAndExecute(t, sess, sess+":")
+	waitForExit(t, sess)
+}
+
+func TestE2E_SessionsVisible(t *testing.T) {
+	sess := startSession(t)
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+
+	// Filter to the current session so it is on screen regardless of how many
+	// other root items sort above it; the session renders with the session icon.
+	typeText(t, sess, sess)
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, iconSession)
+	}, defaultTimeout)
+}
+
+func TestE2E_SessionDrillInOrder(t *testing.T) {
+	xdg := writeConfig(t, `
+[[actions]]
+name = "xq-sess-action"
+cmd = "true"
+matches = "session"
+`)
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	drillIntoSession(t, sess)
+
+	content := waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "Connect") &&
+			strings.Contains(s, "xq-sess-action") &&
+			strings.Contains(s, iconWindow)
+	}, defaultTimeout)
+
+	connectIdx := strings.Index(content, "Connect")
+	actionIdx := strings.Index(content, "xq-sess-action")
+	windowIdx := strings.Index(content, iconWindow)
+	if connectIdx < 0 || connectIdx > actionIdx || actionIdx > windowIdx {
+		t.Errorf("expected order Connect < session action < window; got Connect@%d action@%d window@%d:\n%s",
+			connectIdx, actionIdx, windowIdx, content)
+	}
+}
+
+func TestE2E_SessionConnectSwitchesAndExits(t *testing.T) {
+	sess := startSession(t)
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	drillIntoSession(t, sess)
+
+	// Connect is the first child item. Cancel the empty child-list filter to
+	// enter browse mode with the cursor on Connect, then Enter executes it.
+	exitFilterModeE2E(t, sess)
+	sendKeys(t, sess, "Enter")
 	waitForExit(t, sess)
 }
 
@@ -432,11 +519,7 @@ func TestE2E_NoConfigFile(t *testing.T) {
 		t.Errorf("unexpected config error\nCapture:\n%s", topContent)
 	}
 
-	sendKeys(t, sess, "End")
-
-	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, iconWindow)
-	}, defaultTimeout)
+	navigateToWindowItems(t, sess)
 }
 
 func TestE2E_MalformedConfigShowsError(t *testing.T) {
@@ -659,11 +742,7 @@ func TestE2E_ZoxideUnavailable_ErrorItem(t *testing.T) {
 		return strings.Contains(s, "zoxide error")
 	}, defaultTimeout)
 
-	sendKeys(t, sess, "End")
-
-	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, iconWindow)
-	}, defaultTimeout)
+	navigateToWindowItems(t, sess)
 }
 
 func TestE2E_ErrorItemNotSelectable(t *testing.T) {

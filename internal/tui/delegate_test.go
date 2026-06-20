@@ -178,7 +178,7 @@ func TestDelegate_EmptyIconUsesDefault(t *testing.T) {
 
 func TestDelegate_ConstructorWiresAllTypes(t *testing.T) {
 	d := testDelegate()
-	for _, typ := range []string{"window", "dir", "cmd"} {
+	for _, typ := range []string{"window", "dir", "cmd", "session"} {
 		if _, ok := d.icons[typ]; !ok {
 			t.Errorf("missing icon entry for type %q", typ)
 		}

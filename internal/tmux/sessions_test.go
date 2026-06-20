@@ -74,7 +74,7 @@ func TestParseSessions_EmptyOutput(t *testing.T) {
 }
 
 func TestParseSessions_SkipsMalformedLines(t *testing.T) {
-	output := "not enough fields\n$1\tvalid\t2\t0\n$2\tbad-windows\tnope\t0\n$3\tbad-attached\t1\tnope\n$4\t\t1\t0\n"
+	output := "not enough fields\n$1\tvalid\t2\t0\n$2\tbad-windows\tnope\t0\n$3\tbad-attached\t1\tnope\n$4\t\t1\t0\n\tmissing-id\t1\t0\n"
 	items := ParseSessions(output)
 
 	if len(items) != 1 {

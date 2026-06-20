@@ -164,3 +164,13 @@ func TestParseWindowsForSession_SkipsMalformed(t *testing.T) {
 		t.Errorf("Display = %q, want window 1 valid", items[0].Display)
 	}
 }
+
+func TestSessionTargetRequiresSessionID(t *testing.T) {
+	session := item.NewItem()
+	session.Data["session_name"] = "work"
+
+	_, err := sessionTarget(session)
+	if err == nil {
+		t.Fatal("expected error for session without session_id")
+	}
+}

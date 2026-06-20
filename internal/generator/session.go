@@ -9,8 +9,15 @@ import (
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
+// SessionWindowsFunc lists windows belonging to a selected session. It is injected
+// so NewSessionGenerator stays unit-testable without shelling out to tmux.
 type SessionWindowsFunc func(context.Context, item.Item) ([]item.Item, error)
 
+// NewSessionGenerator builds the child list shown after selecting a tmux
+// session: built-in Connect first, then user-defined session actions, then
+// windows in that session. Connect and configured actions are type "action"
+// while windows are type "window", so GroupAndOrder preserves the required
+// Connect/actions-before-windows display order.
 func NewSessionGenerator(fetchWindows SessionWindowsFunc) GeneratorFunc {
 	actions := NewActionsGenerator()
 
@@ -21,6 +28,9 @@ func NewSessionGenerator(fetchWindows SessionWindowsFunc) GeneratorFunc {
 		session := accumulated[len(accumulated)-1]
 		if session.Type != "session" {
 			return nil
+		}
+		if session.Data["session_id"] == "" {
+			return []item.Item{ErrorItem(Source{Name: "session", Type: "action"}, fmt.Errorf("missing session_id"))}
 		}
 
 		data := maps.Clone(session.Data)
@@ -37,7 +47,7 @@ func NewSessionGenerator(fetchWindows SessionWindowsFunc) GeneratorFunc {
 				Source:  "builtin",
 				Display: "Connect",
 				Action:  item.ActionExecute,
-				Cmd:     sessionConnectCmd(session),
+				Cmd:     sessionConnectCmd(),
 				Data:    data,
 			},
 		}
@@ -67,9 +77,6 @@ func fetchSessionWindows(session item.Item, ctx Context, fetchWindows SessionWin
 	return windows
 }
 
-func sessionConnectCmd(session item.Item) string {
-	if session.Data["session_id"] != "" {
-		return `tmux switch-client -t {{sq .session_id}}`
-	}
-	return `tmux switch-client -t {{sq (printf "=%s" .session_name)}}`
+func sessionConnectCmd() string {
+	return `tmux switch-client -t {{sq .session_id}}`
 }

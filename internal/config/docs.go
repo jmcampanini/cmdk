@@ -148,6 +148,13 @@ TEMPLATE VARIABLES
   Available functions:
       {{sq .path}}     shell-safe single-quoting
 
+  Security: variables such as path, session_name, and stage inputs
+  come from external sources (tmux, zoxide, user input) and may
+  contain shell metacharacters. Wrap command arguments with {{sq .var}}
+  when interpolating them, e.g. {{sq .session_name}}, not
+  {{.session_name}}. Built-in session Connect and child-window actions
+  target by session_id and shell-quote the tmux target.
+
   Environment variables CMDK_PATH, CMDK_PANE_ID, etc. are also
   set when executing commands.
 

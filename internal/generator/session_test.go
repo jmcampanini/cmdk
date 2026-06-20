@@ -80,7 +80,7 @@ func TestSessionGenerator_ConnectUsesSessionID(t *testing.T) {
 	}
 }
 
-func TestSessionGenerator_ConnectFallsBackToExactSessionName(t *testing.T) {
+func TestSessionGenerator_MissingSessionIDShowsError(t *testing.T) {
 	accumulated := sessionAccumulated()
 	delete(accumulated[0].Data, "session_id")
 
@@ -88,8 +88,11 @@ func TestSessionGenerator_ConnectFallsBackToExactSessionName(t *testing.T) {
 		return nil, nil
 	})(accumulated, Context{})
 
-	if items[0].Cmd != `tmux switch-client -t {{sq (printf "=%s" .session_name)}}` {
-		t.Errorf("Cmd = %q", items[0].Cmd)
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
+	}
+	if items[0].Display != "session error: missing session_id" {
+		t.Errorf("Display = %q", items[0].Display)
 	}
 }
 

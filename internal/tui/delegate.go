@@ -17,11 +17,12 @@ import (
 )
 
 const (
-	iconWindow = "\ueb7f"
-	iconDir    = "\ueaf7"
-	iconCmd    = "\uebc8"
-	iconBell   = "\ueaa2"
-	itemGap    = "  "
+	iconWindow  = "\ueb7f"
+	iconDir     = "\ueaf7"
+	iconCmd     = "\uebc8"
+	iconSession = "\ueb23"
+	iconBell    = "\ueaa2"
+	itemGap     = "  "
 )
 
 type iconInfo struct {
@@ -44,7 +45,7 @@ func newItemDelegate(t theme.Theme) itemDelegate {
 			"dir":     {iconDir, t.TypeDir},
 			"cmd":     {iconCmd, t.TypeCmd},
 			"action":  {iconCmd, t.TypeCmd},
-			"session": {iconCmd, t.TypeWindow},
+			"session": {iconSession, t.TypeSession},
 			"pick":    {iconCmd, t.TypeCmd},
 			"error":   {iconCmd, t.TypeCmd},
 			"loading": {iconCmd, t.TypeCmd},
