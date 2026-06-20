@@ -25,14 +25,16 @@ func newAsyncTestModel(syncItems []item.Item, asyncSources []AsyncSource) Model 
 	reg.Register("root", func([]item.Item, generator.Context) []item.Item { return syncItems })
 	reg.MapType("", "root")
 
-	var initialAll []item.Item
-	initialAll = append(initialAll, syncItems...)
-	for _, src := range asyncSources {
-		initialAll = append(initialAll, generator.LoadingItem(generator.Source{Name: src.Name}))
-	}
-	listItems := item.GroupAndOrder(initialAll, false)
+	return NewModel(rootItemsWithLoading(syncItems, asyncSources), "%1", nil, reg, generator.Context{Config: asyncTestConfig()}, t, asyncSources, syncItems)
+}
 
-	return NewModel(listItems, "%1", nil, reg, generator.Context{Config: asyncTestConfig()}, t, asyncSources, syncItems)
+func rootItemsWithLoading(syncItems []item.Item, asyncSources []AsyncSource) []list.Item {
+	var all []item.Item
+	all = append(all, syncItems...)
+	for _, src := range asyncSources {
+		all = append(all, generator.LoadingItem(generator.Source{Name: src.Name}))
+	}
+	return item.GroupAndOrder(all, false)
 }
 
 func sizeModel(m Model, width, height int) Model {
@@ -389,12 +391,7 @@ func TestSourceResult_WhileDrilledDown_DoesNotRebuild(t *testing.T) {
 	reg.MapType("", "root")
 	reg.MapType("dir", "dir-actions")
 
-	var initialAll []item.Item
-	initialAll = append(initialAll, syncItems...)
-	for _, src := range asyncSrcs {
-		initialAll = append(initialAll, generator.LoadingItem(generator.Source{Name: src.Name}))
-	}
-	listItems := item.GroupAndOrder(initialAll, false)
+	listItems := rootItemsWithLoading(syncItems, asyncSrcs)
 
 	m := NewModel(listItems, "%1", nil, reg, generator.Context{Config: asyncTestConfig()}, th, asyncSrcs, syncItems)
 	m = sizeModel(m, 80, 24)

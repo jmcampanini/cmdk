@@ -2057,12 +2057,7 @@ func TestInline_AsyncRebuildExpands(t *testing.T) {
 		}},
 	}
 
-	var initialAll []item.Item
-	initialAll = append(initialAll, syncItems...)
-	for _, src := range asyncSources {
-		initialAll = append(initialAll, generator.LoadingItem(generator.Source{Name: src.Name}))
-	}
-	listItems := item.GroupAndOrder(initialAll, false)
+	listItems := rootItemsWithLoading(syncItems, asyncSources)
 
 	m := NewModel(listItems, "%1", nil, reg, generator.Context{Config: cfg}, theme.Light(), asyncSources, syncItems)
 	m.list.SetSize(80, 40)

@@ -23,6 +23,14 @@ func displays(items []list.Item) []string {
 	return out
 }
 
+func bellWindowItem(display string) Item {
+	it := NewItem()
+	it.Type = "window"
+	it.Display = display
+	it.Data["bell"] = "1"
+	return it
+}
+
 func TestGroupAndOrder_MixedTypes(t *testing.T) {
 	items := []Item{
 		{Type: "dir", Display: "~/foo"},
@@ -63,10 +71,7 @@ func TestGroupAndOrder_Empty(t *testing.T) {
 }
 
 func TestGroupAndOrder_BellToTop(t *testing.T) {
-	bellWindow := NewItem()
-	bellWindow.Type = "window"
-	bellWindow.Display = "tmux: main:1 zsh"
-	bellWindow.Data["bell"] = "1"
+	bellWindow := bellWindowItem("tmux: main:1 zsh")
 
 	items := []Item{
 		{Type: "action", Display: "htop"},
@@ -84,10 +89,7 @@ func TestGroupAndOrder_BellToTop(t *testing.T) {
 }
 
 func TestGroupAndOrder_BellToTopDisabled(t *testing.T) {
-	bellWindow := NewItem()
-	bellWindow.Type = "window"
-	bellWindow.Display = "tmux: main:1 zsh"
-	bellWindow.Data["bell"] = "1"
+	bellWindow := bellWindowItem("tmux: main:1 zsh")
 
 	items := []Item{
 		{Type: "action", Display: "htop"},
@@ -133,10 +135,7 @@ func TestGroupAndOrder_ErrorsBeforeLoading(t *testing.T) {
 }
 
 func TestGroupAndOrder_LoadingBeforeBellAndNormalItems(t *testing.T) {
-	bellWindow := NewItem()
-	bellWindow.Type = "window"
-	bellWindow.Display = "tmux: main:1 zsh"
-	bellWindow.Data["bell"] = "1"
+	bellWindow := bellWindowItem("tmux: main:1 zsh")
 
 	items := []Item{
 		{Type: "action", Display: "deploy"},
@@ -154,10 +153,7 @@ func TestGroupAndOrder_LoadingBeforeBellAndNormalItems(t *testing.T) {
 }
 
 func TestGroupAndOrder_ErrorsAndLoadingBeforeBellWindows(t *testing.T) {
-	bellWindow := NewItem()
-	bellWindow.Type = "window"
-	bellWindow.Display = "tmux: main:1 zsh"
-	bellWindow.Data["bell"] = "1"
+	bellWindow := bellWindowItem("tmux: main:1 zsh")
 
 	items := []Item{
 		bellWindow,

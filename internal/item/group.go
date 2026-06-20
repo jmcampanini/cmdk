@@ -2,22 +2,24 @@ package item
 
 import "charm.land/bubbles/v2/list"
 
-var TypeOrder = []string{"action", "dir", "window"}
+var (
+	TypeOrder       = []string{"action", "dir", "window"}
+	statusTypeOrder = []string{"error", "loading"}
+)
 
 func GroupAndOrder(items []Item, bellToTop bool) []list.Item {
 	buckets := make(map[string][]Item)
-	var bellItems []Item
-	var unknownOrder []string
-	known := knownTypes()
+	var bellWindows []Item
+	var unknownTypes []string
 
 	for _, it := range items {
-		if bellToTop && it.Type == "window" && it.Data["bell"] == "1" {
-			bellItems = append(bellItems, it)
+		if bellToTop && isBellWindow(it) {
+			bellWindows = append(bellWindows, it)
 			continue
 		}
-		if !known[it.Type] {
+		if !isKnownType(it.Type) {
 			if _, ok := buckets[it.Type]; !ok {
-				unknownOrder = append(unknownOrder, it.Type)
+				unknownTypes = append(unknownTypes, it.Type)
 			}
 		}
 		buckets[it.Type] = append(buckets[it.Type], it)
@@ -30,27 +32,36 @@ func GroupAndOrder(items []Item, bellToTop bool) []list.Item {
 		}
 	}
 
-	appendBucket("error")
-	appendBucket("loading")
-	for _, it := range bellItems {
+	for _, typ := range statusTypeOrder {
+		appendBucket(typ)
+	}
+	for _, it := range bellWindows {
 		result = append(result, it)
 	}
 	for _, typ := range TypeOrder {
 		appendBucket(typ)
 	}
-	for _, typ := range unknownOrder {
+	for _, typ := range unknownTypes {
 		appendBucket(typ)
 	}
 
 	return result
 }
 
-func knownTypes() map[string]bool {
-	known := make(map[string]bool, len(TypeOrder)+2)
-	known["error"] = true
-	known["loading"] = true
-	for _, typ := range TypeOrder {
-		known[typ] = true
+func isBellWindow(it Item) bool {
+	return it.Type == "window" && it.Data["bell"] == "1"
+}
+
+func isKnownType(typ string) bool {
+	for _, knownType := range statusTypeOrder {
+		if typ == knownType {
+			return true
+		}
 	}
-	return known
+	for _, knownType := range TypeOrder {
+		if typ == knownType {
+			return true
+		}
+	}
+	return false
 }
