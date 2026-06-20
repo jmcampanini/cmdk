@@ -13,8 +13,40 @@ import (
 
 var shortenCmd = &cobra.Command{
 	Use:   "shorten [path]",
-	Short: "Apply display rules to shorten a path",
-	Args:  cobra.MaximumNArgs(1),
+	Short: "Preview display path shortening",
+	Long: `Preview how cmdk displays paths in the launcher.
+
+If no path argument is supplied, cmdk reads the path from the first line of
+stdin. This is useful for testing display config before opening the TUI.
+
+How paths are formatted:
+
+  1. Replace the $HOME prefix with display.shorten_home.
+  2. Apply display.rules literal substring replacements.
+  3. Apply truncation using display.truncation_length and display.truncation_symbol.
+
+Rules replace the first occurrence of each literal match. Longer rule keys run
+before shorter keys, with lexical ordering used as a tie-breaker. Replacement
+values support icon aliases such as :nf-dev-github:; match keys are literal and
+do not resolve aliases. See "cmdk docs" for the full display config reference.`,
+	Example: `  cmdk shorten /Users/me/Code/github.com/acme/project
+  echo /usr/local/bin/foo | cmdk shorten
+  cmdk shorten --truncate 2 /usr/local/bin/foo
+
+  # Example config:
+  #   [display]
+  #   shorten_home = "~"
+  #   truncation_length = 3
+  #   truncation_symbol = "…"
+  #
+  #   [display.rules]
+  #   "github.com" = "gh"
+  #   "~/Code" = "Code"
+  #
+  # With that config:
+  #   cmdk shorten /Users/me/Code/github.com/acme/project
+  #   => …/gh/acme/project`,
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var path string
 		if len(args) == 1 {
