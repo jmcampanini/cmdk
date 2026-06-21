@@ -48,7 +48,7 @@ func TestGroupAndOrder_MixedTypes(t *testing.T) {
 	}
 }
 
-func TestGroupAndOrder_SessionsFirst(t *testing.T) {
+func TestGroupAndOrder_SessionsAfterWindows(t *testing.T) {
 	items := []Item{
 		{Type: "session", Display: "tmux: work"},
 		{Type: "window", Display: "tmux: work:1 zsh"},
@@ -57,7 +57,7 @@ func TestGroupAndOrder_SessionsFirst(t *testing.T) {
 	}
 
 	got := types(GroupAndOrder(items, false))
-	want := []string{"session", "action", "dir", "window"}
+	want := []string{"action", "dir", "window", "session"}
 
 	if !slices.Equal(got, want) {
 		t.Errorf("types = %v, want %v", got, want)

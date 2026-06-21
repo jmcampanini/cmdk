@@ -187,9 +187,10 @@ func exitFilterModeE2E(t *testing.T, sess string) {
 
 func navigateToWindowItems(t *testing.T, sess string) string {
 	t.Helper()
-	sendKeys(t, sess, "End")
+	sendKeys(t, sess, "/")
+	typeText(t, sess, sess+":")
 	return waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, iconWindow)
+		return strings.Contains(s, iconWindow) && strings.Contains(s, sess+":")
 	}, defaultTimeout)
 }
 
@@ -225,7 +226,8 @@ func drillIntoSession(t *testing.T, sess string) {
 		return
 	}
 
-	// Sessions sort before windows, so Home deterministically selects the session row.
+	// The exact session row ranks above its longer matching window rows, so Home
+	// deterministically selects the session row.
 	sendKeys(t, sess, "Home")
 	sendKeys(t, sess, "Enter")
 
