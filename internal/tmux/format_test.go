@@ -1,13 +1,22 @@
 package tmux
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
-func TestTmuxNameFormatsUseRawTmuxFields(t *testing.T) {
-	if tmuxEscapedSessionNameFormat != "#{session_name}" {
-		t.Errorf("session name format = %q, want raw tmux field", tmuxEscapedSessionNameFormat)
+func TestTmuxNameFormatsSubstituteControlsBeforeDelimiting(t *testing.T) {
+	formats := map[string]string{
+		"session": tmuxEscapedSessionNameFormat,
+		"window":  tmuxEscapedWindowNameFormat,
 	}
-	if tmuxEscapedWindowNameFormat != "#{window_name}" {
-		t.Errorf("window name format = %q, want raw tmux field", tmuxEscapedWindowNameFormat)
+	for name, format := range formats {
+		if !strings.Contains(format, tmuxEscapedTab) || !strings.Contains(format, tmuxEscapedNewline) {
+			t.Errorf("%s format = %q, want display-safe substitutions", name, format)
+		}
+		if !strings.Contains(format, "s|\t|"+tmuxEscapedTab) || !strings.Contains(format, "s|\n|"+tmuxEscapedNewline) {
+			t.Errorf("%s format = %q, want tmux-side control character replacement", name, format)
+		}
 	}
 }
 

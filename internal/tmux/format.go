@@ -6,14 +6,20 @@ const (
 	tmuxFieldSeparator = "\t"
 	tmuxEscapedNewline = "↵"
 	tmuxEscapedTab     = "⇥"
-
-	// tmux escapes control characters in format output (for example, tabs as
-	// `\t`) and doubles literal backslashes. Keep the raw fields in the tmux
-	// format and decode them in Go so literal `\t`/`\n` names stay distinct
-	// from actual tab/newline characters.
-	tmuxEscapedSessionNameFormat = "#{session_name}"
-	tmuxEscapedWindowNameFormat  = "#{window_name}"
 )
+
+// tmux output is not consistent about control characters in names: some paths
+// emit actual tabs/newlines while others emit backslash escapes. Substitute
+// actual controls before tab-delimiting, then decode tmux-style backslash
+// escapes in Go so literal `\t`/`\n` names stay distinct.
+var (
+	tmuxEscapedSessionNameFormat = tmuxEscapedFormat("session_name")
+	tmuxEscapedWindowNameFormat  = tmuxEscapedFormat("window_name")
+)
+
+func tmuxEscapedFormat(name string) string {
+	return "#{s|\t|" + tmuxEscapedTab + "|:#{s|\n|" + tmuxEscapedNewline + "|:#{" + name + "}}}"
+}
 
 func tmuxFormatFields(fields ...string) string {
 	return strings.Join(fields, tmuxFieldSeparator)
