@@ -59,10 +59,8 @@ func sessionConnectItem(session item.Item, paneID string) item.Item {
 }
 
 func sessionData(session item.Item, paneID string) map[string]string {
-	data := maps.Clone(session.Data)
-	if data == nil {
-		data = make(map[string]string)
-	}
+	data := make(map[string]string, len(session.Data)+1)
+	maps.Copy(data, session.Data)
 	if paneID != "" {
 		data["pane_id"] = paneID
 	}

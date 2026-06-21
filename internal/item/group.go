@@ -1,6 +1,10 @@
 package item
 
-import "charm.land/bubbles/v2/list"
+import (
+	"slices"
+
+	"charm.land/bubbles/v2/list"
+)
 
 var (
 	TypeOrder       = []string{"session", "action", "dir", "window"}
@@ -53,15 +57,5 @@ func isBellWindow(it Item) bool {
 }
 
 func isKnownType(typ string) bool {
-	for _, knownType := range statusTypeOrder {
-		if typ == knownType {
-			return true
-		}
-	}
-	for _, knownType := range TypeOrder {
-		if typ == knownType {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(statusTypeOrder, typ) || slices.Contains(TypeOrder, typ)
 }

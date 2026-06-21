@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"os/exec"
 	"regexp"
 	"sort"
 	"strconv"
@@ -90,19 +89,6 @@ func newWindowItem(parsed windowLine, bell bool) item.Item {
 	return it
 }
 
-func newWindowParseErrorItem(malformedRows int) item.Item {
-	rowWord := "row"
-	if malformedRows != 1 {
-		rowWord = "rows"
-	}
-
-	it := item.NewItem()
-	it.Type = "error"
-	it.Source = "tmux"
-	it.Display = fmt.Sprintf("tmux parse error: %d unparseable list-windows %s", malformedRows, rowWord)
-	return it
-}
-
 type windowEntry struct {
 	session     string
 	windowIndex int
@@ -179,23 +165,18 @@ func ParseWindows(output string) ([]item.Item, error) {
 	sortWindowEntries(entries)
 	items := itemsFromWindowEntries(entries)
 	if malformedRows > 0 {
-		items = append(items, newWindowParseErrorItem(malformedRows))
+		items = append(items, newTmuxParseErrorItem("list-windows", malformedRows))
 	}
 	return items, nil
 }
 
 func ListWindows(ctx context.Context) ([]item.Item, error) {
-	out, err := exec.CommandContext(ctx, "tmux", "list-windows", "-a", "-F", tmuxListWindowsFormat).Output()
+	out, err := tmuxOutput(ctx, "list-windows", "-a", "-F", tmuxListWindowsFormat)
 	if err != nil {
-		if ctx.Err() != nil {
-			return nil, fmt.Errorf("tmux did not respond within the configured timeout: %w", err)
-		}
 		return nil, err
 	}
 	return ParseWindows(string(out))
 }
-
-const sessionWindowCommand = tmuxWindowSwitchCommand
 
 const (
 	sessionWindowLineIndexField = iota
@@ -205,6 +186,9 @@ const (
 	sessionWindowLineFieldCount
 )
 
+// Keep window_bell_flag as a sentinel field so empty window names preserve
+// the expected tab count. TODO: surface this flag in the TUI for session child
+// windows without setting Data["bell"] and reordering them above Connect.
 var windowsForSessionFormat = tmuxFormatFields(
 	"#{window_index}",
 	"#{window_id}",
@@ -214,41 +198,24 @@ var windowsForSessionFormat = tmuxFormatFields(
 
 func ParseWindowsForSession(output string, session item.Item) ([]item.Item, error) {
 	lines := strings.Split(output, "\n")
-
-	type entry struct {
-		index int
-		item  item.Item
-	}
-
-	var entries []entry
+	entries := make([]sessionWindowEntry, 0, len(lines))
 	malformedRows := 0
+
 	for _, line := range lines {
 		line = cleanTmuxLine(line)
 		if line == "" {
 			continue
 		}
 
-		// Keep window_bell_flag as a sentinel field so empty window names preserve
-		// the expected tab count. TODO: surface this flag in the TUI for session
-		// child windows without setting Data["bell"] and reordering them above Connect.
-		fields, ok := splitTmuxFields(line, sessionWindowLineFieldCount)
+		parsed, ok := parseSessionWindowLine(line)
 		if !ok {
 			malformedRows++
 			continue
 		}
 
-		windowIndex := fields[sessionWindowLineIndexField]
-		windowID := fields[sessionWindowLineIDField]
-		windowName := fields[sessionWindowLineNameField]
-		idx, err := strconv.Atoi(windowIndex)
-		if err != nil || !validTmuxWindowID.MatchString(windowID) {
-			malformedRows++
-			continue
-		}
-
-		entries = append(entries, entry{
-			index: idx,
-			item:  newSessionWindowItem(session, windowIndex, windowID, windowName),
+		entries = append(entries, sessionWindowEntry{
+			index: parsed.sortIndex,
+			item:  newSessionWindowItem(session, parsed.windowIndex, parsed.windowID, parsed.windowName),
 		})
 	}
 
@@ -268,9 +235,42 @@ func ParseWindowsForSession(output string, session item.Item) ([]item.Item, erro
 		items[i] = e.item
 	}
 	if malformedRows > 0 {
-		items = append(items, newWindowParseErrorItem(malformedRows))
+		items = append(items, newTmuxParseErrorItem("list-windows", malformedRows))
 	}
 	return items, nil
+}
+
+type sessionWindowEntry struct {
+	index int
+	item  item.Item
+}
+
+type sessionWindowLine struct {
+	sortIndex   int
+	windowIndex string
+	windowID    string
+	windowName  string
+}
+
+func parseSessionWindowLine(line string) (sessionWindowLine, bool) {
+	fields, ok := splitTmuxFields(line, sessionWindowLineFieldCount)
+	if !ok {
+		return sessionWindowLine{}, false
+	}
+
+	windowIndex := fields[sessionWindowLineIndexField]
+	windowID := fields[sessionWindowLineIDField]
+	idx, err := strconv.Atoi(windowIndex)
+	if err != nil || !validTmuxWindowID.MatchString(windowID) {
+		return sessionWindowLine{}, false
+	}
+
+	return sessionWindowLine{
+		sortIndex:   idx,
+		windowIndex: windowIndex,
+		windowID:    windowID,
+		windowName:  fields[sessionWindowLineNameField],
+	}, true
 }
 
 func newSessionWindowItem(session item.Item, windowIndex, windowID, windowName string) item.Item {
@@ -284,7 +284,7 @@ func newSessionWindowItem(session item.Item, windowIndex, windowID, windowName s
 		it.Display += " " + windowName
 	}
 	it.Action = item.ActionExecute
-	it.Cmd = sessionWindowCommand
+	it.Cmd = tmuxWindowSwitchCommand
 	maps.Copy(it.Data, session.Data)
 	it.Data["window_index"] = windowIndex
 	it.Data["window_id"] = windowID
@@ -297,11 +297,8 @@ func ListWindowsForSession(ctx context.Context, session item.Item) ([]item.Item,
 		return nil, err
 	}
 
-	out, err := exec.CommandContext(ctx, "tmux", "list-windows", "-t", target, "-F", windowsForSessionFormat).Output()
+	out, err := tmuxOutput(ctx, "list-windows", "-t", target, "-F", windowsForSessionFormat)
 	if err != nil {
-		if ctx.Err() != nil {
-			return nil, fmt.Errorf("tmux did not respond within the configured timeout: %w", err)
-		}
 		return nil, err
 	}
 	return ParseWindowsForSession(string(out), session)

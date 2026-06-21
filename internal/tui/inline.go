@@ -10,21 +10,22 @@ import (
 const inlineSeparator = " » "
 
 func expandInline(items []item.Item, registry *generator.Registry, ctx generator.Context) []item.Item {
-	var result []item.Item
+	result := make([]item.Item, 0, len(items))
 	for _, it := range items {
 		if !canExpandInline(it) {
 			result = append(result, it)
 			continue
 		}
 
-		gen, err := registry.Resolve([]item.Item{it})
+		accumulated := []item.Item{it}
+		gen, err := registry.Resolve(accumulated)
 		if err != nil {
 			log.Warn("inline expand: no generator for type, keeping as drill-down", "type", it.Type, "error", err)
 			result = append(result, it)
 			continue
 		}
 
-		children := gen([]item.Item{it}, ctx)
+		children := gen(accumulated, ctx)
 		if len(children) == 0 {
 			log.Warn("inline expand: generator returned no children, keeping as drill-down", "type", it.Type, "display", it.Display)
 			result = append(result, it)

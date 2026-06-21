@@ -70,7 +70,13 @@ type Config struct {
 	Display  Display                 `toml:"display"`
 }
 
-var validMatchTypes = []string{"root", "dir", "session"}
+const (
+	matchTypeRoot    = "root"
+	matchTypeDir     = "dir"
+	matchTypeSession = "session"
+)
+
+var validMatchTypes = []string{matchTypeRoot, matchTypeDir, matchTypeSession}
 
 // reservedKeys must not be used by stage outputs because they are runtime-provided
 // variables or reserved names that should not be introduced as template aliases.
@@ -176,7 +182,7 @@ func validateActions(actions []Action) error {
 }
 
 func reservedKeysForMatch(matchType string) []string {
-	if matchType == "session" {
+	if matchType == matchTypeSession {
 		return sessionActionReservedKeys
 	}
 	return reservedKeys
