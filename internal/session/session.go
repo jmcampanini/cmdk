@@ -1,6 +1,7 @@
 package session
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -128,15 +129,22 @@ func TmuxSafeSessionName(sessionKey string) string {
 }
 
 func groveAnchorFromContainer(ctx context.Context, dir string) (string, bool, error) {
+	var firstStatErr error
 	for _, name := range primaryBranchDirs {
 		child := filepath.Join(dir, name)
 		valid, err := validGitWorktreeRoot(ctx, child)
 		if err != nil {
+			if rememberWorktreeStatError(err, &firstStatErr) {
+				continue
+			}
 			return "", false, err
 		}
 		if valid {
 			return child, true, nil
 		}
+	}
+	if firstStatErr != nil {
+		return "", false, firstStatErr
 	}
 	return "", false, nil
 }
@@ -148,10 +156,14 @@ func groveContainerForWorktree(ctx context.Context, worktree string) (string, bo
 		return "", false, err
 	}
 
+	var firstStatErr error
 	for _, name := range primaryBranchDirs {
 		child := filepath.Join(parent, name)
 		valid, err := validGitWorktreeRoot(ctx, child)
 		if err != nil {
+			if rememberWorktreeStatError(err, &firstStatErr) {
+				continue
+			}
 			return "", false, err
 		}
 		if !valid {
@@ -171,12 +183,21 @@ func groveContainerForWorktree(ctx context.Context, worktree string) (string, bo
 			return parent, true, nil
 		}
 	}
+	if firstStatErr != nil {
+		return "", false, firstStatErr
+	}
 	return "", false, nil
 }
 
 func validGitWorktreeRoot(ctx context.Context, dir string) (bool, error) {
 	info, err := os.Stat(dir)
-	if err != nil || !info.IsDir() {
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, nil
+		}
+		return false, &worktreeStatError{path: dir, err: err}
+	}
+	if !info.IsDir() {
 		return false, nil
 	}
 	top, ok, err := gitWorktreeTop(ctx, dir)
@@ -184,6 +205,30 @@ func validGitWorktreeRoot(ctx context.Context, dir string) (bool, error) {
 		return false, err
 	}
 	return ok && samePath(top, dir), nil
+}
+
+func rememberWorktreeStatError(err error, firstErr *error) bool {
+	var statErr *worktreeStatError
+	if !errors.As(err, &statErr) {
+		return false
+	}
+	if *firstErr == nil {
+		*firstErr = err
+	}
+	return true
+}
+
+type worktreeStatError struct {
+	path string
+	err  error
+}
+
+func (e *worktreeStatError) Error() string {
+	return fmt.Sprintf("stat %s: %v", e.path, e.err)
+}
+
+func (e *worktreeStatError) Unwrap() error {
+	return e.err
 }
 
 func gitWorktreeTop(ctx context.Context, dir string) (string, bool, error) {
@@ -229,6 +274,8 @@ func gitOutput(ctx context.Context, dir string, args ...string) ([]byte, error) 
 	cmdArgs := append([]string{"-C", dir}, args...)
 	cmd := exec.CommandContext(ctx, "git", cmdArgs...)
 	cmd.Env = withoutGitEnv(os.Environ())
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err == nil {
 		return out, nil
@@ -238,9 +285,24 @@ func gitOutput(ctx context.Context, dir string, args ...string) ([]byte, error) 
 	}
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) && exitErr.ProcessState != nil && exitErr.Exited() {
-		return nil, errGitNoMatch
+		if isGitNoMatchStderr(stderr.String()) {
+			return nil, errGitNoMatch
+		}
+		return nil, gitCommandError(dir, args, err, stderr.String())
 	}
-	return nil, fmt.Errorf("git -C %s %s: %w", dir, strings.Join(args, " "), err)
+	return nil, gitCommandError(dir, args, err, stderr.String())
+}
+
+func isGitNoMatchStderr(stderr string) bool {
+	return strings.Contains(stderr, "not a git repository (or any of the parent directories)") ||
+		strings.Contains(stderr, "this operation must be run in a work tree")
+}
+
+func gitCommandError(dir string, args []string, err error, stderr string) error {
+	if stderr == "" {
+		return fmt.Errorf("git -C %s %s: %w", dir, strings.Join(args, " "), err)
+	}
+	return fmt.Errorf("git -C %s %s: %w: %s", dir, strings.Join(args, " "), err, strings.TrimSpace(stderr))
 }
 
 func withoutGitEnv(env []string) []string {

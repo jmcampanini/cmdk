@@ -157,6 +157,28 @@ func TestResolve_PropagatesGitExecFailure(t *testing.T) {
 	}
 }
 
+func TestResolve_PropagatesCorruptGitMetadata(t *testing.T) {
+	requireGit(t)
+	dir := filepath.Join(t.TempDir(), "bad")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".git"), []byte("gitdir: /nonexistent\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Resolve(context.Background(), dir, DisplayOptions{})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if errors.Is(err, errGitNoMatch) {
+		t.Fatalf("corrupt git metadata should not be treated as no-match: %v", err)
+	}
+	if !strings.Contains(err.Error(), "git -C") {
+		t.Errorf("error = %q, want git command context", err.Error())
+	}
+}
+
 func TestResolve_InsideNormalGitRepo(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "project")
 	initRepo(t, repo)
@@ -252,6 +274,45 @@ func TestResolve_GroveContainerRootContainingMain(t *testing.T) {
 		PlannedTmuxSessionName: TmuxSafeSessionName(containerReal),
 		PlannedTmuxWindowName:  "main",
 	})
+}
+
+func TestResolve_GroveProbeContinuesAfterStatError(t *testing.T) {
+	container := filepath.Join(t.TempDir(), "dotfiles")
+	if err := os.MkdirAll(container, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	symlinkOrSkip(t, "main", filepath.Join(container, "main"))
+	develop := filepath.Join(container, "develop")
+	initRepo(t, develop)
+
+	containerReal := realPath(t, container)
+	developReal := realPath(t, develop)
+	plan := resolveForTest(t, container, DisplayOptions{})
+	assertPlan(t, plan, Plan{
+		SessionKind:            KindRepo,
+		SessionKey:             containerReal,
+		DisplayLabel:           containerReal,
+		LaunchPath:             developReal,
+		PlannedTmuxSessionName: TmuxSafeSessionName(containerReal),
+		PlannedTmuxWindowName:  "develop",
+	})
+}
+
+func TestResolve_GroveProbeReturnsStatErrorWhenNoValidChild(t *testing.T) {
+	container := filepath.Join(t.TempDir(), "dotfiles")
+	if err := os.MkdirAll(container, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	symlinkOrSkip(t, "main", filepath.Join(container, "main"))
+
+	_, err := Resolve(context.Background(), container, DisplayOptions{})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var statErr *worktreeStatError
+	if !errors.As(err, &statErr) {
+		t.Errorf("error = %T %[1]v, want worktreeStatError", err)
+	}
 }
 
 func TestResolve_SymlinkedGroveContainerUsesCanonicalSessionKey(t *testing.T) {
