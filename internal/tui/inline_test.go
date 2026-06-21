@@ -113,6 +113,31 @@ func TestExpandInline_IconDefaultsToCmd(t *testing.T) {
 	}
 }
 
+func TestExpandInline_DoesNotExpandSessions(t *testing.T) {
+	reg := generator.NewRegistry()
+	reg.Register("session-children", func(_ []item.Item, _ generator.Context) []item.Item {
+		return []item.Item{{Type: "action", Display: "Connect", Action: item.ActionExecute}}
+	})
+	reg.MapType("session", "session-children")
+	ctx := generator.Context{}
+
+	items := []item.Item{
+		{Type: "session", Display: "tmux:ses: work", Action: item.ActionNextList},
+	}
+
+	result := expandInline(items, reg, ctx)
+
+	if len(result) != 1 {
+		t.Fatalf("got %d items, want 1", len(result))
+	}
+	if result[0].Display != "tmux:ses: work" {
+		t.Errorf("Display = %q, want tmux:ses: work", result[0].Display)
+	}
+	if result[0].InlineParent != nil {
+		t.Error("InlineParent should be nil for preserved session item")
+	}
+}
+
 func TestExpandInline_PreservesOriginalOnNoChildren(t *testing.T) {
 	reg := generator.NewRegistry()
 	reg.Register("empty-actions", func(_ []item.Item, _ generator.Context) []item.Item {

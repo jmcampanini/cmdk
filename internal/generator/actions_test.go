@@ -61,7 +61,7 @@ func TestActionsGenerator_EmptyPathString(t *testing.T) {
 
 func TestActionsGenerator_UsesLastItem(t *testing.T) {
 	accumulated := []item.Item{
-		{Type: "window", Data: map[string]string{"session": "main"}},
+		{Type: "window", Data: map[string]string{"session_name": "main"}},
 		{Type: "dir", Data: map[string]string{"path": "/tmp"}},
 	}
 

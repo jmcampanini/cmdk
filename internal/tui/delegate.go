@@ -20,6 +20,7 @@ const (
 	iconWindow  = "\ueb7f"
 	iconDir     = "\ueaf7"
 	iconAction  = "\ueb63"
+	iconSession = "\ueb23"
 	iconUnknown = "\ueb63"
 	iconLoading = "\uf4e3"
 	iconError   = "\uea87"
@@ -48,6 +49,7 @@ func newItemDelegate(t theme.Theme) itemDelegate {
 			"window":  {iconWindow, t.TypeWindow},
 			"dir":     {iconDir, t.TypeDir},
 			"action":  {iconAction, t.TypeAction},
+			"session": {iconSession, t.TypeSession},
 			"pick":    unknown,
 			"error":   {iconError, t.Error},
 			"loading": {iconLoading, t.TypeUnknown},

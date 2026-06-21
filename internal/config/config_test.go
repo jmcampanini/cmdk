@@ -132,6 +132,14 @@ func TestValidate_ActionMatchesDir(t *testing.T) {
 	}
 }
 
+func TestValidate_ActionMatchesSession(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{Name: "Rename", Cmd: "tmux rename-session", Matches: "session"}}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestValidate_StagePromptValid(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Actions = []Action{{
@@ -371,6 +379,28 @@ func TestValidate_StageReservedKey_WindowIndex(t *testing.T) {
 	}}
 	if err := cfg.Validate(); err == nil {
 		t.Error("expected error for reserved key 'window_index'")
+	}
+}
+
+func TestValidate_StageReservedKey_SessionNameForSessionAction(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "session",
+		Stages: []StageConfig{{Type: "prompt", Key: "session_name", Text: "Enter"}},
+	}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for reserved key 'session_name' on session action")
+	}
+}
+
+func TestValidate_StageKeySessionNameAllowedForRootAction(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "session_name", Text: "Enter"}},
+	}}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error: %v", err)
 	}
 }
 

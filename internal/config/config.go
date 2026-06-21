@@ -70,10 +70,17 @@ type Config struct {
 	Display  Display                 `toml:"display"`
 }
 
-var validMatchTypes = []string{"root", "dir"}
+const (
+	matchTypeRoot    = "root"
+	matchTypeDir     = "dir"
+	matchTypeSession = "session"
+)
 
-// reservedKeys are set by the runtime (from the selection stack or CLI flags) and must not collide with stage keys.
-var reservedKeys = []string{
+var validMatchTypes = []string{matchTypeRoot, matchTypeDir, matchTypeSession}
+
+// reservedStageKeys must not be used by stage outputs because they are runtime-provided
+// variables or reserved names that should not be introduced as template aliases.
+var reservedStageKeys = []string{
 	"path",
 	"pane_id",
 	"session",
@@ -81,6 +88,14 @@ var reservedKeys = []string{
 	"window_index",
 	"window_id",
 }
+
+var sessionActionReservedStageKeys = slices.Concat(reservedStageKeys, []string{
+	"session_attached",
+	"session_display",
+	"session_kind",
+	"session_name",
+	"session_windows",
+})
 
 var validStageKey = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
@@ -159,14 +174,22 @@ func validateActions(actions []Action) error {
 				return fmt.Errorf("actions[%d].icon: %w", i, err)
 			}
 		}
-		if err := validateStages(i, a.Stages); err != nil {
+		if err := validateStages(i, a.Matches, a.Stages); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func validateStages(actionIdx int, stages []StageConfig) error {
+func reservedStageKeysForMatch(matchType string) []string {
+	if matchType == matchTypeSession {
+		return sessionActionReservedStageKeys
+	}
+	return reservedStageKeys
+}
+
+func validateStages(actionIdx int, matchType string, stages []StageConfig) error {
+	reserved := reservedStageKeysForMatch(matchType)
 	seenKeys := make(map[string]bool, len(stages))
 	for j, s := range stages {
 		prefix := fmt.Sprintf("actions[%d].stages[%d]", actionIdx, j)
@@ -181,8 +204,8 @@ func validateStages(actionIdx int, stages []StageConfig) error {
 			return fmt.Errorf("%s.key %q is duplicate within this action (case-insensitive)", prefix, s.Key)
 		}
 		seenKeys[lower] = true
-		if slices.Contains(reservedKeys, lower) {
-			return fmt.Errorf("%s.key %q is reserved (reserved keys: %v)", prefix, s.Key, reservedKeys)
+		if slices.Contains(reserved, lower) {
+			return fmt.Errorf("%s.key %q is reserved (reserved keys: %v)", prefix, s.Key, reserved)
 		}
 		switch s.Type {
 		case "prompt":
