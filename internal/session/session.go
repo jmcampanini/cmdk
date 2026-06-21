@@ -77,24 +77,27 @@ func Resolve(ctx context.Context, inputPath string, display DisplayOptions) (Pla
 }
 
 func newRepoPlan(sessionKey, launchPath string, display DisplayOptions) Plan {
+	canonicalSessionKey := canonicalPath(sessionKey)
+	canonicalLaunchPath := canonicalPath(launchPath)
 	return Plan{
 		SessionKind:            KindRepo,
-		SessionKey:             sessionKey,
-		DisplayLabel:           displayLabel(sessionKey, display),
-		LaunchPath:             launchPath,
-		PlannedTmuxSessionName: TmuxSafeSessionName(sessionKey),
-		PlannedTmuxWindowName:  filepath.Base(filepath.Clean(launchPath)),
+		SessionKey:             canonicalSessionKey,
+		DisplayLabel:           displayLabel(canonicalSessionKey, display),
+		LaunchPath:             canonicalLaunchPath,
+		PlannedTmuxSessionName: TmuxSafeSessionName(canonicalSessionKey),
+		PlannedTmuxWindowName:  filepath.Base(filepath.Clean(canonicalLaunchPath)),
 	}
 }
 
 func newDirectoryPlan(path string, display DisplayOptions) Plan {
+	canonicalDirectoryPath := canonicalPath(path)
 	return Plan{
 		SessionKind:            KindDirectory,
-		SessionKey:             path,
-		DisplayLabel:           displayLabel(path, display),
-		LaunchPath:             path,
-		PlannedTmuxSessionName: TmuxSafeSessionName(path),
-		PlannedTmuxWindowName:  filepath.Base(filepath.Clean(path)),
+		SessionKey:             canonicalDirectoryPath,
+		DisplayLabel:           displayLabel(canonicalDirectoryPath, display),
+		LaunchPath:             canonicalDirectoryPath,
+		PlannedTmuxSessionName: TmuxSafeSessionName(canonicalDirectoryPath),
+		PlannedTmuxWindowName:  filepath.Base(filepath.Clean(canonicalDirectoryPath)),
 	}
 }
 
@@ -155,7 +158,7 @@ func validGitWorktreeRoot(ctx context.Context, dir string) bool {
 }
 
 func gitWorktreeTop(ctx context.Context, dir string) (string, bool) {
-	out, err := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--show-toplevel").Output()
+	out, err := gitOutput(ctx, dir, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return "", false
 	}
@@ -167,11 +170,11 @@ func gitWorktreeTop(ctx context.Context, dir string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	return filepath.Clean(absTop), true
+	return canonicalPath(absTop), true
 }
 
 func gitCommonDir(ctx context.Context, worktree string) (string, bool) {
-	out, err := exec.CommandContext(ctx, "git", "-C", worktree, "rev-parse", "--git-common-dir").Output()
+	out, err := gitOutput(ctx, worktree, "rev-parse", "--git-common-dir")
 	if err != nil {
 		return "", false
 	}
@@ -183,6 +186,24 @@ func gitCommonDir(ctx context.Context, worktree string) (string, bool) {
 		commonDir = filepath.Join(worktree, commonDir)
 	}
 	return canonicalPath(commonDir), true
+}
+
+func gitOutput(ctx context.Context, dir string, args ...string) ([]byte, error) {
+	cmdArgs := append([]string{"-C", dir}, args...)
+	cmd := exec.CommandContext(ctx, "git", cmdArgs...)
+	cmd.Env = withoutGitEnv(os.Environ())
+	return cmd.Output()
+}
+
+func withoutGitEnv(env []string) []string {
+	filtered := make([]string, 0, len(env))
+	for _, entry := range env {
+		if strings.HasPrefix(entry, "GIT_") {
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+	return filtered
 }
 
 func trimCommandLine(out []byte) string {

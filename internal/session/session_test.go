@@ -73,6 +73,13 @@ func realPath(t *testing.T, path string) string {
 	return filepath.Clean(resolved)
 }
 
+func symlinkOrSkip(t *testing.T, oldname, newname string) {
+	t.Helper()
+	if err := os.Symlink(oldname, newname); err != nil {
+		t.Skipf("symlink not available: %v", err)
+	}
+}
+
 func assertPlan(t *testing.T, got Plan, want Plan) {
 	t.Helper()
 	if got != want {
@@ -152,6 +159,24 @@ func TestResolve_StandaloneRepoFallback(t *testing.T) {
 	}
 }
 
+func TestResolve_SymlinkedStandaloneRepoUsesCanonicalSessionKey(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	initRepo(t, repo)
+	link := filepath.Join(t.TempDir(), "repo-link")
+	symlinkOrSkip(t, repo, link)
+
+	repoReal := realPath(t, repo)
+	plan := resolveForTest(t, link, DisplayOptions{})
+	assertPlan(t, plan, Plan{
+		SessionKind:            KindRepo,
+		SessionKey:             repoReal,
+		DisplayLabel:           repoReal,
+		LaunchPath:             repoReal,
+		PlannedTmuxSessionName: TmuxSafeSessionName(repoReal),
+		PlannedTmuxWindowName:  "repo",
+	})
+}
+
 func TestResolve_InsideLinkedGitWorktree(t *testing.T) {
 	container := filepath.Join(t.TempDir(), "dotfiles")
 	main := filepath.Join(container, "main")
@@ -181,15 +206,48 @@ func TestResolve_GroveContainerRootContainingMain(t *testing.T) {
 	main := filepath.Join(container, "main")
 	initRepo(t, main)
 
+	containerReal := realPath(t, container)
+	mainReal := realPath(t, main)
 	plan := resolveForTest(t, container, DisplayOptions{})
 	assertPlan(t, plan, Plan{
 		SessionKind:            KindRepo,
-		SessionKey:             container,
-		DisplayLabel:           container,
-		LaunchPath:             main,
-		PlannedTmuxSessionName: TmuxSafeSessionName(container),
+		SessionKey:             containerReal,
+		DisplayLabel:           containerReal,
+		LaunchPath:             mainReal,
+		PlannedTmuxSessionName: TmuxSafeSessionName(containerReal),
 		PlannedTmuxWindowName:  "main",
 	})
+}
+
+func TestResolve_SymlinkedGroveContainerUsesCanonicalSessionKey(t *testing.T) {
+	container := filepath.Join(t.TempDir(), "dotfiles")
+	main := filepath.Join(container, "main")
+	initRepo(t, main)
+	link := filepath.Join(t.TempDir(), "dotfiles-link")
+	symlinkOrSkip(t, container, link)
+
+	containerReal := realPath(t, container)
+	mainReal := realPath(t, main)
+	containerPlan := resolveForTest(t, link, DisplayOptions{})
+	childPlan := resolveForTest(t, filepath.Join(link, "main"), DisplayOptions{})
+
+	for name, plan := range map[string]Plan{"container": containerPlan, "child": childPlan} {
+		if plan.SessionKey != containerReal {
+			t.Errorf("%s SessionKey = %q, want canonical container %q", name, plan.SessionKey, containerReal)
+		}
+		if plan.DisplayLabel != containerReal {
+			t.Errorf("%s DisplayLabel = %q, want %q", name, plan.DisplayLabel, containerReal)
+		}
+		if plan.LaunchPath != mainReal {
+			t.Errorf("%s LaunchPath = %q, want %q", name, plan.LaunchPath, mainReal)
+		}
+		if plan.PlannedTmuxSessionName != TmuxSafeSessionName(containerReal) {
+			t.Errorf("%s PlannedTmuxSessionName = %q, want %q", name, plan.PlannedTmuxSessionName, TmuxSafeSessionName(containerReal))
+		}
+	}
+	if containerPlan.SessionKey != childPlan.SessionKey {
+		t.Errorf("symlinked container and child should share session key: container=%q child=%q", containerPlan.SessionKey, childPlan.SessionKey)
+	}
 }
 
 func TestResolve_GrovePrimaryBranchPriority(t *testing.T) {
@@ -199,9 +257,10 @@ func TestResolve_GrovePrimaryBranchPriority(t *testing.T) {
 	initRepo(t, develop)
 	initRepo(t, master)
 
+	developReal := realPath(t, develop)
 	plan := resolveForTest(t, container, DisplayOptions{})
-	if plan.LaunchPath != develop {
-		t.Errorf("LaunchPath = %q, want first valid primary child %q", plan.LaunchPath, develop)
+	if plan.LaunchPath != developReal {
+		t.Errorf("LaunchPath = %q, want first valid primary child %q", plan.LaunchPath, developReal)
 	}
 	if plan.PlannedTmuxWindowName != "develop" {
 		t.Errorf("PlannedTmuxWindowName = %q, want develop", plan.PlannedTmuxWindowName)
@@ -214,15 +273,56 @@ func TestResolve_NonGitDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	dirReal := realPath(t, dir)
 	plan := resolveForTest(t, dir, DisplayOptions{})
 	assertPlan(t, plan, Plan{
 		SessionKind:            KindDirectory,
-		SessionKey:             dir,
-		DisplayLabel:           dir,
-		LaunchPath:             dir,
-		PlannedTmuxSessionName: TmuxSafeSessionName(dir),
+		SessionKey:             dirReal,
+		DisplayLabel:           dirReal,
+		LaunchPath:             dirReal,
+		PlannedTmuxSessionName: TmuxSafeSessionName(dirReal),
 		PlannedTmuxWindowName:  "scratch",
 	})
+}
+
+func TestResolve_SymlinkedNonGitDirectoryUsesCanonicalSessionKey(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "scratch")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "scratch-link")
+	symlinkOrSkip(t, dir, link)
+
+	dirReal := realPath(t, dir)
+	plan := resolveForTest(t, link, DisplayOptions{})
+	assertPlan(t, plan, Plan{
+		SessionKind:            KindDirectory,
+		SessionKey:             dirReal,
+		DisplayLabel:           dirReal,
+		LaunchPath:             dirReal,
+		PlannedTmuxSessionName: TmuxSafeSessionName(dirReal),
+		PlannedTmuxWindowName:  "scratch",
+	})
+}
+
+func TestResolve_IgnoresGitEnvironment(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	initRepo(t, repo)
+	outside := filepath.Join(t.TempDir(), "outside")
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GIT_DIR", filepath.Join(repo, ".git"))
+	t.Setenv("GIT_WORK_TREE", repo)
+
+	plan := resolveForTest(t, outside, DisplayOptions{})
+	if plan.SessionKind != KindDirectory {
+		t.Fatalf("SessionKind = %q, want %q", plan.SessionKind, KindDirectory)
+	}
+	outsideReal := realPath(t, outside)
+	if plan.SessionKey != outsideReal {
+		t.Errorf("SessionKey = %q, want %q", plan.SessionKey, outsideReal)
+	}
 }
 
 func TestResolve_GroupingMainAndDevelopUnderSameContainer(t *testing.T) {
@@ -277,8 +377,10 @@ func TestResolve_DisplayLabelUsesPathFormatting(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	homeReal := realPath(t, home)
+	dirReal := realPath(t, dir)
 	display := DisplayOptions{
-		Home:        home,
+		Home:        homeReal,
 		ShortenHome: "~",
 		Rules:       pathfmt.CompileRules(map[string]string{"github.com": "gh"}),
 		Truncation:  pathfmt.Truncation{Length: 3, Symbol: "…"},
@@ -288,8 +390,8 @@ func TestResolve_DisplayLabelUsesPathFormatting(t *testing.T) {
 	if plan.DisplayLabel != "…/gh/acme/project" {
 		t.Errorf("DisplayLabel = %q, want formatted display path", plan.DisplayLabel)
 	}
-	if plan.SessionKey != dir {
-		t.Errorf("SessionKey = %q, want unformatted identity %q", plan.SessionKey, dir)
+	if plan.SessionKey != dirReal {
+		t.Errorf("SessionKey = %q, want unformatted identity %q", plan.SessionKey, dirReal)
 	}
 }
 

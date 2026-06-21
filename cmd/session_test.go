@@ -87,8 +87,13 @@ func TestRunSessionResolveCommandJSON(t *testing.T) {
 	if plan.SessionKind != resolver.KindDirectory {
 		t.Errorf("SessionKind = %q, want %q", plan.SessionKind, resolver.KindDirectory)
 	}
-	if plan.SessionKey != dir {
-		t.Errorf("SessionKey = %q, want %q", plan.SessionKey, dir)
+	dirReal, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%q): %v", dir, err)
+	}
+	dirReal = filepath.Clean(dirReal)
+	if plan.SessionKey != dirReal {
+		t.Errorf("SessionKey = %q, want %q", plan.SessionKey, dirReal)
 	}
 	if strings.Contains(buf.String(), "session_id") {
 		t.Errorf("JSON should not contain session_id: %s", buf.String())
