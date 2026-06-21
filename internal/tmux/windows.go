@@ -89,6 +89,7 @@ func newWindowItem(parsed windowLine, bell bool) item.Item {
 	it.Data["session_id"] = parsed.sessionID
 	it.Data["window_index"] = parsed.windowIndex
 	it.Data["window_id"] = parsed.windowID
+	it.Data["window_name"] = windowName
 	if bell {
 		it.Data["bell"] = "1"
 	}
@@ -291,6 +292,7 @@ func newSessionWindowItem(session item.Item, windowIndex, windowID, rawWindowNam
 	maps.Copy(it.Data, session.Data)
 	it.Data["window_index"] = windowIndex
 	it.Data["window_id"] = windowID
+	it.Data["window_name"] = windowName
 	return it
 }
 

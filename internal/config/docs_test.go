@@ -86,6 +86,8 @@ func TestRenderHelp_ContainsTemplateVars(t *testing.T) {
 		"{{.session_display}}",
 		"{{.session_id}}",
 		"{{.window_id}}",
+		"{{.window_index}}",
+		"{{.window_name}}",
 		"{{.session_kind}}",
 		"{{.session_name}}",
 		"{{.session_windows}}",

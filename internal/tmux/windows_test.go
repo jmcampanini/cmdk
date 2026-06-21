@@ -38,10 +38,11 @@ func TestParseWindows_MultiSession(t *testing.T) {
 		sessionID   string
 		windowIndex string
 		windowID    string
+		windowName  string
 	}{
-		{"tmux:win: 1 node ‹ dev", "dev", "$2", "1", "@3"},
-		{"tmux:win: 1 zsh ‹ main", "main", "$1", "1", "@1"},
-		{"tmux:win: 2 vim ‹ main", "main", "$1", "2", "@2"},
+		{"tmux:win: 1 node ‹ dev", "dev", "$2", "1", "@3", "node"},
+		{"tmux:win: 1 zsh ‹ main", "main", "$1", "1", "@1", "zsh"},
+		{"tmux:win: 2 vim ‹ main", "main", "$1", "2", "@2", "vim"},
 	}
 
 	for i, expected := range want {
@@ -62,6 +63,9 @@ func TestParseWindows_MultiSession(t *testing.T) {
 		}
 		if items[i].Data["window_id"] != expected.windowID {
 			t.Errorf("item[%d].Data[window_id] = %q, want %q", i, items[i].Data["window_id"], expected.windowID)
+		}
+		if items[i].Data["window_name"] != expected.windowName {
+			t.Errorf("item[%d].Data[window_name] = %q, want %q", i, items[i].Data["window_name"], expected.windowName)
 		}
 		if items[i].Action != item.ActionExecute {
 			t.Errorf("item[%d].Action = %q, want %q", i, items[i].Action, item.ActionExecute)
@@ -113,6 +117,9 @@ func TestParseWindows_WindowNameWithSpaces(t *testing.T) {
 	if items[0].Data["window_id"] != "@7" {
 		t.Errorf("window_id = %q, want %q", items[0].Data["window_id"], "@7")
 	}
+	if items[0].Data["window_name"] != "my cool app" {
+		t.Errorf("window_name = %q, want %q", items[0].Data["window_name"], "my cool app")
+	}
 }
 
 func TestParseWindows_EscapedSessionAndDisplaySafeWindowNames(t *testing.T) {
@@ -132,6 +139,9 @@ func TestParseWindows_EscapedSessionAndDisplaySafeWindowNames(t *testing.T) {
 	if items[0].Data["session_name"] != "work"+tmuxEscapedNewline+"notes" {
 		t.Errorf("session_name = %q", items[0].Data["session_name"])
 	}
+	if items[0].Data["window_name"] != "my"+tmuxEscapedTab+"cool"+tmuxEscapedNewline+"app" {
+		t.Errorf("window_name = %q", items[0].Data["window_name"])
+	}
 }
 
 func TestParseWindows_PreservesLiteralBackslashSequences(t *testing.T) {
@@ -148,6 +158,9 @@ func TestParseWindows_PreservesLiteralBackslashSequences(t *testing.T) {
 	}
 	if items[0].Data["session_name"] != wantSession {
 		t.Errorf("session_name = %q, want %q", items[0].Data["session_name"], wantSession)
+	}
+	if items[0].Data["window_name"] != wantWindow {
+		t.Errorf("window_name = %q, want %q", items[0].Data["window_name"], wantWindow)
 	}
 }
 
@@ -282,6 +295,12 @@ func TestParseWindowsForSession(t *testing.T) {
 	if items[0].Data["window_id"] != "@7" {
 		t.Errorf("window_id = %q, want @7", items[0].Data["window_id"])
 	}
+	if items[0].Data["window_name"] != "zsh" {
+		t.Errorf("window_name = %q, want zsh", items[0].Data["window_name"])
+	}
+	if items[1].Data["window_name"] != "vim" {
+		t.Errorf("items[1] window_name = %q, want vim", items[1].Data["window_name"])
+	}
 	if items[0].Cmd != `tmux switch-client -t {{sq .session_id}}:{{sq .window_id}}` {
 		t.Errorf("Cmd = %q", items[0].Cmd)
 	}
@@ -302,6 +321,9 @@ func TestParseWindowsForSession_DisplaySafeControlGlyphsInName(t *testing.T) {
 	want := "tmux:win: 1 my" + tmuxEscapedTab + "cool" + tmuxEscapedNewline + "app ‹ work"
 	if items[0].Display != want {
 		t.Errorf("Display = %q, want %q", items[0].Display, want)
+	}
+	if items[0].Data["window_name"] != "my"+tmuxEscapedTab+"cool"+tmuxEscapedNewline+"app" {
+		t.Errorf("window_name = %q", items[0].Data["window_name"])
 	}
 }
 

@@ -349,14 +349,25 @@ func TestValidate_StageReservedKey_PaneID(t *testing.T) {
 	}
 }
 
-func TestValidate_StageReservedKey_Session(t *testing.T) {
+func TestValidate_StageKey_SessionIsNotReserved(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Actions = []Action{{
 		Name: "test", Cmd: "echo", Matches: "root",
 		Stages: []StageConfig{{Type: "prompt", Key: "session", Text: "Enter"}},
 	}}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("unexpected error for unreserved key 'session': %v", err)
+	}
+}
+
+func TestValidate_StageReservedKey_SessionName(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "session_name", Text: "Enter"}},
+	}}
 	if err := cfg.Validate(); err == nil {
-		t.Error("expected error for reserved key 'session'")
+		t.Error("expected error for reserved key 'session_name'")
 	}
 }
 
@@ -393,17 +404,6 @@ func TestValidate_StageReservedKey_SessionNameForSessionAction(t *testing.T) {
 	}
 }
 
-func TestValidate_StageKeySessionNameAllowedForRootAction(t *testing.T) {
-	cfg := DefaultConfig()
-	cfg.Actions = []Action{{
-		Name: "test", Cmd: "echo", Matches: "root",
-		Stages: []StageConfig{{Type: "prompt", Key: "session_name", Text: "Enter"}},
-	}}
-	if err := cfg.Validate(); err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
 func TestValidate_StageReservedKey_WindowID(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Actions = []Action{{
@@ -412,6 +412,17 @@ func TestValidate_StageReservedKey_WindowID(t *testing.T) {
 	}}
 	if err := cfg.Validate(); err == nil {
 		t.Error("expected error for reserved key 'window_id'")
+	}
+}
+
+func TestValidate_StageReservedKey_WindowName(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "window_name", Text: "Enter"}},
+	}}
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for reserved key 'window_name'")
 	}
 }
 
@@ -1414,12 +1425,12 @@ func TestLoad_ActionWithStages(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`
 [[actions]]
 name = "New session"
-cmd = "tmux new-session -s {{.session_name}}"
+cmd = "tmux new-session -s {{.new_session_name}}"
 matches = "root"
 
 [[actions.stages]]
 type = "prompt"
-key = "session_name"
+key = "new_session_name"
 text = "Session name"
 default = "dev"
 `), 0o644); err != nil {
@@ -1440,8 +1451,8 @@ default = "dev"
 	if s.Type != "prompt" {
 		t.Errorf("stage.Type = %q, want prompt", s.Type)
 	}
-	if s.Key != "session_name" {
-		t.Errorf("stage.Key = %q, want session_name", s.Key)
+	if s.Key != "new_session_name" {
+		t.Errorf("stage.Key = %q, want new_session_name", s.Key)
 	}
 	if s.Text != "Session name" {
 		t.Errorf("stage.Text = %q, want Session name", s.Text)
