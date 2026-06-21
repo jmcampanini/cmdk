@@ -294,6 +294,8 @@ func gitOutput(ctx context.Context, dir string, args ...string) ([]byte, error) 
 }
 
 func isGitNoMatchStderr(stderr string) bool {
+	// Accepted risk for now: Git does not expose a stable machine-readable
+	// no-worktree signal here, so we match the C-locale English stderr text.
 	return strings.Contains(stderr, "not a git repository (or any of the parent directories)") ||
 		strings.Contains(stderr, "this operation must be run in a work tree")
 }
