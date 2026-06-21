@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/jmcampanini/cmdk/internal/item"
 )
@@ -39,6 +38,7 @@ var (
 )
 
 type windowLine struct {
+	sortIndex   int
 	session     string
 	sessionID   string
 	windowIndex string
@@ -55,14 +55,20 @@ func parseWindowLine(line string) (windowLine, bool) {
 
 	sessionID := fields[windowLineSessionIDField]
 	windowID := fields[windowLineWindowIDField]
+	windowIndex := fields[windowLineWindowIndexField]
+	sortIndex, err := strconv.Atoi(windowIndex)
+	if err != nil {
+		return windowLine{}, false
+	}
 	if !validTmuxSessionID.MatchString(sessionID) || !validTmuxWindowID.MatchString(windowID) {
 		return windowLine{}, false
 	}
 
 	return windowLine{
+		sortIndex:   sortIndex,
 		session:     fields[windowLineSessionField],
 		sessionID:   sessionID,
-		windowIndex: fields[windowLineWindowIndexField],
+		windowIndex: windowIndex,
 		windowID:    windowID,
 		windowName:  fields[windowLineWindowNameField],
 		bellFlag:    fields[windowLineBellFlagField],
@@ -90,41 +96,30 @@ func newWindowItem(parsed windowLine, bell bool) item.Item {
 }
 
 type windowEntry struct {
-	session     string
-	windowIndex int
-	bell        bool
-	item        item.Item
+	session   string
+	sortIndex int
+	bell      bool
+	item      item.Item
 }
 
 func parseWindowEntries(output string) ([]windowEntry, int) {
-	lines := strings.Split(output, "\n")
+	lines := tmuxLines(output)
 	entries := make([]windowEntry, 0, len(lines))
 	malformedRows := 0
 
 	for _, line := range lines {
-		line = cleanTmuxLine(line)
-		if line == "" {
-			continue
-		}
-
 		parsed, ok := parseWindowLine(line)
 		if !ok {
 			malformedRows++
 			continue
 		}
 
-		windowIndex, err := strconv.Atoi(parsed.windowIndex)
-		if err != nil {
-			malformedRows++
-			continue
-		}
-
 		bell := parsed.bellFlag == "1"
 		entries = append(entries, windowEntry{
-			session:     parsed.session,
-			windowIndex: windowIndex,
-			bell:        bell,
-			item:        newWindowItem(parsed, bell),
+			session:   parsed.session,
+			sortIndex: parsed.sortIndex,
+			bell:      bell,
+			item:      newWindowItem(parsed, bell),
 		})
 	}
 
@@ -141,7 +136,7 @@ func sortWindowEntries(entries []windowEntry) {
 		if left.session != right.session {
 			return left.session < right.session
 		}
-		return left.windowIndex < right.windowIndex
+		return left.sortIndex < right.sortIndex
 	})
 }
 
@@ -196,53 +191,9 @@ var windowsForSessionFormat = tmuxFormatFields(
 	"#{window_bell_flag}",
 )
 
-func ParseWindowsForSession(output string, session item.Item) ([]item.Item, error) {
-	lines := strings.Split(output, "\n")
-	entries := make([]sessionWindowEntry, 0, len(lines))
-	malformedRows := 0
-
-	for _, line := range lines {
-		line = cleanTmuxLine(line)
-		if line == "" {
-			continue
-		}
-
-		parsed, ok := parseSessionWindowLine(line)
-		if !ok {
-			malformedRows++
-			continue
-		}
-
-		entries = append(entries, sessionWindowEntry{
-			index: parsed.sortIndex,
-			item:  newSessionWindowItem(session, parsed.windowIndex, parsed.windowID, parsed.windowName),
-		})
-	}
-
-	if len(entries) == 0 {
-		if malformedRows > 0 {
-			return nil, fmt.Errorf("could not parse any tmux list-windows rows (%d unparseable)", malformedRows)
-		}
-		return nil, nil
-	}
-
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].index < entries[j].index
-	})
-
-	items := make([]item.Item, len(entries))
-	for i, e := range entries {
-		items[i] = e.item
-	}
-	if malformedRows > 0 {
-		items = append(items, newTmuxParseErrorItem("list-windows", malformedRows))
-	}
-	return items, nil
-}
-
 type sessionWindowEntry struct {
-	index int
-	item  item.Item
+	sortIndex int
+	item      item.Item
 }
 
 type sessionWindowLine struct {
@@ -250,6 +201,58 @@ type sessionWindowLine struct {
 	windowIndex string
 	windowID    string
 	windowName  string
+}
+
+func ParseWindowsForSession(output string, session item.Item) ([]item.Item, error) {
+	entries, malformedRows := parseSessionWindowEntries(output, session)
+	if len(entries) == 0 {
+		if malformedRows > 0 {
+			return nil, fmt.Errorf("could not parse any tmux list-windows rows (%d unparseable)", malformedRows)
+		}
+		return nil, nil
+	}
+
+	sortSessionWindowEntries(entries)
+	items := itemsFromSessionWindowEntries(entries)
+	if malformedRows > 0 {
+		items = append(items, newTmuxParseErrorItem("list-windows", malformedRows))
+	}
+	return items, nil
+}
+
+func parseSessionWindowEntries(output string, session item.Item) ([]sessionWindowEntry, int) {
+	lines := tmuxLines(output)
+	entries := make([]sessionWindowEntry, 0, len(lines))
+	malformedRows := 0
+
+	for _, line := range lines {
+		parsed, ok := parseSessionWindowLine(line)
+		if !ok {
+			malformedRows++
+			continue
+		}
+
+		entries = append(entries, sessionWindowEntry{
+			sortIndex: parsed.sortIndex,
+			item:      newSessionWindowItem(session, parsed.windowIndex, parsed.windowID, parsed.windowName),
+		})
+	}
+
+	return entries, malformedRows
+}
+
+func sortSessionWindowEntries(entries []sessionWindowEntry) {
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].sortIndex < entries[j].sortIndex
+	})
+}
+
+func itemsFromSessionWindowEntries(entries []sessionWindowEntry) []item.Item {
+	items := make([]item.Item, len(entries))
+	for i, e := range entries {
+		items[i] = e.item
+	}
+	return items
 }
 
 func parseSessionWindowLine(line string) (sessionWindowLine, bool) {
@@ -260,13 +263,16 @@ func parseSessionWindowLine(line string) (sessionWindowLine, bool) {
 
 	windowIndex := fields[sessionWindowLineIndexField]
 	windowID := fields[sessionWindowLineIDField]
-	idx, err := strconv.Atoi(windowIndex)
-	if err != nil || !validTmuxWindowID.MatchString(windowID) {
+	sortIndex, err := strconv.Atoi(windowIndex)
+	if err != nil {
+		return sessionWindowLine{}, false
+	}
+	if !validTmuxWindowID.MatchString(windowID) {
 		return sessionWindowLine{}, false
 	}
 
 	return sessionWindowLine{
-		sortIndex:   idx,
+		sortIndex:   sortIndex,
 		windowIndex: windowIndex,
 		windowID:    windowID,
 		windowName:  fields[sessionWindowLineNameField],

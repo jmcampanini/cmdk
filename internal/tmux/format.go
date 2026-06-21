@@ -100,6 +100,18 @@ func cleanTmuxLine(line string) string {
 	return strings.TrimRight(line, "\r")
 }
 
+func tmuxLines(output string) []string {
+	rawLines := strings.Split(output, "\n")
+	lines := make([]string, 0, len(rawLines))
+	for _, line := range rawLines {
+		line = cleanTmuxLine(line)
+		if line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}
+
 func splitTmuxFields(line string, expected int) ([]string, bool) {
 	fields := strings.Split(cleanTmuxLine(line), tmuxFieldSeparator)
 	if len(fields) != expected {

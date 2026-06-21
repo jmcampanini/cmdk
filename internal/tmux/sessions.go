@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/jmcampanini/cmdk/internal/item"
 )
@@ -28,16 +27,11 @@ var sessionListFormat = tmuxFormatFields(
 )
 
 func ParseSessions(output string) ([]item.Item, error) {
-	lines := strings.Split(output, "\n")
+	lines := tmuxLines(output)
 	entries := make([]sessionEntry, 0, len(lines))
 	malformedRows := 0
 
 	for _, line := range lines {
-		line = cleanTmuxLine(line)
-		if line == "" {
-			continue
-		}
-
 		entry, ok := parseSessionLine(line)
 		if !ok {
 			malformedRows++
