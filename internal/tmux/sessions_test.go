@@ -82,6 +82,19 @@ func TestParseSessions_EmptyOutput(t *testing.T) {
 	}
 }
 
+func TestParseSessions_InvalidSessionIDReturnsError(t *testing.T) {
+	items, err := ParseSessions("bogus\twork\t1\t0\n")
+	if err == nil {
+		t.Fatal("expected error for invalid session_id")
+	}
+	if err.Error() != "could not parse any tmux list-sessions rows (1 unparseable)" {
+		t.Errorf("error = %q", err)
+	}
+	if len(items) != 0 {
+		t.Errorf("got %d items, want 0", len(items))
+	}
+}
+
 func TestParseSessions_PartialMalformedAppendsError(t *testing.T) {
 	output := "not enough fields\n$1\tvalid\t2\t0\n$2\tbad-windows\tnope\t0\n$3\tbad-attached\t1\tnope\n$4\t\t1\t0\n\tmissing-id\t1\t0\n"
 	items := mustParseSessions(t, output)

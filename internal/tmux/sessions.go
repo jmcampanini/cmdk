@@ -82,7 +82,7 @@ func parseSessionLine(line string) (sessionEntry, bool) {
 	sessionName := displaySafeTmuxSessionName(fields[sessionLineNameField])
 	sessionWindows := fields[sessionLineWindowsField]
 	sessionAttached := fields[sessionLineAttachedField]
-	if sessionID == "" || sessionName == "" {
+	if !validTmuxSessionID.MatchString(sessionID) || sessionName == "" {
 		return sessionEntry{}, false
 	}
 	if _, err := strconv.Atoi(sessionWindows); err != nil {
