@@ -71,7 +71,7 @@ For non-repo directories, `session_key` is the absolute directory path.
 Add a human-readable debug command:
 
 ```sh
-cmdk session resolve [path]
+cmdk session resolve <path>
 ```
 
 Default output should be for humans, for example:
@@ -85,13 +85,13 @@ planned_tmux_session_name:  Users/jmcampanini/Code/github_com/jmcampanini/dotfil
 planned_tmux_window_name:   main
 ```
 
-Optional later flag:
+JSON flag:
 
 ```sh
-cmdk session resolve [path] --json
+cmdk session resolve <path> --json
 ```
 
-`--json` is for tests, scripts, and future automation. It is not required for the initial resolver if it slows the phase down.
+`--json` is for tests, scripts, and future automation.
 
 ## Resolver behavior
 
@@ -225,7 +225,7 @@ Field names can change, but these concepts should remain distinct. Avoid fields 
 Add command help for:
 
 ```sh
-cmdk session resolve [path]
+cmdk session resolve <path>
 ```
 
 Document:
@@ -261,7 +261,7 @@ Add tests for:
 
 ## Acceptance criteria
 
-- `cmdk session resolve [path]` prints a correct human-readable session plan.
+- `cmdk session resolve <path>` prints a correct human-readable session plan.
 - Repo/worktree paths resolve to a stable `session_key`.
 - Worktree paths produce the repo session key and planned tmux window name.
 - Workspace/container paths are detected with Grove-style child probing.
