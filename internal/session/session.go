@@ -290,14 +290,24 @@ func gitOutput(ctx context.Context, dir string, args ...string) ([]byte, error) 
 }
 
 func hasGitMarker(path string) (bool, error) {
-	if ok, err := hasGitMarkerInAncestors(path); ok || err != nil {
-		return ok, err
-	}
-	canonical := canonicalPath(path)
-	if canonical == filepath.Clean(path) {
-		return false, nil
+	canonical, err := canonicalExistingPath(path)
+	if err != nil {
+		return false, err
 	}
 	return hasGitMarkerInAncestors(canonical)
+}
+
+func canonicalExistingPath(path string) (string, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("resolving absolute path: %w", err)
+	}
+	absPath = filepath.Clean(absPath)
+	resolved, err := filepath.EvalSymlinks(absPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve symlinks %s: %w", absPath, err)
+	}
+	return filepath.Clean(resolved), nil
 }
 
 func hasGitMarkerInAncestors(path string) (bool, error) {

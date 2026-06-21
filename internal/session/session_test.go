@@ -450,6 +450,28 @@ func TestResolve_SymlinkedNonGitDirectoryUsesCanonicalSessionKey(t *testing.T) {
 	})
 }
 
+func TestResolve_SymlinkInsideRepoToNonGitDirectoryUsesTargetDirectoryPlan(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	initRepo(t, repo)
+	dir := filepath.Join(t.TempDir(), "scratch")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(repo, "scratch-link")
+	symlinkOrSkip(t, dir, link)
+
+	dirReal := realPath(t, dir)
+	plan := resolveForTest(t, link, DisplayOptions{})
+	assertPlan(t, plan, Plan{
+		SessionKind:            KindDirectory,
+		SessionKey:             dirReal,
+		DisplayLabel:           dirReal,
+		LaunchPath:             dirReal,
+		PlannedTmuxSessionName: TmuxSafeSessionName(dirReal),
+		PlannedTmuxWindowName:  "scratch",
+	})
+}
+
 func TestResolve_IgnoresGitEnvironment(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	initRepo(t, repo)
