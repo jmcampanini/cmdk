@@ -78,9 +78,9 @@ const (
 
 var validMatchTypes = []string{matchTypeRoot, matchTypeDir, matchTypeSession}
 
-// reservedKeys must not be used by stage outputs because they are runtime-provided
+// reservedStageKeys must not be used by stage outputs because they are runtime-provided
 // variables or reserved names that should not be introduced as template aliases.
-var reservedKeys = []string{
+var reservedStageKeys = []string{
 	"path",
 	"pane_id",
 	"session",
@@ -89,7 +89,7 @@ var reservedKeys = []string{
 	"window_id",
 }
 
-var sessionActionReservedKeys = slices.Concat(reservedKeys, []string{
+var sessionActionReservedStageKeys = slices.Concat(reservedStageKeys, []string{
 	"session_attached",
 	"session_display",
 	"session_kind",
@@ -181,15 +181,15 @@ func validateActions(actions []Action) error {
 	return nil
 }
 
-func reservedKeysForMatch(matchType string) []string {
+func reservedStageKeysForMatch(matchType string) []string {
 	if matchType == matchTypeSession {
-		return sessionActionReservedKeys
+		return sessionActionReservedStageKeys
 	}
-	return reservedKeys
+	return reservedStageKeys
 }
 
 func validateStages(actionIdx int, matchType string, stages []StageConfig) error {
-	reserved := reservedKeysForMatch(matchType)
+	reserved := reservedStageKeysForMatch(matchType)
 	seenKeys := make(map[string]bool, len(stages))
 	for j, s := range stages {
 		prefix := fmt.Sprintf("actions[%d].stages[%d]", actionIdx, j)

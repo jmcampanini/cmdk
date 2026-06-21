@@ -204,7 +204,7 @@ func navigateToWindowItems(t *testing.T, sess string) string {
 	}, defaultTimeout)
 }
 
-func scrollToWindowItems(t *testing.T, sess string) string {
+func showWindowItems(t *testing.T, sess string) string {
 	t.Helper()
 	exitFilterModeE2E(t, sess)
 	return navigateToWindowItems(t, sess)
@@ -276,7 +276,7 @@ func TestE2E_ItemsVisible(t *testing.T) {
 
 	waitForReady(t, sess)
 
-	content := scrollToWindowItems(t, sess)
+	content := showWindowItems(t, sess)
 
 	marker := sessionWindowMarker(sess)
 	if !strings.Contains(content, marker) {
@@ -469,7 +469,7 @@ func TestE2E_WithoutZoxide_StillLaunches(t *testing.T) {
 	defer killSession(t, sess)
 
 	waitForReady(t, sess)
-	scrollToWindowItems(t, sess)
+	showWindowItems(t, sess)
 }
 
 func writeConfig(t *testing.T, content string) string {

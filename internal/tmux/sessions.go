@@ -2,14 +2,13 @@ package tmux
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"strconv"
 
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
-const SessionKindExternal = "external"
+const sessionKindExternal = "external"
 
 const (
 	sessionLineIDField = iota
@@ -42,7 +41,7 @@ func ParseSessions(output string) ([]item.Item, error) {
 
 	if len(entries) == 0 {
 		if malformedRows > 0 {
-			return nil, fmt.Errorf("could not parse any tmux list-sessions rows (%d unparseable)", malformedRows)
+			return nil, newTmuxRowsParseError("list-sessions", malformedRows)
 		}
 		return nil, nil
 	}
@@ -102,7 +101,7 @@ func newSessionItem(sessionID, sessionName, sessionWindows, sessionAttached stri
 	it.Data["session_attached"] = sessionAttached
 	it.Data["session_display"] = display
 	it.Data["session_id"] = sessionID
-	it.Data["session_kind"] = SessionKindExternal
+	it.Data["session_kind"] = sessionKindExternal
 	it.Data["session_name"] = sessionName
 	it.Data["session_windows"] = sessionWindows
 	return it

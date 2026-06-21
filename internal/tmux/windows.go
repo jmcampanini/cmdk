@@ -2,7 +2,7 @@ package tmux
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"maps"
 	"regexp"
 	"sort"
@@ -38,13 +38,13 @@ var (
 )
 
 type windowLine struct {
-	sortIndex   int
-	session     string
-	sessionID   string
-	windowIndex string
-	windowID    string
-	windowName  string
-	bellFlag    string
+	sortIndex      int
+	rawSessionName string
+	sessionID      string
+	windowIndex    string
+	windowID       string
+	rawWindowName  string
+	bellFlag       string
 }
 
 func parseWindowLine(line string) (windowLine, bool) {
@@ -65,19 +65,19 @@ func parseWindowLine(line string) (windowLine, bool) {
 	}
 
 	return windowLine{
-		sortIndex:   sortIndex,
-		session:     fields[windowLineSessionField],
-		sessionID:   sessionID,
-		windowIndex: windowIndex,
-		windowID:    windowID,
-		windowName:  fields[windowLineWindowNameField],
-		bellFlag:    fields[windowLineBellFlagField],
+		sortIndex:      sortIndex,
+		rawSessionName: fields[windowLineSessionField],
+		sessionID:      sessionID,
+		windowIndex:    windowIndex,
+		windowID:       windowID,
+		rawWindowName:  fields[windowLineWindowNameField],
+		bellFlag:       fields[windowLineBellFlagField],
 	}, true
 }
 
 func newWindowItem(parsed windowLine, bell bool) item.Item {
-	sessionName := displaySafeTmuxSessionName(parsed.session)
-	windowName := displaySafeTmuxWindowName(parsed.windowName)
+	sessionName := displaySafeTmuxSessionName(parsed.rawSessionName)
+	windowName := displaySafeTmuxWindowName(parsed.rawWindowName)
 
 	it := item.NewItem()
 	it.Type = "window"
@@ -96,10 +96,10 @@ func newWindowItem(parsed windowLine, bell bool) item.Item {
 }
 
 type windowEntry struct {
-	session   string
-	sortIndex int
-	bell      bool
-	item      item.Item
+	sortSessionName string
+	sortIndex       int
+	bell            bool
+	item            item.Item
 }
 
 func parseWindowEntries(output string) ([]windowEntry, int) {
@@ -116,10 +116,10 @@ func parseWindowEntries(output string) ([]windowEntry, int) {
 
 		bell := parsed.bellFlag == "1"
 		entries = append(entries, windowEntry{
-			session:   parsed.session,
-			sortIndex: parsed.sortIndex,
-			bell:      bell,
-			item:      newWindowItem(parsed, bell),
+			sortSessionName: parsed.rawSessionName,
+			sortIndex:       parsed.sortIndex,
+			bell:            bell,
+			item:            newWindowItem(parsed, bell),
 		})
 	}
 
@@ -133,8 +133,8 @@ func sortWindowEntries(entries []windowEntry) {
 		if left.bell != right.bell {
 			return left.bell
 		}
-		if left.session != right.session {
-			return left.session < right.session
+		if left.sortSessionName != right.sortSessionName {
+			return left.sortSessionName < right.sortSessionName
 		}
 		return left.sortIndex < right.sortIndex
 	})
@@ -152,7 +152,7 @@ func ParseWindows(output string) ([]item.Item, error) {
 	entries, malformedRows := parseWindowEntries(output)
 	if len(entries) == 0 {
 		if malformedRows > 0 {
-			return nil, fmt.Errorf("could not parse any tmux list-windows rows (%d unparseable)", malformedRows)
+			return nil, newTmuxRowsParseError("list-windows", malformedRows)
 		}
 		return nil, nil
 	}
@@ -197,17 +197,17 @@ type sessionWindowEntry struct {
 }
 
 type sessionWindowLine struct {
-	sortIndex   int
-	windowIndex string
-	windowID    string
-	windowName  string
+	sortIndex     int
+	windowIndex   string
+	windowID      string
+	rawWindowName string
 }
 
 func ParseWindowsForSession(output string, session item.Item) ([]item.Item, error) {
 	entries, malformedRows := parseSessionWindowEntries(output, session)
 	if len(entries) == 0 {
 		if malformedRows > 0 {
-			return nil, fmt.Errorf("could not parse any tmux list-windows rows (%d unparseable)", malformedRows)
+			return nil, newTmuxRowsParseError("list-windows", malformedRows)
 		}
 		return nil, nil
 	}
@@ -234,7 +234,7 @@ func parseSessionWindowEntries(output string, session item.Item) ([]sessionWindo
 
 		entries = append(entries, sessionWindowEntry{
 			sortIndex: parsed.sortIndex,
-			item:      newSessionWindowItem(session, parsed.windowIndex, parsed.windowID, parsed.windowName),
+			item:      newSessionWindowItem(session, parsed.windowIndex, parsed.windowID, parsed.rawWindowName),
 		})
 	}
 
@@ -272,15 +272,15 @@ func parseSessionWindowLine(line string) (sessionWindowLine, bool) {
 	}
 
 	return sessionWindowLine{
-		sortIndex:   sortIndex,
-		windowIndex: windowIndex,
-		windowID:    windowID,
-		windowName:  fields[sessionWindowLineNameField],
+		sortIndex:     sortIndex,
+		windowIndex:   windowIndex,
+		windowID:      windowID,
+		rawWindowName: fields[sessionWindowLineNameField],
 	}, true
 }
 
-func newSessionWindowItem(session item.Item, windowIndex, windowID, windowName string) item.Item {
-	windowName = displaySafeTmuxWindowName(windowName)
+func newSessionWindowItem(session item.Item, windowIndex, windowID, rawWindowName string) item.Item {
+	windowName := displaySafeTmuxWindowName(rawWindowName)
 
 	it := item.NewItem()
 	it.Type = "window"
@@ -322,5 +322,5 @@ func sessionTarget(session item.Item) (string, error) {
 	if sessionID := session.Data["session_id"]; sessionID != "" {
 		return sessionID, nil
 	}
-	return "", fmt.Errorf("session item is missing session_id")
+	return "", errors.New("session item is missing session_id")
 }

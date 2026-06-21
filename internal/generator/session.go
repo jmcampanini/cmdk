@@ -2,7 +2,7 @@ package generator
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"maps"
 	"time"
 
@@ -13,7 +13,10 @@ import (
 // so NewSessionGenerator stays unit-testable without shelling out to tmux.
 type SessionWindowsFunc func(context.Context, item.Item) ([]item.Item, error)
 
-const sessionConnectCommand = `tmux switch-client -t {{sq .session_id}}`
+const (
+	sessionConnectCommand      = `tmux switch-client -t {{sq .session_id}}`
+	defaultSessionFetchTimeout = 2 * time.Second
+)
 
 // NewSessionGenerator builds the child list shown after selecting a tmux
 // session: built-in Connect first, then user-defined session actions, then
@@ -29,7 +32,7 @@ func NewSessionGenerator(fetchWindows SessionWindowsFunc) GeneratorFunc {
 			return nil
 		}
 		if session.Data["session_id"] == "" {
-			return []item.Item{ErrorItem(Source{Name: "session"}, fmt.Errorf("missing session_id"))}
+			return []item.Item{ErrorItem(Source{Name: "session"}, errors.New("missing session_id"))}
 		}
 
 		items := []item.Item{sessionConnectItem(session, ctx.PaneID)}
@@ -69,12 +72,12 @@ func sessionData(session item.Item, paneID string) map[string]string {
 
 func fetchSessionWindows(session item.Item, ctx Context, fetchWindows SessionWindowsFunc) []item.Item {
 	if fetchWindows == nil {
-		return []item.Item{ErrorItem(Source{Name: "windows"}, fmt.Errorf("no fetch function"))}
+		return []item.Item{ErrorItem(Source{Name: "windows"}, errors.New("no fetch function"))}
 	}
 
 	timeout := ctx.Config.Timeout.Fetch
 	if timeout <= 0 {
-		timeout = 2 * time.Second
+		timeout = defaultSessionFetchTimeout
 	}
 	fetchCtx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()

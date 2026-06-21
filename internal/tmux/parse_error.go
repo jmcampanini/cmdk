@@ -6,6 +6,10 @@ import (
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
+func newTmuxRowsParseError(command string, malformedRows int) error {
+	return fmt.Errorf("could not parse any tmux %s rows (%d unparseable)", command, malformedRows)
+}
+
 func newTmuxParseErrorItem(command string, malformedRows int) item.Item {
 	rowWord := "row"
 	if malformedRows != 1 {
