@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -75,6 +76,13 @@ func runSessionResolveCommand(cmd *cobra.Command, path string, options sessionRe
 	home, err := os.UserHomeDir()
 	if err != nil && cfg.Display.ShortenHome != "" {
 		return fmt.Errorf("cannot shorten home prefix: %w", err)
+	}
+	if cfg.Display.ShortenHome != "" && home != "" {
+		resolvedHome, err := filepath.EvalSymlinks(home)
+		if err != nil {
+			return fmt.Errorf("cannot resolve home prefix: %w", err)
+		}
+		home = filepath.Clean(resolvedHome)
 	}
 	display := resolver.DisplayOptions{
 		Home:        home,

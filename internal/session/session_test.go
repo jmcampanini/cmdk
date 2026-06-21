@@ -157,6 +157,34 @@ func TestResolve_PropagatesGitExecFailure(t *testing.T) {
 	}
 }
 
+func TestResolve_ForcesCLocaleForGitNoMatch(t *testing.T) {
+	bin := t.TempDir()
+	gitPath := filepath.Join(bin, "git")
+	script := `#!/bin/sh
+if [ "${LC_ALL:-}" = "C" ]; then
+  printf '%s\n' 'fatal: not a git repository (or any of the parent directories): .git' >&2
+else
+  printf '%s\n' 'fatal: localized no repo' >&2
+fi
+exit 128
+`
+	if err := os.WriteFile(gitPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+	t.Setenv("LC_ALL", "fr_FR.UTF-8")
+
+	dir := filepath.Join(t.TempDir(), "scratch")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	plan := resolveForTest(t, dir, DisplayOptions{})
+	if plan.SessionKind != KindDirectory {
+		t.Errorf("SessionKind = %q, want %q", plan.SessionKind, KindDirectory)
+	}
+}
+
 func TestResolve_PropagatesCorruptGitMetadata(t *testing.T) {
 	requireGit(t)
 	dir := filepath.Join(t.TempDir(), "bad")

@@ -99,3 +99,37 @@ func TestRunSessionResolveCommandJSON(t *testing.T) {
 		t.Errorf("JSON should not contain session_id: %s", buf.String())
 	}
 }
+
+func TestRunSessionResolveCommandShortensSymlinkedHome(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	oldConfigPath := configPath
+	configPath = ""
+	defer func() { configPath = oldConfigPath }()
+
+	root := t.TempDir()
+	realHome := filepath.Join(root, "real-home")
+	dir := filepath.Join(realHome, "project")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	linkHome := filepath.Join(root, "home-link")
+	if err := os.Symlink(realHome, linkHome); err != nil {
+		t.Skipf("symlink not available: %v", err)
+	}
+	t.Setenv("HOME", linkHome)
+
+	var buf bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetOut(&buf)
+	if err := runSessionResolveCommand(cmd, filepath.Join(linkHome, "project"), sessionResolveOptions{json: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	var plan resolver.Plan
+	if err := json.Unmarshal(buf.Bytes(), &plan); err != nil {
+		t.Fatalf("invalid JSON %q: %v", buf.String(), err)
+	}
+	if plan.DisplayLabel != "~/project" {
+		t.Errorf("DisplayLabel = %q, want ~/project", plan.DisplayLabel)
+	}
+}

@@ -306,14 +306,15 @@ func gitCommandError(dir string, args []string, err error, stderr string) error 
 }
 
 func withoutGitEnv(env []string) []string {
-	filtered := make([]string, 0, len(env))
+	// Git no-match detection parses stderr, so force a stable locale.
+	filtered := make([]string, 0, len(env)+1)
 	for _, entry := range env {
-		if strings.HasPrefix(entry, "GIT_") {
+		if strings.HasPrefix(entry, "GIT_") || strings.HasPrefix(entry, "LC_ALL=") {
 			continue
 		}
 		filtered = append(filtered, entry)
 	}
-	return filtered
+	return append(filtered, "LC_ALL=C")
 }
 
 func trimCommandLine(out []byte) string {
