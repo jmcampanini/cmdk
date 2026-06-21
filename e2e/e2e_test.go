@@ -185,12 +185,22 @@ func exitFilterModeE2E(t *testing.T, sess string) {
 	time.Sleep(200 * time.Millisecond)
 }
 
+func windowFilterQuery(sess string) string {
+	return "tmux:win: " + sess
+}
+
+func sessionWindowMarker(sess string) string {
+	return "‹ " + sess
+}
+
 func navigateToWindowItems(t *testing.T, sess string) string {
 	t.Helper()
 	sendKeys(t, sess, "/")
-	typeText(t, sess, sess+":")
+	query := windowFilterQuery(sess)
+	typeText(t, sess, query)
+	marker := sessionWindowMarker(sess)
 	return waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, iconWindow) && strings.Contains(s, sess+":")
+		return strings.Contains(s, iconWindow) && strings.Contains(s, marker)
 	}, defaultTimeout)
 }
 
@@ -268,7 +278,8 @@ func TestE2E_ItemsVisible(t *testing.T) {
 
 	content := scrollToWindowItems(t, sess)
 
-	if !strings.Contains(content, sess+":") {
+	marker := sessionWindowMarker(sess)
+	if !strings.Contains(content, marker) {
 		t.Errorf("expected test session window %q in output\nCapture:\n%s", sess, content)
 	}
 }
@@ -326,7 +337,7 @@ func TestE2E_EnterExecutesAndExits(t *testing.T) {
 
 	waitForReady(t, sess)
 
-	filterAndExecute(t, sess, sess+":")
+	filterAndExecute(t, sess, windowFilterQuery(sess))
 	waitForExit(t, sess)
 }
 
