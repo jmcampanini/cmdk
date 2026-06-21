@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -131,5 +133,41 @@ func TestRunSessionResolveCommandShortensSymlinkedHome(t *testing.T) {
 	}
 	if plan.DisplayLabel != "~/project" {
 		t.Errorf("DisplayLabel = %q, want ~/project", plan.DisplayLabel)
+	}
+}
+
+func TestRunSessionResolveCommandTimesOutGitProbe(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	cfgDir := filepath.Join(xdg, "cmdk")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.toml"), []byte("[timeout]\nfetch = \"10ms\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	oldConfigPath := configPath
+	configPath = ""
+	defer func() { configPath = oldConfigPath }()
+
+	bin := t.TempDir()
+	gitPath := filepath.Join(bin, "git")
+	if err := os.WriteFile(gitPath, []byte("#!/bin/sh\nwhile :; do :; done\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+
+	dir := filepath.Join(t.TempDir(), "scratch")
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := &cobra.Command{}
+	err := runSessionResolveCommand(cmd, dir, sessionResolveOptions{json: true})
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("error = %T %[1]v, want context deadline exceeded", err)
 	}
 }

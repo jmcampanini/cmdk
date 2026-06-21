@@ -142,7 +142,7 @@ func TestResolve_PropagatesCanceledGitProbe(t *testing.T) {
 
 func TestResolve_PropagatesGitExecFailure(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "scratch")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", "")
@@ -157,22 +157,19 @@ func TestResolve_PropagatesGitExecFailure(t *testing.T) {
 	}
 }
 
-func TestResolve_ForcesCLocaleForGitNoMatch(t *testing.T) {
+func TestResolve_DoesNotRunGitWithoutMarker(t *testing.T) {
 	bin := t.TempDir()
 	gitPath := filepath.Join(bin, "git")
+	marker := filepath.Join(t.TempDir(), "git-invoked")
 	script := `#!/bin/sh
-if [ "${LC_ALL:-}" = "C" ]; then
-  printf '%s\n' 'fatal: not a git repository (or any of the parent directories): .git' >&2
-else
-  printf '%s\n' 'fatal: localized no repo' >&2
-fi
-exit 128
+printf invoked > "$CMDK_GIT_MARKER"
+exit 42
 `
 	if err := os.WriteFile(gitPath, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin)
-	t.Setenv("LC_ALL", "fr_FR.UTF-8")
+	t.Setenv("CMDK_GIT_MARKER", marker)
 
 	dir := filepath.Join(t.TempDir(), "scratch")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -182,6 +179,11 @@ exit 128
 	plan := resolveForTest(t, dir, DisplayOptions{})
 	if plan.SessionKind != KindDirectory {
 		t.Errorf("SessionKind = %q, want %q", plan.SessionKind, KindDirectory)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("git should not be invoked when no .git marker exists")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stat marker: %v", err)
 	}
 }
 
@@ -198,9 +200,6 @@ func TestResolve_PropagatesCorruptGitMetadata(t *testing.T) {
 	_, err := Resolve(context.Background(), dir, DisplayOptions{})
 	if err == nil {
 		t.Fatal("expected error")
-	}
-	if errors.Is(err, errGitNoMatch) {
-		t.Fatalf("corrupt git metadata should not be treated as no-match: %v", err)
 	}
 	if !strings.Contains(err.Error(), "git -C") {
 		t.Errorf("error = %q, want git command context", err.Error())
@@ -249,6 +248,28 @@ func TestResolve_SymlinkedStandaloneRepoUsesCanonicalSessionKey(t *testing.T) {
 	initRepo(t, repo)
 	link := filepath.Join(t.TempDir(), "repo-link")
 	symlinkOrSkip(t, repo, link)
+
+	repoReal := realPath(t, repo)
+	plan := resolveForTest(t, link, DisplayOptions{})
+	assertPlan(t, plan, Plan{
+		SessionKind:            KindRepo,
+		SessionKey:             repoReal,
+		DisplayLabel:           repoReal,
+		LaunchPath:             repoReal,
+		PlannedTmuxSessionName: TmuxSafeSessionName(repoReal),
+		PlannedTmuxWindowName:  "repo",
+	})
+}
+
+func TestResolve_SymlinkedRepoSubdirUsesCanonicalSessionKey(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	initRepo(t, repo)
+	subdir := filepath.Join(repo, "cmd")
+	if err := os.MkdirAll(subdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "cmd-link")
+	symlinkOrSkip(t, subdir, link)
 
 	repoReal := realPath(t, repo)
 	plan := resolveForTest(t, link, DisplayOptions{})

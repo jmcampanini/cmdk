@@ -44,6 +44,9 @@ func Resolve(ctx context.Context, inputPath string, display DisplayOptions) (Pla
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if err := ctx.Err(); err != nil {
+		return Plan{}, err
+	}
 
 	absPath, err := filepath.Abs(inputPath)
 	if err != nil {
@@ -232,10 +235,15 @@ func (e *worktreeStatError) Unwrap() error {
 }
 
 func gitWorktreeTop(ctx context.Context, dir string) (string, bool, error) {
-	out, err := gitOutput(ctx, dir, "rev-parse", "--show-toplevel")
-	if errors.Is(err, errGitNoMatch) {
+	hasMarker, err := hasGitMarker(dir)
+	if err != nil {
+		return "", false, err
+	}
+	if !hasMarker {
 		return "", false, nil
 	}
+
+	out, err := gitOutput(ctx, dir, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return "", false, err
 	}
@@ -252,9 +260,6 @@ func gitWorktreeTop(ctx context.Context, dir string) (string, bool, error) {
 
 func gitCommonDir(ctx context.Context, worktree string) (string, bool, error) {
 	out, err := gitOutput(ctx, worktree, "rev-parse", "--git-common-dir")
-	if errors.Is(err, errGitNoMatch) {
-		return "", false, nil
-	}
 	if err != nil {
 		return "", false, err
 	}
@@ -267,8 +272,6 @@ func gitCommonDir(ctx context.Context, worktree string) (string, bool, error) {
 	}
 	return canonicalPath(commonDir), true, nil
 }
-
-var errGitNoMatch = errors.New("git command completed without a matching worktree")
 
 func gitOutput(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	cmdArgs := append([]string{"-C", dir}, args...)
@@ -283,21 +286,36 @@ func gitOutput(ctx context.Context, dir string, args ...string) ([]byte, error) 
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return nil, fmt.Errorf("git -C %s %s: %w", dir, strings.Join(args, " "), ctxErr)
 	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) && exitErr.ProcessState != nil && exitErr.Exited() {
-		if isGitNoMatchStderr(stderr.String()) {
-			return nil, errGitNoMatch
-		}
-		return nil, gitCommandError(dir, args, err, stderr.String())
-	}
 	return nil, gitCommandError(dir, args, err, stderr.String())
 }
 
-func isGitNoMatchStderr(stderr string) bool {
-	// Accepted risk for now: Git does not expose a stable machine-readable
-	// no-worktree signal here, so we match the C-locale English stderr text.
-	return strings.Contains(stderr, "not a git repository (or any of the parent directories)") ||
-		strings.Contains(stderr, "this operation must be run in a work tree")
+func hasGitMarker(path string) (bool, error) {
+	if ok, err := hasGitMarkerInAncestors(path); ok || err != nil {
+		return ok, err
+	}
+	canonical := canonicalPath(path)
+	if canonical == filepath.Clean(path) {
+		return false, nil
+	}
+	return hasGitMarkerInAncestors(canonical)
+}
+
+func hasGitMarkerInAncestors(path string) (bool, error) {
+	dir := filepath.Clean(path)
+	for {
+		marker := filepath.Join(dir, ".git")
+		if _, err := os.Lstat(marker); err == nil {
+			return true, nil
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			return false, fmt.Errorf("stat %s: %w", marker, err)
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return false, nil
+		}
+		dir = parent
+	}
 }
 
 func gitCommandError(dir string, args []string, err error, stderr string) error {
@@ -308,7 +326,7 @@ func gitCommandError(dir string, args []string, err error, stderr string) error 
 }
 
 func withoutGitEnv(env []string) []string {
-	// Git no-match detection parses stderr, so force a stable locale.
+	// Keep Git diagnostics stable and prevent caller GIT_* variables from changing discovery.
 	filtered := make([]string, 0, len(env)+1)
 	for _, entry := range env {
 		if strings.HasPrefix(entry, "GIT_") || strings.HasPrefix(entry, "LC_ALL=") {

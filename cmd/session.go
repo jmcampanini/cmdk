@@ -98,6 +98,13 @@ func runSessionResolveCommand(cmd *cobra.Command, path string, options sessionRe
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	resolveTimeout := cfg.Timeout.Fetch
+	if resolveTimeout <= 0 {
+		resolveTimeout = config.DefaultConfig().Timeout.Fetch
+	}
+	ctx, cancel := context.WithTimeout(ctx, resolveTimeout)
+	defer cancel()
+
 	plan, err := resolver.Resolve(ctx, path, display)
 	if err != nil {
 		return err
