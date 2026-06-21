@@ -82,7 +82,7 @@ func newWindowItem(parsed windowLine, bell bool) item.Item {
 	it := item.NewItem()
 	it.Type = "window"
 	it.Source = "tmux"
-	it.Display = fmt.Sprintf("tmux: %s:%s %s", sessionName, parsed.windowIndex, windowName)
+	it.Display = tmuxWindowDisplay(parsed.windowIndex, windowName, sessionName)
 	it.Action = item.ActionExecute
 	it.Cmd = tmuxWindowSwitchCommand
 	it.Data["session_name"] = sessionName
@@ -285,16 +285,24 @@ func newSessionWindowItem(session item.Item, windowIndex, windowID, windowName s
 	it := item.NewItem()
 	it.Type = "window"
 	it.Source = "tmux"
-	it.Display = "window " + windowIndex
-	if windowName != "" {
-		it.Display += " " + windowName
-	}
+	it.Display = tmuxWindowDisplay(windowIndex, windowName, session.Data["session_name"])
 	it.Action = item.ActionExecute
 	it.Cmd = tmuxWindowSwitchCommand
 	maps.Copy(it.Data, session.Data)
 	it.Data["window_index"] = windowIndex
 	it.Data["window_id"] = windowID
 	return it
+}
+
+func tmuxWindowDisplay(windowIndex, windowName, sessionName string) string {
+	display := "tmux:win: " + windowIndex
+	if windowName != "" {
+		display += " " + windowName
+	}
+	if sessionName != "" {
+		display += " ‹ " + sessionName
+	}
+	return display
 }
 
 func ListWindowsForSession(ctx context.Context, session item.Item) ([]item.Item, error) {

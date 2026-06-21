@@ -13,7 +13,7 @@ import (
 func sessionAccumulated() []item.Item {
 	s := item.NewItem()
 	s.Type = "session"
-	s.Display = "tmux: work"
+	s.Display = "tmux:ses: work"
 	s.Data["session_id"] = "$2"
 	s.Data["session_name"] = "work"
 	s.Data["session_kind"] = "external"
@@ -28,8 +28,8 @@ func TestSessionGenerator_Ordering(t *testing.T) {
 	}}
 	fetch := func(context.Context, item.Item) ([]item.Item, error) {
 		return []item.Item{
-			{Type: "window", Display: "window 1 zsh", Action: item.ActionExecute},
-			{Type: "window", Display: "window 2 vim", Action: item.ActionExecute},
+			{Type: "window", Display: "tmux:win: 1 zsh ‹ work", Action: item.ActionExecute},
+			{Type: "window", Display: "tmux:win: 2 vim ‹ work", Action: item.ActionExecute},
 		}, nil
 	}
 
@@ -39,7 +39,7 @@ func TestSessionGenerator_Ordering(t *testing.T) {
 	for i, it := range items {
 		got[i] = it.Display
 	}
-	want := []string{"Connect", "Rename", "window 1 zsh", "window 2 vim"}
+	want := []string{"Connect", "Rename", "tmux:win: 1 zsh ‹ work", "tmux:win: 2 vim ‹ work"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("displays = %v, want %v", got, want)
 	}

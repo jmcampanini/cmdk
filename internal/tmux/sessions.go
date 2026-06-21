@@ -93,7 +93,7 @@ func parseSessionLine(line string) (sessionEntry, bool) {
 }
 
 func newSessionItem(sessionID, sessionName, sessionWindows, sessionAttached string) item.Item {
-	display := "tmux: " + sessionName
+	display := "tmux:ses: " + sessionName
 	it := item.NewItem()
 	it.Type = "session"
 	it.Source = "tmux"
