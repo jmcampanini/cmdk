@@ -61,15 +61,27 @@ func Resolve(ctx context.Context, inputPath string, display DisplayOptions) (Pla
 		return Plan{}, fmt.Errorf("path is not a directory: %s", absPath)
 	}
 
-	if worktree, ok := gitWorktreeTop(ctx, absPath); ok {
+	worktree, ok, err := gitWorktreeTop(ctx, absPath)
+	if err != nil {
+		return Plan{}, err
+	}
+	if ok {
 		sessionKey := worktree
-		if container, ok := groveContainerForWorktree(ctx, worktree); ok {
+		container, ok, err := groveContainerForWorktree(ctx, worktree)
+		if err != nil {
+			return Plan{}, err
+		}
+		if ok {
 			sessionKey = container
 		}
 		return newRepoPlan(sessionKey, worktree, display), nil
 	}
 
-	if anchor, ok := groveAnchorFromContainer(ctx, absPath); ok {
+	anchor, ok, err := groveAnchorFromContainer(ctx, absPath)
+	if err != nil {
+		return Plan{}, err
+	}
+	if ok {
 		return newRepoPlan(absPath, anchor, display), nil
 	}
 
@@ -115,84 +127,120 @@ func TmuxSafeSessionName(sessionKey string) string {
 	return name
 }
 
-func groveAnchorFromContainer(ctx context.Context, dir string) (string, bool) {
+func groveAnchorFromContainer(ctx context.Context, dir string) (string, bool, error) {
 	for _, name := range primaryBranchDirs {
 		child := filepath.Join(dir, name)
-		if validGitWorktreeRoot(ctx, child) {
-			return child, true
+		valid, err := validGitWorktreeRoot(ctx, child)
+		if err != nil {
+			return "", false, err
+		}
+		if valid {
+			return child, true, nil
 		}
 	}
-	return "", false
+	return "", false, nil
 }
 
-func groveContainerForWorktree(ctx context.Context, worktree string) (string, bool) {
+func groveContainerForWorktree(ctx context.Context, worktree string) (string, bool, error) {
 	parent := filepath.Dir(worktree)
-	worktreeCommonDir, haveWorktreeCommonDir := gitCommonDir(ctx, worktree)
+	worktreeCommonDir, haveWorktreeCommonDir, err := gitCommonDir(ctx, worktree)
+	if err != nil {
+		return "", false, err
+	}
 
 	for _, name := range primaryBranchDirs {
 		child := filepath.Join(parent, name)
-		if !validGitWorktreeRoot(ctx, child) {
+		valid, err := validGitWorktreeRoot(ctx, child)
+		if err != nil {
+			return "", false, err
+		}
+		if !valid {
 			continue
 		}
 		if samePath(child, worktree) {
-			return parent, true
+			return parent, true, nil
 		}
 		if !haveWorktreeCommonDir {
 			continue
 		}
-		childCommonDir, ok := gitCommonDir(ctx, child)
+		childCommonDir, ok, err := gitCommonDir(ctx, child)
+		if err != nil {
+			return "", false, err
+		}
 		if ok && childCommonDir == worktreeCommonDir {
-			return parent, true
+			return parent, true, nil
 		}
 	}
-	return "", false
+	return "", false, nil
 }
 
-func validGitWorktreeRoot(ctx context.Context, dir string) bool {
+func validGitWorktreeRoot(ctx context.Context, dir string) (bool, error) {
 	info, err := os.Stat(dir)
 	if err != nil || !info.IsDir() {
-		return false
+		return false, nil
 	}
-	top, ok := gitWorktreeTop(ctx, dir)
-	return ok && samePath(top, dir)
+	top, ok, err := gitWorktreeTop(ctx, dir)
+	if err != nil {
+		return false, err
+	}
+	return ok && samePath(top, dir), nil
 }
 
-func gitWorktreeTop(ctx context.Context, dir string) (string, bool) {
+func gitWorktreeTop(ctx context.Context, dir string) (string, bool, error) {
 	out, err := gitOutput(ctx, dir, "rev-parse", "--show-toplevel")
+	if errors.Is(err, errGitNoMatch) {
+		return "", false, nil
+	}
 	if err != nil {
-		return "", false
+		return "", false, err
 	}
 	top := trimCommandLine(out)
 	if top == "" {
-		return "", false
+		return "", false, nil
 	}
 	absTop, err := filepath.Abs(top)
 	if err != nil {
-		return "", false
+		return "", false, err
 	}
-	return canonicalPath(absTop), true
+	return canonicalPath(absTop), true, nil
 }
 
-func gitCommonDir(ctx context.Context, worktree string) (string, bool) {
+func gitCommonDir(ctx context.Context, worktree string) (string, bool, error) {
 	out, err := gitOutput(ctx, worktree, "rev-parse", "--git-common-dir")
+	if errors.Is(err, errGitNoMatch) {
+		return "", false, nil
+	}
 	if err != nil {
-		return "", false
+		return "", false, err
 	}
 	commonDir := trimCommandLine(out)
 	if commonDir == "" {
-		return "", false
+		return "", false, nil
 	}
 	if !filepath.IsAbs(commonDir) {
 		commonDir = filepath.Join(worktree, commonDir)
 	}
-	return canonicalPath(commonDir), true
+	return canonicalPath(commonDir), true, nil
 }
+
+var errGitNoMatch = errors.New("git command completed without a matching worktree")
 
 func gitOutput(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	cmdArgs := append([]string{"-C", dir}, args...)
 	cmd := exec.CommandContext(ctx, "git", cmdArgs...)
 	cmd.Env = withoutGitEnv(os.Environ())
-	return cmd.Output()
+	out, err := cmd.Output()
+	if err == nil {
+		return out, nil
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, fmt.Errorf("git -C %s %s: %w", dir, strings.Join(args, " "), ctxErr)
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ProcessState != nil && exitErr.Exited() {
+		return nil, errGitNoMatch
+	}
+	return nil, fmt.Errorf("git -C %s %s: %w", dir, strings.Join(args, " "), err)
 }
 
 func withoutGitEnv(env []string) []string {

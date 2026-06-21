@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -119,6 +120,40 @@ func TestResolve_EmptyPathIsRequired(t *testing.T) {
 	}
 	if err.Error() != "path is required" {
 		t.Errorf("error = %q, want path is required", err.Error())
+	}
+}
+
+func TestResolve_PropagatesCanceledGitProbe(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "scratch")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := Resolve(ctx, dir, DisplayOptions{})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("error = %v, want context.Canceled", err)
+	}
+}
+
+func TestResolve_PropagatesGitExecFailure(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "scratch")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", "")
+
+	_, err := Resolve(context.Background(), dir, DisplayOptions{})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var execErr *exec.Error
+	if !errors.As(err, &execErr) {
+		t.Errorf("error = %T %[1]v, want *exec.Error", err)
 	}
 }
 
