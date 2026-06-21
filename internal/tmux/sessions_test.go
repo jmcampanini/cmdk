@@ -2,7 +2,6 @@ package tmux
 
 import (
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/jmcampanini/cmdk/internal/item"
@@ -145,11 +144,17 @@ func TestParseSessions_ReplacesEscapedControlCharsForDisplay(t *testing.T) {
 	}
 }
 
-func TestSessionListFormatEscapesControlChars(t *testing.T) {
-	if !strings.Contains(sessionListFormat, `#{s|\\t|`+tmuxEscapedTab+`|`) {
-		t.Errorf("sessionListFormat should replace escaped tabs: %q", sessionListFormat)
+func TestParseSessions_PreservesLiteralBackslashSequences(t *testing.T) {
+	items := mustParseSessions(t, `$1	feature\\tfoo\\nbar	1	0`+"\n")
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
 	}
-	if !strings.Contains(sessionListFormat, `#{s|\\n|`+tmuxEscapedNewline+`|`) {
-		t.Errorf("sessionListFormat should replace escaped newlines: %q", sessionListFormat)
+
+	wantName := `feature\tfoo\nbar`
+	if items[0].Data["session_name"] != wantName {
+		t.Errorf("session_name = %q, want %q", items[0].Data["session_name"], wantName)
+	}
+	if items[0].Display != "tmux: "+wantName {
+		t.Errorf("Display = %q, want %q", items[0].Display, "tmux: "+wantName)
 	}
 }

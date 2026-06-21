@@ -1,34 +1,37 @@
 package tmux
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
-func TestTmuxTextFormatEscapesActualAndTmuxEscapedControlChars(t *testing.T) {
-	formats := map[string]string{
-		"session": tmuxEscapedSessionNameFormat,
-		"window":  tmuxEscapedWindowNameFormat,
+func TestTmuxNameFormatsUseRawTmuxFields(t *testing.T) {
+	if tmuxEscapedSessionNameFormat != "#{session_name}" {
+		t.Errorf("session name format = %q, want raw tmux field", tmuxEscapedSessionNameFormat)
 	}
-	checks := map[string]string{
-		"actual tab":      "#{s|\t|" + tmuxEscapedTab + "|",
-		"actual newline":  "#{s|\n|" + tmuxEscapedNewline + "|",
-		"escaped tab":     `#{s|\\t|` + tmuxEscapedTab + `|`,
-		"escaped newline": `#{s|\\n|` + tmuxEscapedNewline + `|`,
-	}
-
-	for name, format := range formats {
-		for checkName, want := range checks {
-			if !strings.Contains(format, want) {
-				t.Errorf("%s format missing %s replacement %q in %q", name, checkName, want, format)
-			}
-		}
+	if tmuxEscapedWindowNameFormat != "#{window_name}" {
+		t.Errorf("window name format = %q, want raw tmux field", tmuxEscapedWindowNameFormat)
 	}
 }
 
-func TestDisplaySafeTmuxTextReplacesActualAndTmuxEscapedControlChars(t *testing.T) {
-	input := "actual\ttab actual\nnewline escaped\\ttab escaped\\nnewline"
-	want := "actual" + tmuxEscapedTab + "tab actual" + tmuxEscapedNewline + "newline escaped" + tmuxEscapedTab + "tab escaped" + tmuxEscapedNewline + "newline"
+func TestDisplaySafeTmuxTextDecodesTmuxEscapedControlChars(t *testing.T) {
+	input := "tmux\\ttab tmux\\nnewline"
+	want := "tmux" + tmuxEscapedTab + "tab tmux" + tmuxEscapedNewline + "newline"
+
+	if got := displaySafeTmuxText(input); got != want {
+		t.Errorf("displaySafeTmuxText() = %q, want %q", got, want)
+	}
+}
+
+func TestDisplaySafeTmuxTextPreservesLiteralBackslashSequences(t *testing.T) {
+	input := "literal\\\\ttab literal\\\\nnewline backslash\\\\"
+	want := "literal\\ttab literal\\nnewline backslash\\"
+
+	if got := displaySafeTmuxText(input); got != want {
+		t.Errorf("displaySafeTmuxText() = %q, want %q", got, want)
+	}
+}
+
+func TestDisplaySafeTmuxTextHandlesActualAndUnknownEscapes(t *testing.T) {
+	input := "actual\ttab actual\nnewline unknown\\x trailing\\"
+	want := "actual" + tmuxEscapedTab + "tab actual" + tmuxEscapedNewline + "newline unknown\\x trailing\\"
 
 	if got := displaySafeTmuxText(input); got != want {
 		t.Errorf("displaySafeTmuxText() = %q, want %q", got, want)

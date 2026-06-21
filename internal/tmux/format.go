@@ -6,48 +6,54 @@ const (
 	tmuxFieldSeparator = "\t"
 	tmuxEscapedNewline = "↵"
 	tmuxEscapedTab     = "⇥"
+
+	// tmux escapes control characters in format output (for example, tabs as
+	// `\t`) and doubles literal backslashes. Keep the raw fields in the tmux
+	// format and decode them in Go so literal `\t`/`\n` names stay distinct
+	// from actual tab/newline characters.
+	tmuxEscapedSessionNameFormat = "#{session_name}"
+	tmuxEscapedWindowNameFormat  = "#{window_name}"
 )
-
-type tmuxTextReplacement struct {
-	// outputPattern is the bytes tmux may emit in list-* output.
-	outputPattern string
-	// formatPattern is the escaped form tmux's #{s|...|...|:...} modifier expects.
-	formatPattern string
-	glyph         string
-}
-
-var tmuxTextReplacements = []tmuxTextReplacement{
-	{outputPattern: "\t", formatPattern: "\t", glyph: tmuxEscapedTab},
-	{outputPattern: "\n", formatPattern: "\n", glyph: tmuxEscapedNewline},
-	{outputPattern: `\t`, formatPattern: `\\t`, glyph: tmuxEscapedTab},
-	{outputPattern: `\n`, formatPattern: `\\n`, glyph: tmuxEscapedNewline},
-}
-
-var (
-	tmuxEscapedSessionNameFormat = tmuxTextFormat("#{session_name}")
-	tmuxEscapedWindowNameFormat  = tmuxTextFormat("#{window_name}")
-)
-
-func tmuxTextFormat(expr string) string {
-	for _, repl := range tmuxTextReplacements {
-		expr = tmuxSubstitute(repl.formatPattern, repl.glyph, expr)
-	}
-	return expr
-}
-
-func tmuxSubstitute(pattern, replacement, expr string) string {
-	return "#{s|" + pattern + "|" + replacement + "|:" + expr + "}"
-}
 
 func tmuxFormatFields(fields ...string) string {
 	return strings.Join(fields, tmuxFieldSeparator)
 }
 
 func displaySafeTmuxText(s string) string {
-	for _, repl := range tmuxTextReplacements {
-		s = strings.ReplaceAll(s, repl.outputPattern, repl.glyph)
+	var b strings.Builder
+	b.Grow(len(s))
+
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '\t':
+			b.WriteString(tmuxEscapedTab)
+		case '\n':
+			b.WriteString(tmuxEscapedNewline)
+		case '\\':
+			if i+1 >= len(s) {
+				b.WriteByte('\\')
+				continue
+			}
+
+			next := s[i+1]
+			switch next {
+			case 't':
+				b.WriteString(tmuxEscapedTab)
+			case 'n':
+				b.WriteString(tmuxEscapedNewline)
+			case '\\':
+				b.WriteByte('\\')
+			default:
+				b.WriteByte('\\')
+				b.WriteByte(next)
+			}
+			i++
+		default:
+			b.WriteByte(s[i])
+		}
 	}
-	return s
+
+	return b.String()
 }
 
 func cleanTmuxLine(line string) string {
