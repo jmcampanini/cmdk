@@ -20,29 +20,49 @@ func TestTmuxNameFormatsSubstituteControlsBeforeDelimiting(t *testing.T) {
 	}
 }
 
-func TestDisplaySafeTmuxTextDecodesTmuxEscapedControlChars(t *testing.T) {
+func TestDisplaySafeTmuxWindowNameHandlesActualControls(t *testing.T) {
+	input := "actual\ttab actual\nnewline actual\rreturn"
+	want := "actual" + tmuxEscapedTab + "tab actual" + tmuxEscapedNewline + "newline actual" + tmuxEscapedNewline + "return"
+
+	if got := displaySafeTmuxWindowName(input); got != want {
+		t.Errorf("displaySafeTmuxWindowName() = %q, want %q", got, want)
+	}
+}
+
+func TestDisplaySafeTmuxWindowNamePreservesLiteralBackslashSequences(t *testing.T) {
+	input := `literal\ttab literal\nnewline backslash\ unknown\x`
+
+	if got := displaySafeTmuxWindowName(input); got != input {
+		t.Errorf("displaySafeTmuxWindowName() = %q, want %q", got, input)
+	}
+}
+
+func TestDisplaySafeTmuxSessionNameDecodesTmuxEscapedControlChars(t *testing.T) {
 	input := "tmux\\ttab tmux\\nnewline"
 	want := "tmux" + tmuxEscapedTab + "tab tmux" + tmuxEscapedNewline + "newline"
 
-	if got := displaySafeTmuxText(input); got != want {
-		t.Errorf("displaySafeTmuxText() = %q, want %q", got, want)
+	if got := displaySafeTmuxSessionName(input); got != want {
+		t.Errorf("displaySafeTmuxSessionName() = %q, want %q", got, want)
 	}
 }
 
-func TestDisplaySafeTmuxTextPreservesLiteralBackslashSequences(t *testing.T) {
+func TestDisplaySafeTmuxSessionNamePreservesLiteralBackslashSequences(t *testing.T) {
 	input := "literal\\\\ttab literal\\\\nnewline backslash\\\\"
 	want := "literal\\ttab literal\\nnewline backslash\\"
 
-	if got := displaySafeTmuxText(input); got != want {
-		t.Errorf("displaySafeTmuxText() = %q, want %q", got, want)
+	if got := displaySafeTmuxSessionName(input); got != want {
+		t.Errorf("displaySafeTmuxSessionName() = %q, want %q", got, want)
 	}
 }
 
-func TestDisplaySafeTmuxTextHandlesActualAndUnknownEscapes(t *testing.T) {
-	input := "actual\ttab actual\nnewline unknown\\x trailing\\"
-	want := "actual" + tmuxEscapedTab + "tab actual" + tmuxEscapedNewline + "newline unknown\\x trailing\\"
+func TestDisplaySafeTmuxNamesReplaceUnsafeBytesAndControls(t *testing.T) {
+	input := string([]byte{'o', 0xff, 'k', 0x1b})
+	want := "o_k_"
 
-	if got := displaySafeTmuxText(input); got != want {
-		t.Errorf("displaySafeTmuxText() = %q, want %q", got, want)
+	if got := displaySafeTmuxWindowName(input); got != want {
+		t.Errorf("displaySafeTmuxWindowName() = %q, want %q", got, want)
+	}
+	if got := displaySafeTmuxSessionName(input); got != want {
+		t.Errorf("displaySafeTmuxSessionName() = %q, want %q", got, want)
 	}
 }

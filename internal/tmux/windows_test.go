@@ -115,8 +115,8 @@ func TestParseWindows_WindowNameWithSpaces(t *testing.T) {
 	}
 }
 
-func TestParseWindows_EscapedControlCharsInNames(t *testing.T) {
-	output := "work\\nnotes\t$9\t1\t@7\tmy\\tcool\\napp\t0\n"
+func TestParseWindows_EscapedSessionAndDisplaySafeWindowNames(t *testing.T) {
+	output := "work\\nnotes\t$9\t1\t@7\tmy" + tmuxEscapedTab + "cool" + tmuxEscapedNewline + "app\t0\n"
 	items := mustParseWindows(t, output)
 
 	if len(items) != 1 {
@@ -135,7 +135,7 @@ func TestParseWindows_EscapedControlCharsInNames(t *testing.T) {
 }
 
 func TestParseWindows_PreservesLiteralBackslashSequences(t *testing.T) {
-	items := mustParseWindows(t, `work\\nnotes	$9	1	@7	my\\tcool\\napp	0`+"\n")
+	items := mustParseWindows(t, "work\\\\nnotes\t$9\t1\t@7\tmy\\tcool\\napp\t0\n")
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
@@ -290,11 +290,11 @@ func TestParseWindowsForSession(t *testing.T) {
 	}
 }
 
-func TestParseWindowsForSession_EscapedControlCharsInName(t *testing.T) {
+func TestParseWindowsForSession_DisplaySafeControlGlyphsInName(t *testing.T) {
 	session := item.NewItem()
 	session.Data["session_id"] = "$1"
 
-	items := mustParseWindowsForSession(t, "1\t@2\tmy\\tcool\\napp\t0\n", session)
+	items := mustParseWindowsForSession(t, "1\t@2\tmy"+tmuxEscapedTab+"cool"+tmuxEscapedNewline+"app\t0\n", session)
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
 	}

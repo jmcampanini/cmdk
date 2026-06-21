@@ -70,8 +70,8 @@ func parseWindowLine(line string) (windowLine, bool) {
 }
 
 func newWindowItem(parsed windowLine, bell bool) item.Item {
-	sessionName := displaySafeTmuxText(parsed.session)
-	windowName := displaySafeTmuxText(parsed.windowName)
+	sessionName := displaySafeTmuxSessionName(parsed.session)
+	windowName := displaySafeTmuxWindowName(parsed.windowName)
 
 	it := item.NewItem()
 	it.Type = "window"
@@ -274,7 +274,7 @@ func parseSessionWindowLine(line string) (sessionWindowLine, bool) {
 }
 
 func newSessionWindowItem(session item.Item, windowIndex, windowID, windowName string) item.Item {
-	windowName = displaySafeTmuxText(windowName)
+	windowName = displaySafeTmuxWindowName(windowName)
 
 	it := item.NewItem()
 	it.Type = "window"
