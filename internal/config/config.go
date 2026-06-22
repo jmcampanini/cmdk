@@ -83,19 +83,21 @@ var validMatchTypes = []string{matchTypeRoot, matchTypeDir, matchTypeSession}
 var reservedStageKeys = []string{
 	"path",
 	"pane_id",
-	"session",
 	"session_id",
-	"window_index",
+	"session_name",
 	"window_id",
+	"window_index",
+	"window_name",
 }
 
-var sessionActionReservedStageKeys = slices.Concat(reservedStageKeys, []string{
+var sessionActionExtraReservedStageKeys = []string{
 	"session_attached",
 	"session_display",
 	"session_kind",
-	"session_name",
 	"session_windows",
-})
+}
+
+var sessionActionReservedStageKeys = slices.Concat(reservedStageKeys, sessionActionExtraReservedStageKeys)
 
 var validStageKey = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 

@@ -41,5 +41,6 @@ For the full command reference, run `cmdk --help`. See also:
 - `cmdk help exit-codes` — exit codes and error categories
 - `cmdk config --provenance` — effective configuration and source provenance
 - `cmdk logs --help` — where logs go and how to inspect them
+- `cmdk session resolve <path>` — inspect the planned session for a path
 - `cmdk docs` — configuration reference
 - `cmdk icons` — supported icon aliases

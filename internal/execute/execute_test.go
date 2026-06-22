@@ -244,7 +244,6 @@ func TestBuildCMDKEnvVars_Basic(t *testing.T) {
 	items := []item.Item{
 		{Data: map[string]string{
 			"path":         "/home/user",
-			"session":      "legacy-alias",
 			"session_name": "main",
 			"session_id":   "$1",
 			"window_id":    "@2",
@@ -270,6 +269,16 @@ func TestBuildCMDKEnvVars_Basic(t *testing.T) {
 	}
 	if envMap["CMDK_PANE_ID"] != "%1" {
 		t.Errorf("CMDK_PANE_ID = %q, want %%1", envMap["CMDK_PANE_ID"])
+	}
+}
+
+func TestBuildCMDKEnvVars_UserSessionKeyIsPreserved(t *testing.T) {
+	items := []item.Item{{Data: map[string]string{"session": "scratch"}}}
+	envs := BuildCMDKEnvVars(items, "")
+	envMap := envSliceToMap(envs)
+
+	if envMap["CMDK_SESSION"] != "scratch" {
+		t.Errorf("CMDK_SESSION = %q, want scratch", envMap["CMDK_SESSION"])
 	}
 }
 

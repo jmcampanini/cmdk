@@ -20,6 +20,10 @@ type SectionDoc struct {
 }
 
 func ConfigDocs() []SectionDoc {
+	reservedStageKeyValidation := "cannot be empty; must be unique within action; " +
+		"cannot be reserved (" + strings.Join(reservedStageKeys, ", ") +
+		"; session actions also reserve " + strings.Join(sessionActionExtraReservedStageKeys, ", ") + ")"
+
 	return []SectionDoc{
 		{
 			Name:        "actions",
@@ -38,7 +42,7 @@ func ConfigDocs() []SectionDoc {
 			Description: "Stages are declared inline within an action's stages array.\n  Each stage collects one piece of data before the action executes.",
 			Fields: []FieldDoc{
 				{Name: "type", Type: "string", Description: "Stage type: \"prompt\" (text input) or \"picker\" (shell command → fuzzy list).", Validation: "must be \"prompt\" or \"picker\""},
-				{Name: "key", Type: "string", Description: "Template variable name for the stage's output value.", Validation: "cannot be empty; must be unique within action; cannot be reserved (path, pane_id, session, session_id, window_index, window_id; session actions also reserve session_attached, session_display, session_kind, session_name, session_windows). The reserved name session is not emitted; use session_name for tmux session names."},
+				{Name: "key", Type: "string", Description: "Template variable name for the stage's output value.", Validation: reservedStageKeyValidation},
 				{Name: "text", Type: "string", Description: "Prompt label (Go template). Only for type = \"prompt\".", Validation: "required for prompt; forbidden for picker"},
 				{Name: "default", Type: "string", Description: "Default value pre-filled in prompt (Go template). Only for type = \"prompt\"."},
 				{Name: "source", Type: "string", Description: "Shell command run via sh -c that produces newline-separated entries (Go template). Only for type = \"picker\".", Validation: "required for picker; forbidden for prompt"},
@@ -136,12 +140,13 @@ TEMPLATE VARIABLES
       {{.path}}           directory path (for dir-matching actions)
       {{.pane_id}}        tmux pane ID (when --pane-id is set)
       {{.session_id}}     stable tmux session ID (from window or session items)
-      {{.window_index}}   tmux window index (from window items in the selection stack)
+      {{.session_name}}   display-safe tmux session name (from window or session items)
       {{.window_id}}      stable tmux window ID (from window items in the selection stack)
+      {{.window_index}}   tmux window index (from window items in the selection stack)
+      {{.window_name}}    display-safe tmux window name (from window items in the selection stack)
       {{.session_attached}} tmux attached client count (from session items)
       {{.session_display}}  display string for the selected session
       {{.session_kind}}     session classification; "external" in this phase
-      {{.session_name}}     display-safe tmux session name (from window or session items)
       {{.session_windows}}  tmux window count (from session items)
       {{.<key>}}          stage output keyed by the stage's key field
 
