@@ -15,6 +15,16 @@ import (
 	resolver "github.com/jmcampanini/cmdk/internal/session"
 )
 
+func useTempConfigHome(t *testing.T) string {
+	t.Helper()
+	xdg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	oldConfigPath := configPath
+	configPath = ""
+	t.Cleanup(func() { configPath = oldConfigPath })
+	return xdg
+}
+
 func TestSessionResolveCommandRequiresPath(t *testing.T) {
 	cmd := newSessionResolveCommand()
 	if err := cmd.Args(cmd, nil); err == nil {
@@ -65,10 +75,7 @@ func TestWriteSessionPlan(t *testing.T) {
 }
 
 func TestRunSessionResolveCommandJSON(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	oldConfigPath := configPath
-	configPath = ""
-	defer func() { configPath = oldConfigPath }()
+	useTempConfigHome(t)
 
 	dir := filepath.Join(t.TempDir(), "scratch")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -103,10 +110,7 @@ func TestRunSessionResolveCommandJSON(t *testing.T) {
 }
 
 func TestRunSessionResolveCommandShortensSymlinkedHome(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	oldConfigPath := configPath
-	configPath = ""
-	defer func() { configPath = oldConfigPath }()
+	useTempConfigHome(t)
 
 	root := t.TempDir()
 	realHome := filepath.Join(root, "real-home")
@@ -137,8 +141,7 @@ func TestRunSessionResolveCommandShortensSymlinkedHome(t *testing.T) {
 }
 
 func TestRunSessionResolveCommandTimesOutGitProbe(t *testing.T) {
-	xdg := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", xdg)
+	xdg := useTempConfigHome(t)
 	cfgDir := filepath.Join(xdg, "cmdk")
 	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -146,10 +149,6 @@ func TestRunSessionResolveCommandTimesOutGitProbe(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(cfgDir, "config.toml"), []byte("[timeout]\nfetch = \"10ms\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	oldConfigPath := configPath
-	configPath = ""
-	defer func() { configPath = oldConfigPath }()
-
 	bin := t.TempDir()
 	gitPath := filepath.Join(bin, "git")
 	if err := os.WriteFile(gitPath, []byte("#!/bin/sh\nwhile :; do :; done\n"), 0o755); err != nil {

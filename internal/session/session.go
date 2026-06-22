@@ -19,7 +19,7 @@ const (
 	KindDirectory = "directory"
 )
 
-var primaryBranchDirs = []string{"main", "develop", "master"}
+var primaryBranchDirs = [...]string{"main", "develop", "master"}
 
 type DisplayOptions struct {
 	Home        string
@@ -48,21 +48,9 @@ func Resolve(ctx context.Context, inputPath string, display DisplayOptions) (Pla
 		return Plan{}, err
 	}
 
-	absPath, err := filepath.Abs(inputPath)
+	absPath, err := resolveExistingDirectory(inputPath)
 	if err != nil {
-		return Plan{}, fmt.Errorf("resolving absolute path: %w", err)
-	}
-	absPath = filepath.Clean(absPath)
-
-	info, err := os.Stat(absPath)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return Plan{}, fmt.Errorf("path does not exist: %s", absPath)
-		}
-		return Plan{}, fmt.Errorf("path is not accessible: %w", err)
-	}
-	if !info.IsDir() {
-		return Plan{}, fmt.Errorf("path is not a directory: %s", absPath)
+		return Plan{}, err
 	}
 
 	worktree, ok, err := gitWorktreeTop(ctx, absPath)
@@ -70,13 +58,9 @@ func Resolve(ctx context.Context, inputPath string, display DisplayOptions) (Pla
 		return Plan{}, err
 	}
 	if ok {
-		sessionKey := worktree
-		container, ok, err := groveContainerForWorktree(ctx, worktree)
+		sessionKey, err := sessionKeyForWorktree(ctx, worktree)
 		if err != nil {
 			return Plan{}, err
-		}
-		if ok {
-			sessionKey = container
 		}
 		return newRepoPlan(sessionKey, worktree, display), nil
 	}
@@ -92,28 +76,59 @@ func Resolve(ctx context.Context, inputPath string, display DisplayOptions) (Pla
 	return newDirectoryPlan(absPath, display), nil
 }
 
-func newRepoPlan(sessionKey, launchPath string, display DisplayOptions) Plan {
-	canonicalSessionKey := canonicalPath(sessionKey)
-	canonicalLaunchPath := canonicalPath(launchPath)
-	return Plan{
-		SessionKind:            KindRepo,
-		SessionKey:             canonicalSessionKey,
-		DisplayLabel:           displayLabel(canonicalSessionKey, display),
-		LaunchPath:             canonicalLaunchPath,
-		PlannedTmuxSessionName: TmuxSafeSessionName(canonicalSessionKey),
-		PlannedTmuxWindowName:  filepath.Base(filepath.Clean(canonicalLaunchPath)),
+func resolveExistingDirectory(inputPath string) (string, error) {
+	absPath, err := filepath.Abs(inputPath)
+	if err != nil {
+		return "", fmt.Errorf("resolving absolute path: %w", err)
 	}
+	absPath = filepath.Clean(absPath)
+
+	info, err := os.Stat(absPath)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", fmt.Errorf("path does not exist: %s", absPath)
+		}
+		return "", fmt.Errorf("path is not accessible: %w", err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("path is not a directory: %s", absPath)
+	}
+	return absPath, nil
+}
+
+func sessionKeyForWorktree(ctx context.Context, worktree string) (string, error) {
+	container, ok, err := groveContainerForWorktree(ctx, worktree)
+	if err != nil {
+		return "", err
+	}
+	if ok {
+		return container, nil
+	}
+	return worktree, nil
+}
+
+func newRepoPlan(sessionKey, launchPath string, display DisplayOptions) Plan {
+	return newPlanFromCanonicalPaths(
+		KindRepo,
+		canonicalPath(sessionKey),
+		canonicalPath(launchPath),
+		display,
+	)
 }
 
 func newDirectoryPlan(path string, display DisplayOptions) Plan {
 	canonicalDirectoryPath := canonicalPath(path)
+	return newPlanFromCanonicalPaths(KindDirectory, canonicalDirectoryPath, canonicalDirectoryPath, display)
+}
+
+func newPlanFromCanonicalPaths(kind, sessionKey, launchPath string, display DisplayOptions) Plan {
 	return Plan{
-		SessionKind:            KindDirectory,
-		SessionKey:             canonicalDirectoryPath,
-		DisplayLabel:           displayLabel(canonicalDirectoryPath, display),
-		LaunchPath:             canonicalDirectoryPath,
-		PlannedTmuxSessionName: TmuxSafeSessionName(canonicalDirectoryPath),
-		PlannedTmuxWindowName:  filepath.Base(filepath.Clean(canonicalDirectoryPath)),
+		SessionKind:            kind,
+		SessionKey:             sessionKey,
+		DisplayLabel:           displayLabel(sessionKey, display),
+		LaunchPath:             launchPath,
+		PlannedTmuxSessionName: TmuxSafeSessionName(sessionKey),
+		PlannedTmuxWindowName:  filepath.Base(filepath.Clean(launchPath)),
 	}
 }
 
@@ -135,21 +150,15 @@ func groveAnchorFromContainer(ctx context.Context, dir string) (string, bool, er
 	var firstStatErr error
 	for _, name := range primaryBranchDirs {
 		child := filepath.Join(dir, name)
-		valid, err := validGitWorktreeRoot(ctx, child)
+		valid, err := validPrimaryWorktree(ctx, child, &firstStatErr)
 		if err != nil {
-			if rememberWorktreeStatError(err, &firstStatErr) {
-				continue
-			}
 			return "", false, err
 		}
 		if valid {
 			return child, true, nil
 		}
 	}
-	if firstStatErr != nil {
-		return "", false, firstStatErr
-	}
-	return "", false, nil
+	return "", false, firstStatErr
 }
 
 func groveContainerForWorktree(ctx context.Context, worktree string) (string, bool, error) {
@@ -162,11 +171,8 @@ func groveContainerForWorktree(ctx context.Context, worktree string) (string, bo
 	var firstStatErr error
 	for _, name := range primaryBranchDirs {
 		child := filepath.Join(parent, name)
-		valid, err := validGitWorktreeRoot(ctx, child)
+		valid, err := validPrimaryWorktree(ctx, child, &firstStatErr)
 		if err != nil {
-			if rememberWorktreeStatError(err, &firstStatErr) {
-				continue
-			}
 			return "", false, err
 		}
 		if !valid {
@@ -186,10 +192,18 @@ func groveContainerForWorktree(ctx context.Context, worktree string) (string, bo
 			return parent, true, nil
 		}
 	}
-	if firstStatErr != nil {
-		return "", false, firstStatErr
+	return "", false, firstStatErr
+}
+
+func validPrimaryWorktree(ctx context.Context, dir string, firstStatErr *error) (bool, error) {
+	valid, err := validGitWorktreeRoot(ctx, dir)
+	if err == nil {
+		return valid, nil
 	}
-	return "", false, nil
+	if rememberWorktreeStatError(err, firstStatErr) {
+		return false, nil
+	}
+	return false, err
 }
 
 func validGitWorktreeRoot(ctx context.Context, dir string) (bool, error) {
@@ -314,9 +328,11 @@ func hasGitMarkerInAncestors(path string) (bool, error) {
 	dir := filepath.Clean(path)
 	for {
 		marker := filepath.Join(dir, ".git")
-		if _, err := os.Lstat(marker); err == nil {
+		_, err := os.Lstat(marker)
+		if err == nil {
 			return true, nil
-		} else if !errors.Is(err, fs.ErrNotExist) {
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
 			return false, fmt.Errorf("stat %s: %w", marker, err)
 		}
 

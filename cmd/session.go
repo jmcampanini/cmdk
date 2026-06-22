@@ -73,36 +73,12 @@ func runSessionResolveCommand(cmd *cobra.Command, path string, options sessionRe
 		return fmt.Errorf("loading config: %w", err)
 	}
 
-	home, err := os.UserHomeDir()
-	if err != nil && cfg.Display.ShortenHome != "" {
-		return fmt.Errorf("cannot shorten home prefix: %w", err)
-	}
-	if cfg.Display.ShortenHome != "" && home != "" {
-		resolvedHome, err := filepath.EvalSymlinks(home)
-		if err != nil {
-			return fmt.Errorf("cannot resolve home prefix: %w", err)
-		}
-		home = filepath.Clean(resolvedHome)
-	}
-	display := resolver.DisplayOptions{
-		Home:        home,
-		ShortenHome: cfg.Display.ShortenHome,
-		Rules:       pathfmt.CompileRules(cfg.Display.Rules),
-		Truncation: pathfmt.Truncation{
-			Length: cfg.Display.TruncationLength,
-			Symbol: cfg.Display.TruncationSymbol,
-		},
+	display, err := sessionDisplayOptions(cfg)
+	if err != nil {
+		return err
 	}
 
-	ctx := cmd.Context()
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	resolveTimeout := cfg.Timeout.Fetch
-	if resolveTimeout <= 0 {
-		resolveTimeout = config.DefaultConfig().Timeout.Fetch
-	}
-	ctx, cancel := context.WithTimeout(ctx, resolveTimeout)
+	ctx, cancel := sessionResolveContext(cmd, cfg)
 	defer cancel()
 
 	plan, err := resolver.Resolve(ctx, path, display)
@@ -116,6 +92,42 @@ func runSessionResolveCommand(cmd *cobra.Command, path string, options sessionRe
 		return enc.Encode(plan)
 	}
 	return writeSessionPlan(cmd.OutOrStdout(), plan)
+}
+
+func sessionDisplayOptions(cfg config.Config) (resolver.DisplayOptions, error) {
+	home, err := os.UserHomeDir()
+	if err != nil && cfg.Display.ShortenHome != "" {
+		return resolver.DisplayOptions{}, fmt.Errorf("cannot shorten home prefix: %w", err)
+	}
+	if cfg.Display.ShortenHome != "" && home != "" {
+		resolvedHome, err := filepath.EvalSymlinks(home)
+		if err != nil {
+			return resolver.DisplayOptions{}, fmt.Errorf("cannot resolve home prefix: %w", err)
+		}
+		home = filepath.Clean(resolvedHome)
+	}
+
+	return resolver.DisplayOptions{
+		Home:        home,
+		ShortenHome: cfg.Display.ShortenHome,
+		Rules:       pathfmt.CompileRules(cfg.Display.Rules),
+		Truncation: pathfmt.Truncation{
+			Length: cfg.Display.TruncationLength,
+			Symbol: cfg.Display.TruncationSymbol,
+		},
+	}, nil
+}
+
+func sessionResolveContext(cmd *cobra.Command, cfg config.Config) (context.Context, context.CancelFunc) {
+	ctx := cmd.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	resolveTimeout := cfg.Timeout.Fetch
+	if resolveTimeout <= 0 {
+		resolveTimeout = config.DefaultConfig().Timeout.Fetch
+	}
+	return context.WithTimeout(ctx, resolveTimeout)
 }
 
 func writeSessionPlan(out io.Writer, plan resolver.Plan) error {
