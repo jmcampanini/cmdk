@@ -243,6 +243,30 @@ func TestResolve_StandaloneRepoFallback(t *testing.T) {
 	}
 }
 
+func TestResolve_StandaloneRepoFallbackIgnoresCorruptGroveSibling(t *testing.T) {
+	root := t.TempDir()
+	repo := filepath.Join(root, "foo")
+	initRepo(t, repo)
+	main := filepath.Join(root, "main")
+	if err := os.MkdirAll(main, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(main, ".git"), []byte("gitdir: /nonexistent\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	repoReal := realPath(t, repo)
+	plan := resolveForTest(t, repo, DisplayOptions{})
+	assertPlan(t, plan, Plan{
+		SessionKind:            KindRepo,
+		SessionKey:             repoReal,
+		DisplayLabel:           repoReal,
+		LaunchPath:             repoReal,
+		PlannedTmuxSessionName: TmuxSafeSessionName(repoReal),
+		PlannedTmuxWindowName:  "foo",
+	})
+}
+
 func TestResolve_SymlinkedStandaloneRepoUsesCanonicalSessionKey(t *testing.T) {
 	repo := filepath.Join(t.TempDir(), "repo")
 	initRepo(t, repo)

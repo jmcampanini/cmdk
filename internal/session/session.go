@@ -168,12 +168,15 @@ func groveContainerForWorktree(ctx context.Context, worktree string) (string, bo
 		return "", false, err
 	}
 
-	var firstStatErr error
+	var ignoredStatErr error
 	for _, name := range primaryBranchDirs {
 		child := filepath.Join(parent, name)
-		valid, err := validPrimaryWorktree(ctx, child, &firstStatErr)
+		valid, err := validPrimaryWorktree(ctx, child, &ignoredStatErr)
 		if err != nil {
-			return "", false, err
+			if isContextError(err) {
+				return "", false, err
+			}
+			continue
 		}
 		if !valid {
 			continue
@@ -186,13 +189,16 @@ func groveContainerForWorktree(ctx context.Context, worktree string) (string, bo
 		}
 		childCommonDir, ok, err := gitCommonDir(ctx, child)
 		if err != nil {
-			return "", false, err
+			if isContextError(err) {
+				return "", false, err
+			}
+			continue
 		}
 		if ok && childCommonDir == worktreeCommonDir {
 			return parent, true, nil
 		}
 	}
-	return "", false, firstStatErr
+	return "", false, nil
 }
 
 func validPrimaryWorktree(ctx context.Context, dir string, firstStatErr *error) (bool, error) {
@@ -222,6 +228,10 @@ func validGitWorktreeRoot(ctx context.Context, dir string) (bool, error) {
 		return false, err
 	}
 	return ok && samePath(top, dir), nil
+}
+
+func isContextError(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 func rememberWorktreeStatError(err error, firstErr *error) bool {
