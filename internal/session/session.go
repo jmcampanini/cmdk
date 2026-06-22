@@ -368,7 +368,8 @@ func withoutGitEnv(env []string) []string {
 }
 
 func trimCommandLine(out []byte) string {
-	return strings.TrimRight(string(out), "\r\n")
+	line := string(out)
+	return strings.TrimSuffix(line, "\n")
 }
 
 func samePath(a, b string) bool {

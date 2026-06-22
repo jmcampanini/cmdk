@@ -123,6 +123,14 @@ func TestResolve_EmptyPathIsRequired(t *testing.T) {
 	}
 }
 
+func TestTrimCommandLinePreservesPathTrailingNewlines(t *testing.T) {
+	got := trimCommandLine([]byte("/tmp/repo\n\n"))
+	want := "/tmp/repo\n"
+	if got != want {
+		t.Errorf("trimCommandLine() = %q, want %q", got, want)
+	}
+}
+
 func TestResolve_PropagatesCanceledGitProbe(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "scratch")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
