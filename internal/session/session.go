@@ -19,7 +19,10 @@ const (
 	KindDirectory = "directory"
 )
 
-var primaryBranchDirs = [...]string{"main", "develop", "master"}
+var (
+	primaryBranchDirs       = [...]string{"main", "develop", "master"}
+	tmuxSessionNameReplacer = strings.NewReplacer(".", "_", ":", "_")
+)
 
 type DisplayOptions struct {
 	Home        string
@@ -139,7 +142,7 @@ func displayLabel(path string, display DisplayOptions) string {
 func TmuxSafeSessionName(sessionKey string) string {
 	name := filepath.ToSlash(filepath.Clean(sessionKey))
 	name = strings.TrimLeft(name, "/")
-	name = strings.NewReplacer(".", "_", ":", "_").Replace(name)
+	name = tmuxSessionNameReplacer.Replace(name)
 	if name == "" || name == "." {
 		return "_"
 	}
@@ -150,8 +153,11 @@ func groveAnchorFromContainer(ctx context.Context, dir string) (string, bool, er
 	var firstStatErr error
 	for _, name := range primaryBranchDirs {
 		child := filepath.Join(dir, name)
-		valid, err := validPrimaryWorktree(ctx, child, &firstStatErr)
+		valid, err := validGitWorktreeRoot(ctx, child)
 		if err != nil {
+			if rememberWorktreeStatError(err, &firstStatErr) {
+				continue
+			}
 			return "", false, err
 		}
 		if valid {
@@ -168,10 +174,9 @@ func groveContainerForWorktree(ctx context.Context, worktree string) (string, bo
 		return "", false, err
 	}
 
-	var ignoredStatErr error
 	for _, name := range primaryBranchDirs {
 		child := filepath.Join(parent, name)
-		valid, err := validPrimaryWorktree(ctx, child, &ignoredStatErr)
+		valid, err := validGitWorktreeRoot(ctx, child)
 		if err != nil {
 			if isContextError(err) {
 				return "", false, err
@@ -199,17 +204,6 @@ func groveContainerForWorktree(ctx context.Context, worktree string) (string, bo
 		}
 	}
 	return "", false, nil
-}
-
-func validPrimaryWorktree(ctx context.Context, dir string, firstStatErr *error) (bool, error) {
-	valid, err := validGitWorktreeRoot(ctx, dir)
-	if err == nil {
-		return valid, nil
-	}
-	if rememberWorktreeStatError(err, firstStatErr) {
-		return false, nil
-	}
-	return false, err
 }
 
 func validGitWorktreeRoot(ctx context.Context, dir string) (bool, error) {
