@@ -13,43 +13,48 @@ import (
 	"github.com/jmcampanini/cmdk/internal/config"
 	"github.com/jmcampanini/cmdk/internal/pathfmt"
 	resolver "github.com/jmcampanini/cmdk/internal/session"
+	"github.com/jmcampanini/cmdk/internal/tmux"
 )
 
 type sessionResolveOptions struct {
 	json bool
 }
 
+var connectResolvedSession = tmux.ConnectResolvedSession
+
 var sessionCmd = &cobra.Command{
 	Use:   "session",
-	Short: "Inspect cmdk session plans",
-	Long: `Inspect cmdk session plans.
+	Short: "Resolve and connect cmdk sessions",
+	Long: `Resolve and connect cmdk sessions.
 
-Session commands are debug and inspection tools. Phase 2 resolves paths to
-plans only; it does not create tmux sessions.`,
+Session commands turn existing directories into cmdk session plans and can
+create or reuse tmux sessions for those plans.`,
 }
 
-var sessionResolveCmd = newSessionResolveCommand()
+var (
+	sessionResolveCmd = newSessionResolveCommand()
+	sessionConnectCmd = newSessionConnectCommand()
+)
 
 func newSessionResolveCommand() *cobra.Command {
 	options := sessionResolveOptions{}
 	cmd := &cobra.Command{
 		Use:   "resolve <path>",
 		Short: "Resolve a path to a cmdk session plan",
-		Long: `Resolve a filesystem path to the cmdk session plan that would be used
-when session creation is added later.
+		Long: `Resolve a filesystem path to the cmdk session plan.
 
 The path must exist and be a directory. The resolver classifies the path as a
 repo session or directory session, computes cmdk's logical session_key, and
-shows the tmux-safe names cmdk would pass to tmux later. This command does not
-create tmux sessions.
+shows the tmux-safe names cmdk passes to tmux when connecting. This command does
+not create tmux sessions.
 
 Fields:
   session_kind                 repo or directory
   session_key                  cmdk grouping key; not tmux #{session_id}
-  display_label                display path derived from cmdk path formatting
+  session_display              display path derived from cmdk path formatting
   launch_path                  filesystem path for the initial/current window cwd
-  planned_tmux_session_name    tmux-safe name cmdk would pass to tmux -s later
-  planned_tmux_window_name     tmux window name cmdk would pass to tmux -n later
+  planned_tmux_session_name    tmux-safe name cmdk passes to tmux -s on create
+  planned_tmux_window_name     tmux window name cmdk passes to tmux -n on create
 
 Repo sessions use a path-based session_key so sibling Grove-style worktrees
 (main, develop, master) share one cmdk session. Directory sessions use absolute
@@ -63,25 +68,32 @@ path identity and the directory basename as their planned tmux window name.`,
 	return cmd
 }
 
+func newSessionConnectCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "connect <path>",
+		Short: "Create or switch to a cmdk-managed tmux session for a path",
+		Long: `Create or switch to a cmdk-managed tmux session for an existing directory.
+
+The path is required. Repo worktrees share one cmdk-managed tmux session per
+repo/container and use one window per worktree. Non-repo directories get one
+session whose default window uses the directory basename.
+
+cmdk recognizes managed sessions by @cmdk_session_key metadata, not by tmux
+session name. When cmdk creates a session it sets @cmdk_session_kind,
+@cmdk_session_key, and @cmdk_session_display. Existing managed sessions are
+reused without refreshing metadata.
+
+The final switch uses tmux switch-client and requires a current tmux client;
+Phase 3 does not attach from outside tmux.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runSessionConnectCommand(cmd, args[0])
+		},
+	}
+}
+
 func runSessionResolveCommand(cmd *cobra.Command, path string, options sessionResolveOptions) error {
-	cfgPath, err := resolveConfigPath()
-	if err != nil {
-		return err
-	}
-	cfg, err := config.Load(cfgPath)
-	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
-	}
-
-	display, err := sessionDisplayOptions(cfg)
-	if err != nil {
-		return err
-	}
-
-	ctx, cancel := sessionResolveContext(cmd, cfg)
-	defer cancel()
-
-	plan, err := resolver.Resolve(ctx, path, display)
+	plan, err := resolveSessionPlanForCommand(cmd, path)
 	if err != nil {
 		return err
 	}
@@ -92,6 +104,40 @@ func runSessionResolveCommand(cmd *cobra.Command, path string, options sessionRe
 		return enc.Encode(plan)
 	}
 	return writeSessionPlan(cmd.OutOrStdout(), plan)
+}
+
+func runSessionConnectCommand(cmd *cobra.Command, path string) error {
+	plan, err := resolveSessionPlanForCommand(cmd, path)
+	if err != nil {
+		return err
+	}
+
+	return connectResolvedSession(sessionConnectContext(cmd), plan)
+}
+
+func resolveSessionPlanForCommand(cmd *cobra.Command, path string) (resolver.Plan, error) {
+	cfgPath, err := resolveConfigPath()
+	if err != nil {
+		return resolver.Plan{}, err
+	}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return resolver.Plan{}, fmt.Errorf("loading config: %w", err)
+	}
+
+	display, err := sessionDisplayOptions(cfg)
+	if err != nil {
+		return resolver.Plan{}, err
+	}
+
+	ctx, cancel := sessionResolveContext(cmd, cfg)
+	defer cancel()
+
+	plan, err := resolver.Resolve(ctx, path, display)
+	if err != nil {
+		return resolver.Plan{}, err
+	}
+	return plan, nil
 }
 
 func sessionDisplayOptions(cfg config.Config) (resolver.DisplayOptions, error) {
@@ -130,6 +176,17 @@ func sessionResolveContext(cmd *cobra.Command, cfg config.Config) (context.Conte
 	return context.WithTimeout(ctx, resolveTimeout)
 }
 
+func sessionConnectContext(cmd *cobra.Command) context.Context {
+	// Do not reuse sessionResolveContext here. Connection performs tmux mutations,
+	// so it must not inherit the [timeout].fetch deadline that may already have
+	// been mostly consumed by git/config resolution.
+	ctx := cmd.Context()
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
+}
+
 func writeSessionPlan(out io.Writer, plan resolver.Plan) error {
 	rows := []struct {
 		label string
@@ -137,7 +194,7 @@ func writeSessionPlan(out io.Writer, plan resolver.Plan) error {
 	}{
 		{"session_kind:", plan.SessionKind},
 		{"session_key:", plan.SessionKey},
-		{"display_label:", plan.DisplayLabel},
+		{"session_display:", plan.SessionDisplay},
 		{"launch_path:", plan.LaunchPath},
 		{"planned_tmux_session_name:", plan.PlannedTmuxSessionName},
 		{"planned_tmux_window_name:", plan.PlannedTmuxWindowName},
@@ -151,6 +208,6 @@ func writeSessionPlan(out io.Writer, plan resolver.Plan) error {
 }
 
 func init() {
-	sessionCmd.AddCommand(sessionResolveCmd)
+	sessionCmd.AddCommand(sessionResolveCmd, sessionConnectCmd)
 	rootCmd.AddCommand(sessionCmd)
 }

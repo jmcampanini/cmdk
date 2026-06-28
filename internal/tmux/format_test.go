@@ -37,6 +37,15 @@ func TestDisplaySafeTmuxWindowNamePreservesLiteralBackslashSequences(t *testing.
 	}
 }
 
+func TestDisplaySafeTmuxWindowNameCollapsesDoubledLiteralBackslashes(t *testing.T) {
+	input := `literal\\ttab literal\\nnewline`
+	want := `literal\ttab literal\nnewline`
+
+	if got := displaySafeTmuxWindowName(input); got != want {
+		t.Errorf("displaySafeTmuxWindowName() = %q, want %q", got, want)
+	}
+}
+
 func TestDisplaySafeTmuxSessionNameDecodesTmuxEscapedControlChars(t *testing.T) {
 	input := "tmux\\ttab tmux\\nnewline"
 	want := "tmux" + tmuxEscapedTab + "tab tmux" + tmuxEscapedNewline + "newline"

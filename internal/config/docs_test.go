@@ -76,6 +76,20 @@ func TestRenderHelp_ContainsLiveDefaults(t *testing.T) {
 	}
 }
 
+func TestRenderHelp_ContainsSessionConnectDocs(t *testing.T) {
+	output := RenderHelp()
+	for _, want := range []string{
+		"cmdk session connect <path>",
+		"@cmdk_session_key",
+		"@cmdk_session_display",
+		"switch-client",
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("RenderHelp() should contain %q", want)
+		}
+	}
+}
+
 func TestRenderHelp_ContainsTemplateVars(t *testing.T) {
 	output := RenderHelp()
 	for _, v := range []string{

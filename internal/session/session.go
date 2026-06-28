@@ -34,7 +34,7 @@ type DisplayOptions struct {
 type Plan struct {
 	SessionKind            string `json:"session_kind"`
 	SessionKey             string `json:"session_key"`
-	DisplayLabel           string `json:"display_label"`
+	SessionDisplay         string `json:"session_display"`
 	LaunchPath             string `json:"launch_path"`
 	PlannedTmuxSessionName string `json:"planned_tmux_session_name"`
 	PlannedTmuxWindowName  string `json:"planned_tmux_window_name"`
@@ -128,17 +128,23 @@ func newPlanFromCanonicalPaths(kind, sessionKey, launchPath string, display Disp
 	return Plan{
 		SessionKind:            kind,
 		SessionKey:             sessionKey,
-		DisplayLabel:           displayLabel(sessionKey, display),
+		SessionDisplay:         sessionDisplay(sessionKey, display),
 		LaunchPath:             launchPath,
 		PlannedTmuxSessionName: TmuxSafeSessionName(sessionKey),
 		PlannedTmuxWindowName:  filepath.Base(filepath.Clean(launchPath)),
 	}
 }
 
-func displayLabel(path string, display DisplayOptions) string {
+func sessionDisplay(path string, display DisplayOptions) string {
 	return pathfmt.DisplayPath(path, display.Home, display.ShortenHome, display.Rules, display.Truncation)
 }
 
+// TmuxSafeSessionName returns the tmux session name cmdk uses when creating a
+// session for sessionKey. It cleans the path, normalizes separators to slashes,
+// trims leading slashes, replaces '.' and ':' with '_', and falls back to "_"
+// for empty or root-like names. The returned name is a tmux-safe creation and
+// display handle; it is not a uniqueness or identity guarantee. Cmdk session
+// identity comes from @cmdk_session_key metadata.
 func TmuxSafeSessionName(sessionKey string) string {
 	name := filepath.ToSlash(filepath.Clean(sessionKey))
 	name = strings.TrimLeft(name, "/")
