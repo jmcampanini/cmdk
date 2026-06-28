@@ -20,11 +20,7 @@ type sessionResolveOptions struct {
 	json bool
 }
 
-type resolvedSessionPlan struct {
-	plan   resolver.Plan
-	ctx    context.Context
-	cancel context.CancelFunc
-}
+var connectResolvedSession = tmux.ConnectResolvedSession
 
 var sessionCmd = &cobra.Command{
 	Use:   "session",
@@ -97,52 +93,51 @@ Phase 3 does not attach from outside tmux.`,
 }
 
 func runSessionResolveCommand(cmd *cobra.Command, path string, options sessionResolveOptions) error {
-	resolved, err := resolveSessionPlanForCommand(cmd, path)
+	plan, err := resolveSessionPlanForCommand(cmd, path)
 	if err != nil {
 		return err
 	}
-	defer resolved.cancel()
 
 	if options.json {
 		enc := json.NewEncoder(cmd.OutOrStdout())
 		enc.SetIndent("", "  ")
-		return enc.Encode(resolved.plan)
+		return enc.Encode(plan)
 	}
-	return writeSessionPlan(cmd.OutOrStdout(), resolved.plan)
+	return writeSessionPlan(cmd.OutOrStdout(), plan)
 }
 
 func runSessionConnectCommand(cmd *cobra.Command, path string) error {
-	resolved, err := resolveSessionPlanForCommand(cmd, path)
+	plan, err := resolveSessionPlanForCommand(cmd, path)
 	if err != nil {
 		return err
 	}
-	defer resolved.cancel()
 
-	return tmux.ConnectResolvedSession(resolved.ctx, resolved.plan)
+	return connectResolvedSession(sessionConnectContext(cmd), plan)
 }
 
-func resolveSessionPlanForCommand(cmd *cobra.Command, path string) (resolvedSessionPlan, error) {
+func resolveSessionPlanForCommand(cmd *cobra.Command, path string) (resolver.Plan, error) {
 	cfgPath, err := resolveConfigPath()
 	if err != nil {
-		return resolvedSessionPlan{}, err
+		return resolver.Plan{}, err
 	}
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
-		return resolvedSessionPlan{}, fmt.Errorf("loading config: %w", err)
+		return resolver.Plan{}, fmt.Errorf("loading config: %w", err)
 	}
 
 	display, err := sessionDisplayOptions(cfg)
 	if err != nil {
-		return resolvedSessionPlan{}, err
+		return resolver.Plan{}, err
 	}
 
 	ctx, cancel := sessionResolveContext(cmd, cfg)
+	defer cancel()
+
 	plan, err := resolver.Resolve(ctx, path, display)
 	if err != nil {
-		cancel()
-		return resolvedSessionPlan{}, err
+		return resolver.Plan{}, err
 	}
-	return resolvedSessionPlan{plan: plan, ctx: ctx, cancel: cancel}, nil
+	return plan, nil
 }
 
 func sessionDisplayOptions(cfg config.Config) (resolver.DisplayOptions, error) {
@@ -179,6 +174,17 @@ func sessionResolveContext(cmd *cobra.Command, cfg config.Config) (context.Conte
 		resolveTimeout = config.DefaultConfig().Timeout.Fetch
 	}
 	return context.WithTimeout(ctx, resolveTimeout)
+}
+
+func sessionConnectContext(cmd *cobra.Command) context.Context {
+	// Do not reuse sessionResolveContext here. Connection performs tmux mutations,
+	// so it must not inherit the [timeout].fetch deadline that may already have
+	// been mostly consumed by git/config resolution.
+	ctx := cmd.Context()
+	if ctx == nil {
+		return context.Background()
+	}
+	return ctx
 }
 
 func writeSessionPlan(out io.Writer, plan resolver.Plan) error {

@@ -135,6 +135,41 @@ func TestRunSessionResolveCommandJSON(t *testing.T) {
 	}
 }
 
+func TestRunSessionConnectCommandUsesFreshUntimedContext(t *testing.T) {
+	useTempConfigHome(t)
+
+	dir := filepath.Join(t.TempDir(), "scratch")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	oldConnect := connectResolvedSession
+	t.Cleanup(func() { connectResolvedSession = oldConnect })
+
+	called := false
+	connectResolvedSession = func(ctx context.Context, plan resolver.Plan) error {
+		called = true
+		if _, ok := ctx.Deadline(); ok {
+			return errors.New("connect context unexpectedly inherited resolve timeout")
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if plan.SessionKind != resolver.KindDirectory {
+			t.Errorf("SessionKind = %q, want %q", plan.SessionKind, resolver.KindDirectory)
+		}
+		return nil
+	}
+
+	cmd := &cobra.Command{}
+	if err := runSessionConnectCommand(cmd, dir); err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("connectResolvedSession was not called")
+	}
+}
+
 func TestRunSessionResolveCommandShortensSymlinkedHome(t *testing.T) {
 	useTempConfigHome(t)
 
