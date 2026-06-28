@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -116,21 +115,17 @@ func (c connector) findManagedSession(ctx context.Context, sessionKey string) (s
 		return "", err
 	}
 
-	var matches []string
+	var match string
 	for _, row := range rows {
-		if row.sessionKey == sessionKey {
-			matches = append(matches, row.sessionID)
+		if row.sessionKey != sessionKey {
+			continue
 		}
+		if match != "" {
+			return "", fmt.Errorf("multiple tmux sessions have %s=%q", cmdkSessionKeyOption, sessionKey)
+		}
+		match = row.sessionID
 	}
-
-	switch len(matches) {
-	case 0:
-		return "", nil
-	case 1:
-		return matches[0], nil
-	default:
-		return "", fmt.Errorf("multiple tmux sessions have %s=%q", cmdkSessionKeyOption, sessionKey)
-	}
+	return match, nil
 }
 
 type managedSessionRow struct {
@@ -229,19 +224,21 @@ func (c connector) findWindowByName(ctx context.Context, sessionID, windowName s
 		return "", err
 	}
 
-	matches := make([]connectWindowRow, 0, 1)
+	var firstMatch connectWindowRow
+	found := false
 	for _, row := range rows {
-		if row.windowName == windowName {
-			matches = append(matches, row)
+		if row.windowName != windowName {
+			continue
+		}
+		if !found || row.index < firstMatch.index {
+			firstMatch = row
+			found = true
 		}
 	}
-	if len(matches) == 0 {
+	if !found {
 		return "", nil
 	}
-	slices.SortFunc(matches, func(a, b connectWindowRow) int {
-		return a.index - b.index
-	})
-	return matches[0].windowID, nil
+	return firstMatch.windowID, nil
 }
 
 type connectWindowRow struct {

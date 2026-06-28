@@ -576,7 +576,6 @@ func runDetachedSessionConnect(t *testing.T, path string) string {
 type managedSessionE2E struct {
 	ID      string
 	Kind    string
-	Key     string
 	Display string
 }
 
@@ -596,7 +595,7 @@ func findManagedSessionE2E(t *testing.T, key string) managedSessionE2E {
 			t.Fatalf("malformed list-sessions row %q", line)
 		}
 		if fields[2] == key {
-			return managedSessionE2E{ID: fields[0], Kind: fields[1], Key: fields[2], Display: fields[3]}
+			return managedSessionE2E{ID: fields[0], Kind: fields[1], Display: fields[3]}
 		}
 	}
 	t.Fatalf("no managed session found for key %q\n%s", key, out)

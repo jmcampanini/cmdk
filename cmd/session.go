@@ -20,6 +20,12 @@ type sessionResolveOptions struct {
 	json bool
 }
 
+type resolvedSessionPlan struct {
+	plan   resolver.Plan
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
 var sessionCmd = &cobra.Command{
 	Use:   "session",
 	Short: "Resolve and connect cmdk sessions",
@@ -91,52 +97,52 @@ Phase 3 does not attach from outside tmux.`,
 }
 
 func runSessionResolveCommand(cmd *cobra.Command, path string, options sessionResolveOptions) error {
-	plan, _, cancel, err := resolveSessionPlanForCommand(cmd, path)
+	resolved, err := resolveSessionPlanForCommand(cmd, path)
 	if err != nil {
 		return err
 	}
-	defer cancel()
+	defer resolved.cancel()
 
 	if options.json {
 		enc := json.NewEncoder(cmd.OutOrStdout())
 		enc.SetIndent("", "  ")
-		return enc.Encode(plan)
+		return enc.Encode(resolved.plan)
 	}
-	return writeSessionPlan(cmd.OutOrStdout(), plan)
+	return writeSessionPlan(cmd.OutOrStdout(), resolved.plan)
 }
 
 func runSessionConnectCommand(cmd *cobra.Command, path string) error {
-	plan, ctx, cancel, err := resolveSessionPlanForCommand(cmd, path)
+	resolved, err := resolveSessionPlanForCommand(cmd, path)
 	if err != nil {
 		return err
 	}
-	defer cancel()
+	defer resolved.cancel()
 
-	return tmux.ConnectResolvedSession(ctx, plan)
+	return tmux.ConnectResolvedSession(resolved.ctx, resolved.plan)
 }
 
-func resolveSessionPlanForCommand(cmd *cobra.Command, path string) (resolver.Plan, context.Context, context.CancelFunc, error) {
+func resolveSessionPlanForCommand(cmd *cobra.Command, path string) (resolvedSessionPlan, error) {
 	cfgPath, err := resolveConfigPath()
 	if err != nil {
-		return resolver.Plan{}, nil, nil, err
+		return resolvedSessionPlan{}, err
 	}
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
-		return resolver.Plan{}, nil, nil, fmt.Errorf("loading config: %w", err)
+		return resolvedSessionPlan{}, fmt.Errorf("loading config: %w", err)
 	}
 
 	display, err := sessionDisplayOptions(cfg)
 	if err != nil {
-		return resolver.Plan{}, nil, nil, err
+		return resolvedSessionPlan{}, err
 	}
 
 	ctx, cancel := sessionResolveContext(cmd, cfg)
 	plan, err := resolver.Resolve(ctx, path, display)
 	if err != nil {
 		cancel()
-		return resolver.Plan{}, nil, nil, err
+		return resolvedSessionPlan{}, err
 	}
-	return plan, ctx, cancel, nil
+	return resolvedSessionPlan{plan: plan, ctx: ctx, cancel: cancel}, nil
 }
 
 func sessionDisplayOptions(cfg config.Config) (resolver.DisplayOptions, error) {
