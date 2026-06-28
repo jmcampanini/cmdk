@@ -35,6 +35,14 @@ func NewActionsGenerator() GeneratorFunc {
 				Cmd:     "tmux new-window -c {{sq .path}}",
 				Data:    maps.Clone(data),
 				Icon:    "\ueb7f",
+			}, item.Item{
+				Type:    "action",
+				Source:  "builtin",
+				Display: "New session window",
+				Action:  item.ActionExecute,
+				Cmd:     "cmdk session window {{sq .path}} --new",
+				Data:    maps.Clone(data),
+				Icon:    "\ueb7f",
 			})
 		}
 

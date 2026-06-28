@@ -53,9 +53,9 @@ func TestExpandInline_ExpandsDirItems(t *testing.T) {
 
 	result := expandInline(items, reg, ctx)
 
-	// "New window" builtin + "Browse" from config
-	if len(result) != 2 {
-		t.Fatalf("got %d items, want 2", len(result))
+	// "New window" + "New session window" built-ins + "Browse" from config
+	if len(result) != 3 {
+		t.Fatalf("got %d items, want 3", len(result))
 	}
 
 	newWindow := result[0]
@@ -81,7 +81,15 @@ func TestExpandInline_ExpandsDirItems(t *testing.T) {
 		t.Errorf("Data[path] = %q, want /home/user/projects", newWindow.Data["path"])
 	}
 
-	browse := result[1]
+	sessionWindow := result[1]
+	if sessionWindow.Display != "~/projects » New session window" {
+		t.Errorf("Display = %q, want ~/projects » New session window", sessionWindow.Display)
+	}
+	if sessionWindow.Value != "New session window" {
+		t.Errorf("Value = %q, want New session window", sessionWindow.Value)
+	}
+
+	browse := result[2]
 	if browse.Display != "~/projects » Browse" {
 		t.Errorf("Display = %q, want ~/projects » Browse", browse.Display)
 	}
@@ -116,7 +124,7 @@ func TestExpandInline_IconDefaultsToCmd(t *testing.T) {
 func TestExpandInline_DoesNotExpandSessions(t *testing.T) {
 	reg := generator.NewRegistry()
 	reg.Register("session-children", func(_ []item.Item, _ generator.Context) []item.Item {
-		return []item.Item{{Type: "action", Display: "Connect", Action: item.ActionExecute}}
+		return []item.Item{{Type: "action", Display: "Switch to session", Action: item.ActionExecute}}
 	})
 	reg.MapType("session", "session-children")
 	ctx := generator.Context{}
@@ -194,21 +202,26 @@ func TestExpandInline_MultipleParents(t *testing.T) {
 
 	result := expandInline(items, reg, ctx)
 
-	// Each dir gets "New window" builtin
-	if len(result) != 2 {
-		t.Fatalf("got %d items, want 2", len(result))
+	// Each dir gets both built-in window actions.
+	if len(result) != 4 {
+		t.Fatalf("got %d items, want 4", len(result))
 	}
-	if result[0].Display != "~/a » New window" {
-		t.Errorf("result[0].Display = %q", result[0].Display)
+	wantDisplays := []string{
+		"~/a » New window",
+		"~/a » New session window",
+		"~/b » New window",
+		"~/b » New session window",
 	}
-	if result[1].Display != "~/b » New window" {
-		t.Errorf("result[1].Display = %q", result[1].Display)
+	for i, want := range wantDisplays {
+		if result[i].Display != want {
+			t.Errorf("result[%d].Display = %q, want %q", i, result[i].Display, want)
+		}
 	}
-	if result[0].Data["path"] != "/a" {
-		t.Errorf("result[0] path = %q, want /a", result[0].Data["path"])
+	if result[0].Data["path"] != "/a" || result[1].Data["path"] != "/a" {
+		t.Errorf("first parent paths = %q/%q, want /a", result[0].Data["path"], result[1].Data["path"])
 	}
-	if result[1].Data["path"] != "/b" {
-		t.Errorf("result[1] path = %q, want /b", result[1].Data["path"])
+	if result[2].Data["path"] != "/b" || result[3].Data["path"] != "/b" {
+		t.Errorf("second parent paths = %q/%q, want /b", result[2].Data["path"], result[3].Data["path"])
 	}
 }
 
@@ -225,8 +238,8 @@ func TestExpandInline_MixedItems(t *testing.T) {
 
 	result := expandInline(items, reg, ctx)
 
-	if len(result) != 3 {
-		t.Fatalf("got %d items, want 3", len(result))
+	if len(result) != 4 {
+		t.Fatalf("got %d items, want 4", len(result))
 	}
 	if result[0].Display != "htop" {
 		t.Errorf("result[0].Display = %q, want htop", result[0].Display)
@@ -234,7 +247,10 @@ func TestExpandInline_MixedItems(t *testing.T) {
 	if result[1].Display != "~/proj » New window" {
 		t.Errorf("result[1].Display = %q, want ~/proj » New window", result[1].Display)
 	}
-	if result[2].Display != "main:1" {
-		t.Errorf("result[2].Display = %q, want main:1", result[2].Display)
+	if result[2].Display != "~/proj » New session window" {
+		t.Errorf("result[2].Display = %q, want ~/proj » New session window", result[2].Display)
+	}
+	if result[3].Display != "main:1" {
+		t.Errorf("result[3].Display = %q, want main:1", result[3].Display)
 	}
 }

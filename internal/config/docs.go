@@ -159,28 +159,41 @@ TEMPLATE VARIABLES
   display glyphs (⇥, ↵), but it is not a stable tmux target and is not
   shell-safe. Use session_id for tmux targets, and wrap command arguments with
   {{sq .var}}, e.g. {{sq .session_name}}, not {{.session_name}}. Built-in
-  session Connect and child-window actions target by session_id and shell-quote
-  the tmux target.
+  built-in session switch and child-window actions target by session_id and
+  shell-quote the tmux target.
 
   Environment variables CMDK_PATH, CMDK_PANE_ID, etc. are also
   set when executing commands.
 
-SESSION CONNECT
-  cmdk session connect <path> resolves an existing directory, creates or reuses
-  a cmdk-managed tmux session, ensures the planned/default window exists, and
-  switches the current tmux client to that window.
+SESSION WINDOWS
+  cmdk session window <path> --new resolves an existing directory, finds or
+  creates the cmdk-managed tmux session for that path, creates a fresh shell
+  window in that session, and switches the current tmux client to it.
 
-  Repo worktree paths create or reuse one session per repo/container and one
-  window per worktree. Directory paths create or reuse one session for that
-  directory; the default window is named from the directory basename.
+  cmdk session window <path> [--name <name>] -- <command> [args...] creates a
+  fresh command window. Command args after -- are treated as argv-style input;
+  cmdk shell-quotes each arg before passing one shell-command string to tmux.
+  Metacharacters such as $, |, >, and ; are literal by default. Use an explicit
+  shell for shell behavior, e.g.:
+
+      cmdk session window . --name tests -- sh -lc 'npm test | tee test.log'
+
+  Command-window lifecycle is direct tmux behavior: when the command exits,
+  cmdk does not hold the window, set remain-on-exit, or drop into a shell.
+
+  Repo worktree paths use one managed session per repo/container. Directory
+  paths use one managed session per canonical directory. Each invocation creates
+  a new tmux window; cmdk does not search for or reuse existing window names.
 
   Cmdk recognizes managed sessions by the @cmdk_session_key tmux option. When
   cmdk creates a session it sets only @cmdk_session_kind, @cmdk_session_key, and
-  @cmdk_session_display. Reconnecting to an existing managed session does not
-  refresh metadata.
+  @cmdk_session_display. Existing managed sessions are found by exact key match.
 
-  connect requires a current tmux client for switch-client. Phase 3 does not
+  session window requires a current tmux client for switch-client. It does not
   attach from outside tmux and does not fall back to attach-session.
+
+  In the TUI, selecting a tmux session shows the built-in "Switch to session"
+  action before configured session actions and windows.
 
 EXECUTION
   Commands are passed to sh -c via syscall.Exec, replacing the

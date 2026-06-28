@@ -39,7 +39,7 @@ func TestSessionGenerator_Ordering(t *testing.T) {
 	for i, it := range items {
 		got[i] = it.Display
 	}
-	want := []string{"Connect", "Rename", "tmux:win: 1 zsh ‹ work", "tmux:win: 2 vim ‹ work"}
+	want := []string{"Switch to session", "Rename", "tmux:win: 1 zsh ‹ work", "tmux:win: 2 vim ‹ work"}
 	if !slices.Equal(got, want) {
 		t.Fatalf("displays = %v, want %v", got, want)
 	}
@@ -51,7 +51,7 @@ func TestSessionGenerator_Ordering(t *testing.T) {
 	}
 }
 
-func TestSessionGenerator_ConnectUsesSessionID(t *testing.T) {
+func TestSessionGenerator_SwitchUsesSessionID(t *testing.T) {
 	items := NewSessionGenerator(func(context.Context, item.Item) ([]item.Item, error) {
 		return nil, nil
 	})(sessionAccumulated(), Context{})
@@ -59,24 +59,24 @@ func TestSessionGenerator_ConnectUsesSessionID(t *testing.T) {
 	if len(items) == 0 {
 		t.Fatal("got no items")
 	}
-	connect := items[0]
-	if connect.Display != "Connect" {
-		t.Fatalf("Display = %q, want Connect", connect.Display)
+	switchItem := items[0]
+	if switchItem.Display != "Switch to session" {
+		t.Fatalf("Display = %q, want Switch to session", switchItem.Display)
 	}
-	if connect.Type != "action" {
-		t.Errorf("Type = %q, want action", connect.Type)
+	if switchItem.Type != "action" {
+		t.Errorf("Type = %q, want action", switchItem.Type)
 	}
-	if connect.Source != "builtin" {
-		t.Errorf("Source = %q, want builtin", connect.Source)
+	if switchItem.Source != "builtin" {
+		t.Errorf("Source = %q, want builtin", switchItem.Source)
 	}
-	if connect.Action != item.ActionExecute {
-		t.Errorf("Action = %q, want execute", connect.Action)
+	if switchItem.Action != item.ActionExecute {
+		t.Errorf("Action = %q, want execute", switchItem.Action)
 	}
-	if connect.Cmd != `tmux switch-client -t {{sq .session_id}}` {
-		t.Errorf("Cmd = %q", connect.Cmd)
+	if switchItem.Cmd != `tmux switch-client -t {{sq .session_id}}` {
+		t.Errorf("Cmd = %q", switchItem.Cmd)
 	}
-	if connect.Data["session_id"] != "$2" {
-		t.Errorf("Data[session_id] = %q, want $2", connect.Data["session_id"])
+	if switchItem.Data["session_id"] != "$2" {
+		t.Errorf("Data[session_id] = %q, want $2", switchItem.Data["session_id"])
 	}
 }
 
@@ -104,8 +104,8 @@ func TestSessionGenerator_WindowFetchErrorAppended(t *testing.T) {
 	if len(items) != 2 {
 		t.Fatalf("got %d items, want 2", len(items))
 	}
-	if items[0].Display != "Connect" {
-		t.Errorf("items[0].Display = %q, want Connect", items[0].Display)
+	if items[0].Display != "Switch to session" {
+		t.Errorf("items[0].Display = %q, want Switch to session", items[0].Display)
 	}
 	if items[1].Type != "error" {
 		t.Errorf("error item Type = %q, want error", items[1].Type)

@@ -7,12 +7,14 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 
 	resolver "github.com/jmcampanini/cmdk/internal/session"
+	"github.com/jmcampanini/cmdk/internal/tmux"
 )
 
 func useTempConfigHome(t *testing.T) string {
@@ -42,20 +44,250 @@ func TestSessionResolveCommandUseDocumentsRequiredPath(t *testing.T) {
 	}
 }
 
-func TestSessionConnectCommandRequiresPath(t *testing.T) {
-	cmd := newSessionConnectCommand()
+func TestSessionWindowCommandRequiresPath(t *testing.T) {
+	cmd := newSessionWindowCommand()
 	if err := cmd.Args(cmd, nil); err == nil {
 		t.Fatal("expected error for missing path")
 	}
 }
 
-func TestSessionConnectCommandUseDocumentsRequiredPath(t *testing.T) {
-	cmd := newSessionConnectCommand()
+func TestSessionWindowCommandUseDocumentsRequiredPath(t *testing.T) {
+	cmd := newSessionWindowCommand()
 	if !strings.Contains(cmd.Use, "<path>") {
 		t.Errorf("Use = %q, want required <path>", cmd.Use)
 	}
 	if strings.Contains(cmd.Use, "[path]") {
 		t.Errorf("Use = %q, should not document optional [path]", cmd.Use)
+	}
+}
+
+func TestSessionCommandDoesNotRegisterConnect(t *testing.T) {
+	cmd := &cobra.Command{Use: "session"}
+	cmd.AddCommand(newSessionResolveCommand(), newSessionWindowCommand())
+	_, _, err := cmd.Find([]string{"connect"})
+	if err == nil {
+		t.Fatal("session connect should not be registered")
+	}
+}
+
+func TestRunSessionWindowCommandErrorsWithNoMode(t *testing.T) {
+	useTempConfigHome(t)
+	dir := filepath.Join(t.TempDir(), "scratch")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := &cobra.Command{}
+	err := runSessionWindowCommand(cmd, []string{dir}, sessionWindowOptions{})
+	if err == nil {
+		t.Fatal("expected mode error")
+	}
+	if !strings.Contains(err.Error(), "--new or command args") {
+		t.Errorf("error = %q, want mode guidance", err.Error())
+	}
+}
+
+func TestRunSessionWindowCommandNewShellCallsTmuxWindowFunction(t *testing.T) {
+	useTempConfigHome(t)
+	dir := filepath.Join(t.TempDir(), "scratch")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	oldCreate := createResolvedSessionWindow
+	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
+
+	called := false
+	createResolvedSessionWindow = func(ctx context.Context, plan resolver.Plan, opts tmux.SessionWindowOptions) error {
+		called = true
+		if _, ok := ctx.Deadline(); ok {
+			return errors.New("window context unexpectedly inherited resolve timeout")
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if plan.SessionKind != resolver.KindDirectory {
+			t.Errorf("SessionKind = %q, want %q", plan.SessionKind, resolver.KindDirectory)
+		}
+		if !opts.NewShell {
+			t.Error("NewShell = false, want true")
+		}
+		if len(opts.Command) != 0 {
+			t.Errorf("Command = %q, want empty", opts.Command)
+		}
+		if !opts.Switch {
+			t.Error("Switch = false, want true")
+		}
+		return nil
+	}
+
+	cmd := &cobra.Command{}
+	if err := runSessionWindowCommand(cmd, []string{dir}, sessionWindowOptions{newShell: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("createResolvedSessionWindow was not called")
+	}
+}
+
+func TestRunSessionWindowCommandCommandModePassesArgvUnchanged(t *testing.T) {
+	useTempConfigHome(t)
+	dir := filepath.Join(t.TempDir(), "scratch")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	oldCreate := createResolvedSessionWindow
+	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
+
+	wantCommand := []string{"echo", "hello $HOME", "|", "tee", "x"}
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, opts tmux.SessionWindowOptions) error {
+		if opts.NewShell {
+			t.Error("NewShell = true, want false")
+		}
+		if !slices.Equal(opts.Command, wantCommand) {
+			t.Errorf("Command = %q, want %q", opts.Command, wantCommand)
+		}
+		return nil
+	}
+
+	cmd := &cobra.Command{}
+	args := append([]string{dir}, wantCommand...)
+	if err := runSessionWindowCommand(cmd, args, sessionWindowOptions{dashSeen: true, argsLenAtDash: 1}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunSessionWindowCommandRejectsCommandWithoutDashDash(t *testing.T) {
+	cmd := &cobra.Command{}
+	err := runSessionWindowCommand(cmd, []string{".", "echo", "hi"}, sessionWindowOptions{})
+	if err == nil {
+		t.Fatal("expected delimiter error")
+	}
+	if !strings.Contains(err.Error(), "--") {
+		t.Errorf("error = %q, want -- guidance", err.Error())
+	}
+}
+
+func TestSplitSessionWindowArgsAllowsFlagTerminatorBeforeDashPath(t *testing.T) {
+	path, commandArgs, commandDelimiter, err := splitSessionWindowArgs(
+		[]string{"-project"},
+		sessionWindowOptions{dashSeen: true, argsLenAtDash: 0},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != "-project" {
+		t.Errorf("path = %q, want -project", path)
+	}
+	if len(commandArgs) != 0 {
+		t.Errorf("commandArgs = %q, want empty", commandArgs)
+	}
+	if commandDelimiter {
+		t.Error("commandDelimiter = true, want false")
+	}
+}
+
+func TestSplitSessionWindowArgsAllowsDashPathAndCommandDelimiter(t *testing.T) {
+	path, commandArgs, commandDelimiter, err := splitSessionWindowArgs(
+		[]string{"-project", "--", "echo", "hi"},
+		sessionWindowOptions{dashSeen: true, argsLenAtDash: 0},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != "-project" {
+		t.Errorf("path = %q, want -project", path)
+	}
+	want := []string{"echo", "hi"}
+	if !slices.Equal(commandArgs, want) {
+		t.Errorf("commandArgs = %q, want %q", commandArgs, want)
+	}
+	if !commandDelimiter {
+		t.Error("commandDelimiter = false, want true")
+	}
+}
+
+func TestSplitSessionWindowArgsRejectsExtraArgsBeforeDashDash(t *testing.T) {
+	_, _, _, err := splitSessionWindowArgs(
+		[]string{".", "extra", "echo"},
+		sessionWindowOptions{dashSeen: true, argsLenAtDash: 2},
+	)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "exactly one path") {
+		t.Errorf("error = %q, want path count context", err.Error())
+	}
+}
+
+func TestRunSessionWindowCommandNameOverride(t *testing.T) {
+	useTempConfigHome(t)
+	dir := filepath.Join(t.TempDir(), "scratch")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	oldCreate := createResolvedSessionWindow
+	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
+
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, opts tmux.SessionWindowOptions) error {
+		if opts.Name != "tests" {
+			t.Errorf("Name = %q, want tests", opts.Name)
+		}
+		return nil
+	}
+
+	cmd := &cobra.Command{}
+	if err := runSessionWindowCommand(cmd, []string{dir}, sessionWindowOptions{newShell: true, name: "tests", nameSet: true}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunSessionWindowCommandNewPlusCommandErrors(t *testing.T) {
+	cmd := &cobra.Command{}
+	err := runSessionWindowCommand(cmd, []string{".", "echo", "hi"}, sessionWindowOptions{newShell: true, dashSeen: true, argsLenAtDash: 1})
+	if err == nil {
+		t.Fatal("expected mode conflict error")
+	}
+	if !strings.Contains(err.Error(), "--new") || !strings.Contains(err.Error(), "command") {
+		t.Errorf("error = %q, want --new command conflict", err.Error())
+	}
+}
+
+func TestRunSessionWindowCommandEmptyNameErrors(t *testing.T) {
+	cmd := &cobra.Command{}
+	err := runSessionWindowCommand(cmd, []string{"."}, sessionWindowOptions{newShell: true, nameSet: true})
+	if err == nil {
+		t.Fatal("expected name error")
+	}
+	if !strings.Contains(err.Error(), "--name") || !strings.Contains(err.Error(), "empty") {
+		t.Errorf("error = %q, want empty --name context", err.Error())
+	}
+}
+
+func TestSessionWindowCommandAllowsArgsAfterDashDash(t *testing.T) {
+	useTempConfigHome(t)
+	dir := filepath.Join(t.TempDir(), "scratch")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	oldCreate := createResolvedSessionWindow
+	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
+
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, opts tmux.SessionWindowOptions) error {
+		want := []string{"--flag", "value"}
+		if !slices.Equal(opts.Command, want) {
+			t.Errorf("Command = %q, want %q", opts.Command, want)
+		}
+		return nil
+	}
+
+	cmd := newSessionWindowCommand()
+	cmd.SetArgs([]string{dir, "--", "--flag", "value"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -132,41 +364,6 @@ func TestRunSessionResolveCommandJSON(t *testing.T) {
 	}
 	if strings.Contains(buf.String(), "display_label") {
 		t.Errorf("JSON should not contain display_label: %s", buf.String())
-	}
-}
-
-func TestRunSessionConnectCommandUsesFreshUntimedContext(t *testing.T) {
-	useTempConfigHome(t)
-
-	dir := filepath.Join(t.TempDir(), "scratch")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	oldConnect := connectResolvedSession
-	t.Cleanup(func() { connectResolvedSession = oldConnect })
-
-	called := false
-	connectResolvedSession = func(ctx context.Context, plan resolver.Plan) error {
-		called = true
-		if _, ok := ctx.Deadline(); ok {
-			return errors.New("connect context unexpectedly inherited resolve timeout")
-		}
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if plan.SessionKind != resolver.KindDirectory {
-			t.Errorf("SessionKind = %q, want %q", plan.SessionKind, resolver.KindDirectory)
-		}
-		return nil
-	}
-
-	cmd := &cobra.Command{}
-	if err := runSessionConnectCommand(cmd, dir); err != nil {
-		t.Fatal(err)
-	}
-	if !called {
-		t.Fatal("connectResolvedSession was not called")
 	}
 }
 
