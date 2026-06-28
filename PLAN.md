@@ -11,7 +11,9 @@ A **session-ed window** means:
 - The window's working directory is the resolver's launch path.
 - The new window is selected by stable tmux IDs, not by display names.
 
-This is not about connecting to a session. Existing root window listing already supports switching to windows across all sessions.
+This is not about connecting to a session. The path-based `cmdk session connect` command should be removed entirely as if it never existed.
+
+Existing root window listing already supports switching to windows across all sessions. The TUI's session-level switch action is not part of the path-based connect feature, but should be renamed from `Connect` to `Switch to session`.
 
 ## Existing behavior and reusable pieces
 
@@ -28,7 +30,7 @@ This is not about connecting to a session. Existing root window listing already 
 
 - Root TUI lists sessions via `tmux list-sessions`.
 - Selecting a session drills into:
-  - built-in `Connect`
+  - built-in `Switch to session`
   - configured session actions
   - windows in that session
 
@@ -49,8 +51,9 @@ This is not about connecting to a session. Existing root window listing already 
 
 ### Existing behavior to preserve/add/remove
 
-- `cmdk session connect <path>` is no longer a primary feature and should be removed as a user-facing command.
-- Connect-specific behavior should be deleted or simplified where possible.
+- `cmdk session connect <path>` should be hard-removed, with no hidden alias or compatibility shim.
+- Path-based connect-specific behavior should be deleted aggressively and refactored as if the command never existed.
+- The TUI session child action currently named `Connect` should remain, but be renamed to `Switch to session`.
 - Preserve the current built-in dir action unchanged:
 
   ```sh
@@ -190,6 +193,7 @@ This means:
 - spaces are preserved
 - `$HOME`, `|`, `>`, `;`, etc. are literal unless the user explicitly invokes a shell
 - shell behavior remains available via `sh -lc '...'`
+- command-mode windows use direct tmux lifecycle behavior: when the command exits, cmdk does not hold the window, set `remain-on-exit`, or drop into a shell
 
 ### Window naming
 
@@ -263,6 +267,7 @@ For command mode:
 - working directory: `plan.LaunchPath`
 - window name: `--name` if set, else `plan.PlannedTmuxWindowName`
 - command is the safely shell-quoted argv command string
+- command exit follows direct tmux behavior; cmdk does not add hold/remain-on-exit/drop-to-shell behavior
 
 Implementation shape:
 
@@ -304,6 +309,23 @@ TUI implication:
 - With two default dir actions, `auto_select_single` will no longer auto-execute a dir selection in the default config because the dir action list is no longer a single item.
 - That is acceptable for this plan because users need to choose between plain `New window` and `New session window`.
 
+### Session child action
+
+Keep the built-in session-level switch action, but rename it from `Connect` to `Switch to session`.
+
+Expected behavior:
+
+- It remains the first child item when selecting a tmux session.
+- It should continue to execute:
+
+  ```sh
+  tmux switch-client -t {{sq .session_id}}
+  ```
+
+- Configured session actions remain after `Switch to session`.
+- Windows in the selected session remain after configured session actions.
+- Update tests/docs to use the new label. Do not reintroduce path-based `cmdk session connect` language.
+
 ### Config actions
 
 No config schema change is required in this phase.
@@ -324,7 +346,7 @@ Future extension could add first-class action helpers, but do not introduce conf
 ### `cmd/session.go`
 
 - Keep `session resolve`.
-- Remove `session connect` command registration and documentation.
+- Remove `session connect` command registration and documentation entirely; do not keep a hidden alias.
 - Add `session window` command.
 - Define window options:
 
@@ -365,9 +387,16 @@ Future extension could add first-class action helpers, but do not introduce conf
 - Continue to include `pane_id` in item data when present.
 - Existing config dir actions should remain appended after built-in actions in config order.
 
+### `internal/generator/session.go`
+
+- Rename the built-in session child item from `Connect` to `Switch to session`.
+- Keep its command as `tmux switch-client -t {{sq .session_id}}`.
+- Rename constants/helpers/tests away from `Connect` where practical, e.g. `sessionSwitchCommand`, `sessionSwitchItem`.
+- Preserve child ordering: built-in session switch action, configured session actions, then windows.
+
 ### `internal/tmux`
 
-Refactor `connect.go` into reusable session/window operations.
+Refactor `connect.go` into reusable session/window operations or replace it with better-named session/window files. Remove path-based connect abstractions and naming where possible.
 
 Suggested exported API:
 
@@ -394,11 +423,12 @@ Internal helpers:
 - Add command argv shell quoting helper for tmux's shell-command argument.
 - `switchClient` remains useful.
 
-Important distinction from old connect:
+Important distinction from old path-based connect:
 
 - Do not search for an existing window by name.
 - Do not reuse existing windows.
 - Always produce a fresh window for the requested operation.
+- Remove connect-specific parser/helper tests and code instead of preserving them under old names.
 
 ### Initial window creation when session does not exist
 
@@ -432,7 +462,7 @@ Then switch to the returned window.
 
 ## Documentation updates
 
-Update docs in all places that mention connect behavior:
+Update docs in all places that mention path-based connect behavior:
 
 - `README.md`
   - replace `cmdk session connect <path>` reference with `cmdk session window <path> --new`
@@ -440,7 +470,8 @@ Update docs in all places that mention connect behavior:
 - `internal/config/docs.go`
   - remove `SESSION CONNECT`
   - add `SESSION WINDOWS`
-  - document examples and command argv behavior
+  - document examples, command argv behavior, and direct tmux command lifecycle behavior
+  - update TUI wording from `Connect` to `Switch to session`
 - `cmd/exit_codes.go`
   - likely no behavior change except references if any are added later
 
@@ -478,13 +509,13 @@ Add tests for:
 - Control characters in plan/window name are rejected.
 - Existing windows with same name are not searched/reused.
 
-Remove or rewrite connect tests tied to reuse behavior:
+Remove or rewrite path-based connect tests tied to reuse behavior:
 
 - `TestConnectReusesManagedSessionAndExistingWindow`
 - `TestConnectCreatesMissingWorktreeWindowInExistingRepoSession`
 - duplicate-window-name-first-index behavior for connect reuse
 
-Keep useful parser/runner tests where they still apply.
+Do not preserve old connect test names unless they genuinely describe a remaining helper. Keep useful parser/runner tests where they still apply.
 
 ### Generator/TUI tests
 
@@ -505,6 +536,13 @@ Update tests for built-in dir actions:
 - Built-in ordering is `New window`, then `New session window`, then config-provided dir actions.
 - Tests that previously expected only one built-in dir action should now expect two.
 
+Update session child tests:
+
+- Built-in session action display changes from `Connect` to `Switch to session`.
+- Built-in session action command remains `tmux switch-client -t {{sq .session_id}}`.
+- Ordering remains `Switch to session`, then configured session actions, then windows.
+- Remove or rename test/helpers that use `Connect` terminology unless they are explicitly testing legacy absence.
+
 ### E2E tests
 
 Update or add:
@@ -512,6 +550,7 @@ Update or add:
 - `cmdk session window <dir> --new` creates managed session/window metadata and switches when run from active client.
 - `cmdk session window <dir> -- command` creates window running command.
 - Existing all-window switching remains valid.
+- Session child switch action is labeled `Switch to session` and still switches with `tmux switch-client -t <session_id>`.
 - Built-in dir `New window` still creates a plain current-session tmux window.
 - Built-in dir `New session window` creates a session-ed window.
 
