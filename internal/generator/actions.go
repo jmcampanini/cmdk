@@ -18,11 +18,7 @@ func NewActionsGenerator() GeneratorFunc {
 			return nil
 		}
 
-		data := make(map[string]string)
-		maps.Copy(data, last.Data)
-		if ctx.PaneID != "" {
-			data["pane_id"] = ctx.PaneID
-		}
+		data := itemDataWithPaneID(last.Data, ctx.PaneID)
 
 		var items []item.Item
 
@@ -57,4 +53,13 @@ func NewActionsGenerator() GeneratorFunc {
 
 		return items
 	}
+}
+
+func itemDataWithPaneID(source map[string]string, paneID string) map[string]string {
+	data := make(map[string]string, len(source)+1)
+	maps.Copy(data, source)
+	if paneID != "" {
+		data["pane_id"] = paneID
+	}
+	return data
 }

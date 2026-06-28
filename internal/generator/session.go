@@ -3,7 +3,6 @@ package generator
 import (
 	"context"
 	"errors"
-	"maps"
 	"time"
 
 	"github.com/jmcampanini/cmdk/internal/item"
@@ -57,17 +56,8 @@ func sessionSwitchItem(session item.Item, paneID string) item.Item {
 		Display: "Switch to session",
 		Action:  item.ActionExecute,
 		Cmd:     sessionSwitchCommand,
-		Data:    sessionData(session, paneID),
+		Data:    itemDataWithPaneID(session.Data, paneID),
 	}
-}
-
-func sessionData(session item.Item, paneID string) map[string]string {
-	data := make(map[string]string, len(session.Data)+1)
-	maps.Copy(data, session.Data)
-	if paneID != "" {
-		data["pane_id"] = paneID
-	}
-	return data
 }
 
 func fetchSessionWindows(session item.Item, ctx Context, fetchWindows SessionWindowsFunc) []item.Item {

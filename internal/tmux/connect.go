@@ -14,6 +14,8 @@ const (
 	cmdkSessionKindOption    = "@cmdk_session_kind"
 	cmdkSessionKeyOption     = "@cmdk_session_key"
 	cmdkSessionDisplayOption = "@cmdk_session_display"
+
+	sessionWindowModeErrorMessage = "session window requires exactly one mode: --new or command args after --"
 )
 
 var (
@@ -122,8 +124,11 @@ func validateSessionPlan(plan resolver.Plan) error {
 
 func validateSessionWindowOptions(windowName string, opts SessionWindowOptions) error {
 	haveCommand := len(opts.Command) > 0
-	if opts.NewShell == haveCommand {
-		return errors.New("session window requires exactly one mode: --new or command args after --")
+	if opts.NewShell && haveCommand {
+		return errors.New(sessionWindowModeErrorMessage)
+	}
+	if !opts.NewShell && !haveCommand {
+		return errors.New(sessionWindowModeErrorMessage)
 	}
 	if containsControl(windowName) {
 		return errors.New("window name contains control characters")
@@ -196,11 +201,7 @@ func (m sessionWindowManager) createSession(ctx context.Context, plan resolver.P
 		return "", "", err
 	}
 
-	sessionID, windowID, err := parseCreatedSessionIDs(string(out))
-	if err != nil {
-		return "", "", err
-	}
-	return sessionID, windowID, nil
+	return parseCreatedSessionIDs(string(out))
 }
 
 func parseCreatedSessionIDs(output string) (string, string, error) {
