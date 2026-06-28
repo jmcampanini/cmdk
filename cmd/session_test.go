@@ -42,11 +42,28 @@ func TestSessionResolveCommandUseDocumentsRequiredPath(t *testing.T) {
 	}
 }
 
+func TestSessionConnectCommandRequiresPath(t *testing.T) {
+	cmd := newSessionConnectCommand()
+	if err := cmd.Args(cmd, nil); err == nil {
+		t.Fatal("expected error for missing path")
+	}
+}
+
+func TestSessionConnectCommandUseDocumentsRequiredPath(t *testing.T) {
+	cmd := newSessionConnectCommand()
+	if !strings.Contains(cmd.Use, "<path>") {
+		t.Errorf("Use = %q, want required <path>", cmd.Use)
+	}
+	if strings.Contains(cmd.Use, "[path]") {
+		t.Errorf("Use = %q, should not document optional [path]", cmd.Use)
+	}
+}
+
 func TestWriteSessionPlan(t *testing.T) {
 	plan := resolver.Plan{
 		SessionKind:            resolver.KindRepo,
 		SessionKey:             "/Users/me/Code/github.com/me/dotfiles",
-		DisplayLabel:           "~/Code/github.com/me/dotfiles",
+		SessionDisplay:         "~/Code/github.com/me/dotfiles",
 		LaunchPath:             "/Users/me/Code/github.com/me/dotfiles/main",
 		PlannedTmuxSessionName: "Users/me/Code/github_com/me/dotfiles",
 		PlannedTmuxWindowName:  "main",
@@ -59,7 +76,7 @@ func TestWriteSessionPlan(t *testing.T) {
 	for _, want := range []string{
 		"session_kind:",
 		"session_key:",
-		"display_label:",
+		"session_display:",
 		"launch_path:",
 		"planned_tmux_session_name:",
 		"planned_tmux_window_name:",
@@ -71,6 +88,9 @@ func TestWriteSessionPlan(t *testing.T) {
 	}
 	if strings.Contains(got, "session_id") {
 		t.Errorf("human output should not use session_id for cmdk identity\n%s", got)
+	}
+	if strings.Contains(got, "display_label") {
+		t.Errorf("human output should not contain display_label\n%s", got)
 	}
 }
 
@@ -107,6 +127,12 @@ func TestRunSessionResolveCommandJSON(t *testing.T) {
 	if strings.Contains(buf.String(), "session_id") {
 		t.Errorf("JSON should not contain session_id: %s", buf.String())
 	}
+	if !strings.Contains(buf.String(), "session_display") {
+		t.Errorf("JSON should contain session_display: %s", buf.String())
+	}
+	if strings.Contains(buf.String(), "display_label") {
+		t.Errorf("JSON should not contain display_label: %s", buf.String())
+	}
 }
 
 func TestRunSessionResolveCommandShortensSymlinkedHome(t *testing.T) {
@@ -135,8 +161,8 @@ func TestRunSessionResolveCommandShortensSymlinkedHome(t *testing.T) {
 	if err := json.Unmarshal(buf.Bytes(), &plan); err != nil {
 		t.Fatalf("invalid JSON %q: %v", buf.String(), err)
 	}
-	if plan.DisplayLabel != "~/project" {
-		t.Errorf("DisplayLabel = %q, want ~/project", plan.DisplayLabel)
+	if plan.SessionDisplay != "~/project" {
+		t.Errorf("SessionDisplay = %q, want ~/project", plan.SessionDisplay)
 	}
 }
 

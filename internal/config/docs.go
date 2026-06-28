@@ -165,6 +165,23 @@ TEMPLATE VARIABLES
   Environment variables CMDK_PATH, CMDK_PANE_ID, etc. are also
   set when executing commands.
 
+SESSION CONNECT
+  cmdk session connect <path> resolves an existing directory, creates or reuses
+  a cmdk-managed tmux session, ensures the planned/default window exists, and
+  switches the current tmux client to that window.
+
+  Repo worktree paths create or reuse one session per repo/container and one
+  window per worktree. Directory paths create or reuse one session for that
+  directory; the default window is named from the directory basename.
+
+  Cmdk recognizes managed sessions by the @cmdk_session_key tmux option. When
+  cmdk creates a session it sets only @cmdk_session_kind, @cmdk_session_key, and
+  @cmdk_session_display. Reconnecting to an existing managed session does not
+  refresh metadata.
+
+  connect requires a current tmux client for switch-client. Phase 3 does not
+  attach from outside tmux and does not fall back to attach-session.
+
 EXECUTION
   Commands are passed to sh -c via syscall.Exec, replacing the
   cmdk process in the current pane. Shell features (pipes,

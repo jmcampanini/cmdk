@@ -28,13 +28,18 @@ func tmuxFormatFields(fields ...string) string {
 	return strings.Join(fields, tmuxFieldSeparator)
 }
 
-// displaySafeTmuxWindowName returns a TUI-safe tmux window name. tmux emits
-// window_name with actual control bytes, so tmuxEscapedFormat handles tabs and
-// newlines before field splitting; this function is only defensive cleanup for
-// any controls that remain and deliberately preserves literal backslash text
-// such as `\t` and `\n`.
+// displaySafeTmuxWindowName returns a TUI-safe tmux window name. tmux usually
+// emits window_name with actual control bytes, so tmuxEscapedFormat handles tabs
+// and newlines before field splitting; this function is defensive cleanup for
+// controls that remain. Some tmux versions double literal backslashes in window
+// names, so collapse those pairs while preserving literal text such as `\t` and
+// `\n`.
 func displaySafeTmuxWindowName(s string) string {
-	return displaySafeTmuxControls(s)
+	return displaySafeTmuxControls(decodeTmuxLiteralBackslashes(s))
+}
+
+func decodeTmuxLiteralBackslashes(s string) string {
+	return strings.ReplaceAll(s, `\\`, `\`)
 }
 
 // displaySafeTmuxSessionName returns a TUI-safe tmux session name. tmux emits

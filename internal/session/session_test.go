@@ -227,7 +227,7 @@ func TestResolve_InsideNormalGitRepo(t *testing.T) {
 	assertPlan(t, plan, Plan{
 		SessionKind:            KindRepo,
 		SessionKey:             repoReal,
-		DisplayLabel:           repoReal,
+		SessionDisplay:         repoReal,
 		LaunchPath:             repoReal,
 		PlannedTmuxSessionName: TmuxSafeSessionName(repoReal),
 		PlannedTmuxWindowName:  "project",
@@ -268,7 +268,7 @@ func TestResolve_StandaloneRepoFallbackIgnoresCorruptGroveSibling(t *testing.T) 
 	assertPlan(t, plan, Plan{
 		SessionKind:            KindRepo,
 		SessionKey:             repoReal,
-		DisplayLabel:           repoReal,
+		SessionDisplay:         repoReal,
 		LaunchPath:             repoReal,
 		PlannedTmuxSessionName: TmuxSafeSessionName(repoReal),
 		PlannedTmuxWindowName:  "foo",
@@ -286,7 +286,7 @@ func TestResolve_SymlinkedStandaloneRepoUsesCanonicalSessionKey(t *testing.T) {
 	assertPlan(t, plan, Plan{
 		SessionKind:            KindRepo,
 		SessionKey:             repoReal,
-		DisplayLabel:           repoReal,
+		SessionDisplay:         repoReal,
 		LaunchPath:             repoReal,
 		PlannedTmuxSessionName: TmuxSafeSessionName(repoReal),
 		PlannedTmuxWindowName:  "repo",
@@ -308,7 +308,7 @@ func TestResolve_SymlinkedRepoSubdirUsesCanonicalSessionKey(t *testing.T) {
 	assertPlan(t, plan, Plan{
 		SessionKind:            KindRepo,
 		SessionKey:             repoReal,
-		DisplayLabel:           repoReal,
+		SessionDisplay:         repoReal,
 		LaunchPath:             repoReal,
 		PlannedTmuxSessionName: TmuxSafeSessionName(repoReal),
 		PlannedTmuxWindowName:  "repo",
@@ -332,7 +332,7 @@ func TestResolve_InsideLinkedGitWorktree(t *testing.T) {
 	assertPlan(t, plan, Plan{
 		SessionKind:            KindRepo,
 		SessionKey:             containerReal,
-		DisplayLabel:           containerReal,
+		SessionDisplay:         containerReal,
 		LaunchPath:             developReal,
 		PlannedTmuxSessionName: TmuxSafeSessionName(containerReal),
 		PlannedTmuxWindowName:  "develop",
@@ -350,7 +350,7 @@ func TestResolve_GroveContainerRootContainingMain(t *testing.T) {
 	assertPlan(t, plan, Plan{
 		SessionKind:            KindRepo,
 		SessionKey:             containerReal,
-		DisplayLabel:           containerReal,
+		SessionDisplay:         containerReal,
 		LaunchPath:             mainReal,
 		PlannedTmuxSessionName: TmuxSafeSessionName(containerReal),
 		PlannedTmuxWindowName:  "main",
@@ -372,7 +372,7 @@ func TestResolve_GroveProbeContinuesAfterStatError(t *testing.T) {
 	assertPlan(t, plan, Plan{
 		SessionKind:            KindRepo,
 		SessionKey:             containerReal,
-		DisplayLabel:           containerReal,
+		SessionDisplay:         containerReal,
 		LaunchPath:             developReal,
 		PlannedTmuxSessionName: TmuxSafeSessionName(containerReal),
 		PlannedTmuxWindowName:  "develop",
@@ -412,8 +412,8 @@ func TestResolve_SymlinkedGroveContainerUsesCanonicalSessionKey(t *testing.T) {
 		if plan.SessionKey != containerReal {
 			t.Errorf("%s SessionKey = %q, want canonical container %q", name, plan.SessionKey, containerReal)
 		}
-		if plan.DisplayLabel != containerReal {
-			t.Errorf("%s DisplayLabel = %q, want %q", name, plan.DisplayLabel, containerReal)
+		if plan.SessionDisplay != containerReal {
+			t.Errorf("%s SessionDisplay = %q, want %q", name, plan.SessionDisplay, containerReal)
 		}
 		if plan.LaunchPath != mainReal {
 			t.Errorf("%s LaunchPath = %q, want %q", name, plan.LaunchPath, mainReal)
@@ -455,7 +455,7 @@ func TestResolve_NonGitDirectory(t *testing.T) {
 	assertPlan(t, plan, Plan{
 		SessionKind:            KindDirectory,
 		SessionKey:             dirReal,
-		DisplayLabel:           dirReal,
+		SessionDisplay:         dirReal,
 		LaunchPath:             dirReal,
 		PlannedTmuxSessionName: TmuxSafeSessionName(dirReal),
 		PlannedTmuxWindowName:  "scratch",
@@ -475,7 +475,7 @@ func TestResolve_SymlinkedNonGitDirectoryUsesCanonicalSessionKey(t *testing.T) {
 	assertPlan(t, plan, Plan{
 		SessionKind:            KindDirectory,
 		SessionKey:             dirReal,
-		DisplayLabel:           dirReal,
+		SessionDisplay:         dirReal,
 		LaunchPath:             dirReal,
 		PlannedTmuxSessionName: TmuxSafeSessionName(dirReal),
 		PlannedTmuxWindowName:  "scratch",
@@ -497,7 +497,7 @@ func TestResolve_SymlinkInsideRepoToNonGitDirectoryUsesTargetDirectoryPlan(t *te
 	assertPlan(t, plan, Plan{
 		SessionKind:            KindDirectory,
 		SessionKey:             dirReal,
-		DisplayLabel:           dirReal,
+		SessionDisplay:         dirReal,
 		LaunchPath:             dirReal,
 		PlannedTmuxSessionName: TmuxSafeSessionName(dirReal),
 		PlannedTmuxWindowName:  "scratch",
@@ -570,7 +570,14 @@ func TestTmuxSafeSessionNameRootFallback(t *testing.T) {
 	}
 }
 
-func TestResolve_DisplayLabelUsesPathFormatting(t *testing.T) {
+func TestTmuxSafeSessionNameEmptyFallback(t *testing.T) {
+	got := TmuxSafeSessionName("")
+	if got != "_" {
+		t.Errorf("TmuxSafeSessionName(empty) = %q, want _", got)
+	}
+}
+
+func TestResolve_SessionDisplayUsesPathFormatting(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "home")
 	dir := filepath.Join(home, "Code", "github.com", "acme", "project")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -586,8 +593,8 @@ func TestResolve_DisplayLabelUsesPathFormatting(t *testing.T) {
 	}
 
 	plan := resolveForTest(t, dir, display)
-	if plan.DisplayLabel != "…/gh/acme/project" {
-		t.Errorf("DisplayLabel = %q, want formatted display path", plan.DisplayLabel)
+	if plan.SessionDisplay != "…/gh/acme/project" {
+		t.Errorf("SessionDisplay = %q, want formatted display path", plan.SessionDisplay)
 	}
 	if plan.SessionKey != dirReal {
 		t.Errorf("SessionKey = %q, want unformatted identity %q", plan.SessionKey, dirReal)
@@ -598,7 +605,7 @@ func TestPlanJSONDoesNotUseSessionIDForCmdkIdentity(t *testing.T) {
 	plan := Plan{
 		SessionKind:            KindDirectory,
 		SessionKey:             "/tmp/scratch",
-		DisplayLabel:           "/tmp/scratch",
+		SessionDisplay:         "/tmp/scratch",
 		LaunchPath:             "/tmp/scratch",
 		PlannedTmuxSessionName: "tmp/scratch",
 		PlannedTmuxWindowName:  "scratch",
@@ -612,5 +619,11 @@ func TestPlanJSONDoesNotUseSessionIDForCmdkIdentity(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "session_key") {
 		t.Fatalf("JSON should contain session_key: %s", data)
+	}
+	if !strings.Contains(string(data), "session_display") {
+		t.Fatalf("JSON should contain session_display: %s", data)
+	}
+	if strings.Contains(string(data), "display_label") {
+		t.Fatalf("JSON should not contain display_label: %s", data)
 	}
 }

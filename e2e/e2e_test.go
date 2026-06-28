@@ -83,6 +83,22 @@ func killSession(t *testing.T, sess string) {
 	}
 }
 
+func waitForFile(t *testing.T, path string, timeout time.Duration) string {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		data, err := os.ReadFile(path)
+		if err == nil {
+			return string(data)
+		}
+		lastErr = err
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s: %v", path, lastErr)
+	return ""
+}
+
 func capturePane(t *testing.T, sess string) string {
 	t.Helper()
 	out, err := tmuxCmd("capture-pane", "-t", sess, "-p").Output()
@@ -148,6 +164,58 @@ func typeText(t *testing.T, sess string, text string) {
 func hasZoxide() bool {
 	_, err := exec.LookPath("zoxide")
 	return err == nil
+}
+
+func requireGitE2E(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+}
+
+func runGitE2E(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=cmdk e2e",
+		"GIT_AUTHOR_EMAIL=cmdk@example.invalid",
+		"GIT_COMMITTER_NAME=cmdk e2e",
+		"GIT_COMMITTER_EMAIL=cmdk@example.invalid",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git -C %s %s failed: %v\n%s", dir, strings.Join(args, " "), err, out)
+	}
+	return string(out)
+}
+
+func initRepoE2E(t *testing.T, path string) {
+	t.Helper()
+	requireGitE2E(t)
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("git", "init", path)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git init failed: %v\n%s", err, out)
+	}
+	runGitE2E(t, path, "config", "user.name", "cmdk e2e")
+	runGitE2E(t, path, "config", "user.email", "cmdk@example.invalid")
+	if err := os.WriteFile(filepath.Join(path, "README.md"), []byte("test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitE2E(t, path, "add", "README.md")
+	runGitE2E(t, path, "commit", "-m", "initial")
+}
+
+func realPathE2E(t *testing.T, path string) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%q): %v", path, err)
+	}
+	return filepath.Clean(resolved)
 }
 
 func requireZoxideEntries(t *testing.T) {
@@ -483,6 +551,141 @@ func writeConfig(t *testing.T, content string) string {
 		t.Fatal(err)
 	}
 	return dir
+}
+
+func shellQuoteE2E(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
+func runDetachedSessionConnect(t *testing.T, path string) string {
+	t.Helper()
+	xdg := writeConfig(t, "")
+	marker := filepath.Join(t.TempDir(), "connect-exit")
+	sess := "cmdk-connect-" + strings.ReplaceAll(t.Name(), "/", "-") + fmt.Sprintf("-%d", time.Now().UnixNano())
+	shellCmd := fmt.Sprintf("%s session connect %s; echo EXITCODE=$? > %s; sleep 1",
+		shellQuoteE2E(binaryPath), shellQuoteE2E(path), shellQuoteE2E(marker))
+	cmd := tmuxCmd("new-session", "-d", "-s", sess, "-x", "120", "-y", "40",
+		"env", "XDG_CONFIG_HOME="+xdg, "sh", "-c", shellCmd)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("tmux new-session failed: %v\n%s", err, out)
+	}
+	t.Cleanup(func() { killSession(t, sess) })
+	return waitForFile(t, marker, defaultTimeout)
+}
+
+type managedSessionE2E struct {
+	ID      string
+	Kind    string
+	Key     string
+	Display string
+}
+
+func findManagedSessionE2E(t *testing.T, key string) managedSessionE2E {
+	t.Helper()
+	out, err := tmuxCmd("list-sessions", "-F", "#{session_id}\t#{@cmdk_session_kind}\t#{@cmdk_session_key}\t#{@cmdk_session_display}").Output()
+	if err != nil {
+		t.Fatalf("list-sessions failed: %v", err)
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimRight(line, "\r")
+		if line == "" {
+			continue
+		}
+		fields := strings.Split(line, "\t")
+		if len(fields) != 4 {
+			t.Fatalf("malformed list-sessions row %q", line)
+		}
+		if fields[2] == key {
+			return managedSessionE2E{ID: fields[0], Kind: fields[1], Key: fields[2], Display: fields[3]}
+		}
+	}
+	t.Fatalf("no managed session found for key %q\n%s", key, out)
+	return managedSessionE2E{}
+}
+
+func windowNamesE2E(t *testing.T, sessionID string) map[string]string {
+	t.Helper()
+	out, err := tmuxCmd("list-windows", "-t", sessionID, "-F", "#{window_name}\t#{pane_current_path}").Output()
+	if err != nil {
+		t.Fatalf("list-windows failed: %v", err)
+	}
+	windows := map[string]string{}
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimRight(line, "\r")
+		if line == "" {
+			continue
+		}
+		fields := strings.Split(line, "\t")
+		if len(fields) != 2 {
+			t.Fatalf("malformed list-windows row %q", line)
+		}
+		windows[fields[0]] = fields[1]
+	}
+	return windows
+}
+
+// Detached e2e panes have no current tmux client, so the final switch-client
+// may exit nonzero. These tests assert the create/metadata/window steps that
+// happen before that Phase 3 switch failure.
+func TestE2E_SessionConnectCreatesNonGitDirectorySession(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "scratch")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dirReal := realPathE2E(t, dir)
+
+	result := runDetachedSessionConnect(t, dir)
+	if !strings.Contains(result, "EXITCODE=") {
+		t.Fatalf("missing connect exit marker: %q", result)
+	}
+
+	session := findManagedSessionE2E(t, dirReal)
+	if session.Kind != "directory" {
+		t.Errorf("session kind = %q, want directory", session.Kind)
+	}
+	if session.Display != dirReal {
+		t.Errorf("session display = %q, want %q", session.Display, dirReal)
+	}
+	windows := windowNamesE2E(t, session.ID)
+	if windows["scratch"] != dirReal {
+		t.Errorf("scratch window cwd = %q, want %q (all windows: %v)", windows["scratch"], dirReal, windows)
+	}
+}
+
+func TestE2E_SessionConnectCreatesRepoWorktreeSessionAndWindows(t *testing.T) {
+	requireGitE2E(t)
+	container := filepath.Join(t.TempDir(), "dotfiles")
+	main := filepath.Join(container, "main")
+	feature := filepath.Join(container, "wt-feature")
+	initRepoE2E(t, main)
+	runGitE2E(t, main, "worktree", "add", "-b", "cmdk-e2e-feature", feature)
+
+	containerReal := realPathE2E(t, container)
+	featureReal := realPathE2E(t, feature)
+	mainReal := realPathE2E(t, main)
+
+	result := runDetachedSessionConnect(t, feature)
+	if !strings.Contains(result, "EXITCODE=") {
+		t.Fatalf("missing connect exit marker: %q", result)
+	}
+
+	session := findManagedSessionE2E(t, containerReal)
+	if session.Kind != "repo" {
+		t.Errorf("session kind = %q, want repo", session.Kind)
+	}
+	windows := windowNamesE2E(t, session.ID)
+	if windows["wt-feature"] != featureReal {
+		t.Errorf("wt-feature window cwd = %q, want %q (all windows: %v)", windows["wt-feature"], featureReal, windows)
+	}
+
+	result = runDetachedSessionConnect(t, main)
+	if !strings.Contains(result, "EXITCODE=") {
+		t.Fatalf("missing second connect exit marker: %q", result)
+	}
+	windows = windowNamesE2E(t, session.ID)
+	if windows["main"] != mainReal {
+		t.Errorf("main window cwd = %q, want %q (all windows: %v)", windows["main"], mainReal, windows)
+	}
 }
 
 func TestE2E_ConfigCommandsVisible(t *testing.T) {
