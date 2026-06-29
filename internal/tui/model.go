@@ -563,22 +563,28 @@ func (m Model) openErrorDetails(it item.Item) Model {
 func safeErrorDetailItem(it item.Item) item.Item {
 	it.Display = escapeTerminalControls(it.Display)
 	it.Source = escapeTerminalControls(it.Source)
-	if it.Diagnostics != nil {
-		diagnostics := *it.Diagnostics
-		diagnostics.Summary = escapeTerminalControls(diagnostics.Summary)
-		diagnostics.Fields = slices.Clone(diagnostics.Fields)
-		for i := range diagnostics.Fields {
-			diagnostics.Fields[i].Label = escapeTerminalControls(diagnostics.Fields[i].Label)
-			diagnostics.Fields[i].Value = escapeTerminalControls(diagnostics.Fields[i].Value)
-		}
-		diagnostics.Sections = slices.Clone(diagnostics.Sections)
-		for i := range diagnostics.Sections {
-			diagnostics.Sections[i].Title = escapeTerminalControls(diagnostics.Sections[i].Title)
-			diagnostics.Sections[i].Body = escapeTerminalControls(diagnostics.Sections[i].Body)
-		}
-		it.Diagnostics = &diagnostics
-	}
+	it.Diagnostics = safeDiagnostics(it.Diagnostics)
 	return it
+}
+
+func safeDiagnostics(d *item.Diagnostics) *item.Diagnostics {
+	if d == nil {
+		return nil
+	}
+
+	diagnostics := *d
+	diagnostics.Summary = escapeTerminalControls(diagnostics.Summary)
+	diagnostics.Fields = slices.Clone(diagnostics.Fields)
+	for i := range diagnostics.Fields {
+		diagnostics.Fields[i].Label = escapeTerminalControls(diagnostics.Fields[i].Label)
+		diagnostics.Fields[i].Value = escapeTerminalControls(diagnostics.Fields[i].Value)
+	}
+	diagnostics.Sections = slices.Clone(diagnostics.Sections)
+	for i := range diagnostics.Sections {
+		diagnostics.Sections[i].Title = escapeTerminalControls(diagnostics.Sections[i].Title)
+		diagnostics.Sections[i].Body = escapeTerminalControls(diagnostics.Sections[i].Body)
+	}
+	return &diagnostics
 }
 
 func (m Model) updateErrorDetails(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -888,18 +894,20 @@ func pickerErrorItem(kind string, stage item.Stage, data map[string]string, cwd 
 }
 
 func pickerDiagnostics(summary string, stage item.Stage, data map[string]string, cwd string, cwdErr error, failure pickerFailure) *item.Diagnostics {
+	workingDirectory := cwd
+	if cwdErr != nil {
+		workingDirectory = fmt.Sprintf("unknown: %s", cwdErr)
+	}
+
+	timeoutValue := "none"
+	if failure.Timeout > 0 {
+		timeoutValue = failure.Timeout.String()
+	}
+
 	fields := []item.DiagnosticField{
 		{Label: "Stage key", Value: stage.Key},
-	}
-	if cwdErr != nil {
-		fields = append(fields, item.DiagnosticField{Label: "Working directory", Value: fmt.Sprintf("unknown: %s", cwdErr)})
-	} else {
-		fields = append(fields, item.DiagnosticField{Label: "Working directory", Value: cwd})
-	}
-	if failure.Timeout > 0 {
-		fields = append(fields, item.DiagnosticField{Label: "Timeout", Value: failure.Timeout.String()})
-	} else {
-		fields = append(fields, item.DiagnosticField{Label: "Timeout", Value: "none"})
+		{Label: "Working directory", Value: workingDirectory},
+		{Label: "Timeout", Value: timeoutValue},
 	}
 	if failure.Err != nil {
 		fields = append(fields, item.DiagnosticField{Label: "Error", Value: failure.Err.Error()})
@@ -1210,7 +1218,7 @@ func formatDiagnosticsBody(d *item.Diagnostics) string {
 	return b.String()
 }
 
-func writeDiagnosticLabelValue(b *strings.Builder, label string, value string) {
+func writeDiagnosticLabelValue(b *strings.Builder, label, value string) {
 	if value == "" {
 		value = "(empty)"
 	}
