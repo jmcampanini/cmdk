@@ -44,8 +44,12 @@ func init() {
 
 func newRootCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:           "cmdk",
-		Short:         "Keyboard-driven tmux launcher",
+		Use:   "cmdk",
+		Short: "Keyboard-driven tmux launcher",
+		Long: `Keyboard-driven tmux launcher.
+
+Log file:
+  $HOME/.local/state/cmdk/cmdk.log`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE:          runRootCommand,
@@ -62,7 +66,6 @@ func newRootCommand() *cobra.Command {
 		newDocsCommand(),
 		newExitCodesCommand(),
 		newIconsCommand(),
-		newLogsCommand(),
 		newSessionCommand(),
 		newShortenCommand(),
 	)
