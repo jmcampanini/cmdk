@@ -181,9 +181,16 @@ TEMPLATE VARIABLES
   built-in session switch and child-window actions target by session_id and
   shell-quote the tmux target.
 
-  Environment variables CMDK_PATH, CMDK_PANE_ID, CMDK_LAUNCH_PATH,
-  CMDK_LAUNCH_BASENAME, etc. are also set when executing commands
-  when the corresponding template variables are available.
+  Command environment: shell-mode final commands and launch_path_cmd commands
+  run with a clean CMDK_* namespace. cmdk removes inherited CMDK_* variables
+  and sets CMDK_* variables for data available to that command, such as
+  CMDK_PATH, CMDK_PANE_ID, and CMDK_LAUNCH_PATH when available.
+
+  Session-window actions do not pass action or stage data through tmux
+  environment variables. Payload commands in session-window mode should use
+  template variables such as {{.launch_path}} in cmd. Interactive
+  session-window shells do not receive action-specific CMDK_* variables from
+  cmdk.
 
 ATTACH
   cmdk attach enters a cmdk-managed tmux session from outside tmux. It refuses
@@ -231,9 +238,11 @@ SESSION WINDOWS
 
 EXECUTION
   Actions run in one of two launch modes. In session-window mode, cmdk resolves
-  the effective launch path, creates/switches to a fresh window in the
-  cmdk-managed tmux session for that path, and runs the rendered cmd there via
-  sh -lc. Dir-matching actions default to session-window.
+  the effective launch path, renders the payload command, creates/switches to a
+  fresh window in the cmdk-managed tmux session for that path, and runs the
+  rendered cmd there via sh -lc. Dir-matching actions default to session-window.
+  cmdk does not pass CMDK_* action/stage data to tmux with -e or set it in the
+  managed session environment; use template variables in cmd.
 
   In shell mode, commands are passed to sh -c via syscall.Exec, replacing the
   cmdk process in the current pane. If an effective launch path exists, cmdk

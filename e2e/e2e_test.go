@@ -773,7 +773,7 @@ func TestE2E_RootLaunchPathActionCreatesManagedSession(t *testing.T) {
 name = "xq-launch-path"
 matches = "root"
 launch_path = "%s"
-cmd = "printf '%%s\\n%%s\\n%%s\\n' \"$PWD\" \"$CMDK_LAUNCH_PATH\" {{sq .launch_path}} > '%s'; sleep 30"
+cmd = "printf '%%s\\n%%s\\n' \"$PWD\" {{sq .launch_path}} > '%s'; sleep 30"
 `, dir, marker))
 
 	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
@@ -783,10 +783,10 @@ cmd = "printf '%%s\\n%%s\\n%%s\\n' \"$PWD\" \"$CMDK_LAUNCH_PATH\" {{sq .launch_p
 	filterAndExecute(t, sess, "xq-launch-path")
 
 	lines := strings.Split(strings.TrimSpace(waitForFile(t, marker, defaultTimeout)), "\n")
-	if len(lines) != 3 {
-		t.Fatalf("marker lines = %#v, want 3", lines)
+	if len(lines) != 2 {
+		t.Fatalf("marker lines = %#v, want 2", lines)
 	}
-	wantLines := []string{dirReal, dirClean, dirClean}
+	wantLines := []string{dirReal, dirClean}
 	for i, got := range lines {
 		if got != wantLines[i] {
 			t.Fatalf("marker line %d = %q, want %q (all lines: %#v)", i, got, wantLines[i], lines)

@@ -199,7 +199,7 @@ Execution details:
 - It should use `[timeout].picker` as its timeout.
   - Existing picker source commands already use this timeout category.
   - `0` should mean no timeout, consistent with picker sources.
-- It should receive `CMDK_*` env vars for data available at that point, but `CMDK_LAUNCH_PATH` and `CMDK_LAUNCH_BASENAME` are not available until after it returns.
+- It should receive `CMDK_*` environment variables for data available before launch path resolution. `CMDK_LAUNCH_PATH` and `CMDK_LAUNCH_BASENAME` are not available until after it returns.
 
 Stdout parsing:
 
@@ -235,6 +235,13 @@ Availability:
 | final `cmd` | yes, if effective launch path exists | yes, if effective launch path exists |
 | `window_name` | yes | yes |
 
+CMDK_* environment availability:
+
+- shell-mode final `cmd`: yes, command process only,
+- `launch_path_cmd`: yes, command process only, before `launch_path` exists,
+- session-window payload `cmd`: no; use template variables in `cmd`,
+- interactive session-window shell: no action/stage CMDK_* environment injection.
+
 `launch_path` and `launch_basename` must be reserved stage keys so stage output cannot overwrite them.
 
 ## Execution semantics
@@ -255,6 +262,8 @@ The final command should preserve existing shell-snippet semantics by running th
 ```sh
 sh -lc '<rendered cmd>'
 ```
+
+Do not pass action/stage CMDK_* data to tmux using `-e`. cmdk should not set action-specific CMDK_* variables in managed tmux session or window environment. Session-window payload commands rely on template rendering for action data, for example `{{.launch_path}}`, `{{.launch_basename}}`, and stage outputs. The built-in interactive `NewShell` action does not receive action-specific CMDK_* environment variables.
 
 Implementation can use existing `tmux.CreateResolvedSessionWindow` with:
 
@@ -764,6 +773,7 @@ Add tests for session-window execution with a fake tmux/session creation functio
 - renders command with `launch_path`,
 - passes `[]string{"sh", "-lc", rendered}` as command payload,
 - passes rendered/default window name,
+- does not pass action/stage CMDK_* environment variables to tmux,
 - uses existing resolver display options.
 
 Implementation may require dependency injection around session-window creation similar to existing command tests.

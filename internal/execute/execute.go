@@ -370,7 +370,6 @@ func runSessionWindow(selected item.Item, data map[string]string, launchPath str
 		Name:     windowName,
 		NewShell: selected.NewShell,
 		Command:  command,
-		Env:      BuildCMDKEnvVarsFromData(data, paneID),
 		Switch:   true,
 	})
 }

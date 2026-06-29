@@ -28,13 +28,11 @@ var (
 )
 
 // SessionWindowOptions controls creation of a new tmux window inside the
-// cmdk-managed session described by a resolved session plan. Env entries are
-// KEY=value strings passed to tmux via -e for the created window.
+// cmdk-managed session described by a resolved session plan.
 type SessionWindowOptions struct {
 	Name     string
 	NewShell bool
 	Command  []string
-	Env      []string
 	Switch   bool
 }
 
@@ -75,9 +73,9 @@ func (m sessionWindowManager) createResolvedWindow(ctx context.Context, plan res
 	shellCommand := shellCommandFromArgv(opts.Command)
 	var windowID string
 	if sessionID == "" {
-		sessionID, windowID, err = m.createManagedSession(ctx, plan, windowName, shellCommand, opts.Env)
+		sessionID, windowID, err = m.createManagedSession(ctx, plan, windowName, shellCommand)
 	} else {
-		windowID, err = m.createWindow(ctx, sessionID, plan.LaunchPath, windowName, shellCommand, opts.Env)
+		windowID, err = m.createWindow(ctx, sessionID, plan.LaunchPath, windowName, shellCommand)
 	}
 	if err != nil {
 		return err
@@ -101,7 +99,7 @@ func (m sessionWindowManager) attachResolvedSession(ctx context.Context, plan re
 		return err
 	}
 	if sessionID == "" {
-		sessionID, _, err = m.createManagedSession(ctx, plan, plan.PlannedTmuxWindowName, "", nil)
+		sessionID, _, err = m.createManagedSession(ctx, plan, plan.PlannedTmuxWindowName, "")
 		if err != nil {
 			return err
 		}
@@ -236,8 +234,8 @@ func parseManagedSessionRows(output string) ([]managedSessionRow, error) {
 	return rows, nil
 }
 
-func (m sessionWindowManager) createManagedSession(ctx context.Context, plan resolver.Plan, windowName, shellCommand string, env []string) (string, string, error) {
-	sessionID, windowID, err := m.createSession(ctx, plan, windowName, shellCommand, env)
+func (m sessionWindowManager) createManagedSession(ctx context.Context, plan resolver.Plan, windowName, shellCommand string) (string, string, error) {
+	sessionID, windowID, err := m.createSession(ctx, plan, windowName, shellCommand)
 	if err != nil {
 		return "", "", err
 	}
@@ -247,14 +245,13 @@ func (m sessionWindowManager) createManagedSession(ctx context.Context, plan res
 	return sessionID, windowID, nil
 }
 
-func (m sessionWindowManager) createSession(ctx context.Context, plan resolver.Plan, windowName, shellCommand string, env []string) (string, string, error) {
+func (m sessionWindowManager) createSession(ctx context.Context, plan resolver.Plan, windowName, shellCommand string) (string, string, error) {
 	args := []string{
 		"new-session", "-d", "-P", "-F", newSessionIDsFormat,
 		"-s", plan.PlannedTmuxSessionName,
 		"-n", windowName,
 		"-c", plan.LaunchPath,
 	}
-	args = appendTmuxEnv(args, env)
 	if shellCommand != "" {
 		args = append(args, shellCommand)
 	}
@@ -302,14 +299,13 @@ func (m sessionWindowManager) setSessionMetadata(ctx context.Context, sessionID 
 	return nil
 }
 
-func (m sessionWindowManager) createWindow(ctx context.Context, sessionID, launchPath, windowName, shellCommand string, env []string) (string, error) {
+func (m sessionWindowManager) createWindow(ctx context.Context, sessionID, launchPath, windowName, shellCommand string) (string, error) {
 	args := []string{
 		"new-window", "-P", "-F", "#{window_id}",
 		"-t", sessionID + ":",
 		"-n", windowName,
 		"-c", launchPath,
 	}
-	args = appendTmuxEnv(args, env)
 	if shellCommand != "" {
 		args = append(args, shellCommand)
 	}
@@ -319,13 +315,6 @@ func (m sessionWindowManager) createWindow(ctx context.Context, sessionID, launc
 		return "", err
 	}
 	return parseCreatedWindowID(string(out))
-}
-
-func appendTmuxEnv(args []string, env []string) []string {
-	for _, entry := range env {
-		args = append(args, "-e", entry)
-	}
-	return args
 }
 
 func parseCreatedWindowID(output string) (string, error) {

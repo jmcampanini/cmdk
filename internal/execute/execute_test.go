@@ -756,9 +756,6 @@ func TestRun_SessionWindowNewShellCreatesInteractiveWindow(t *testing.T) {
 	if gotOpts.Name != filepath.Base(dir) {
 		t.Errorf("Name = %q, want basename", gotOpts.Name)
 	}
-	if envMap := envSliceToMap(gotOpts.Env); envMap["CMDK_LAUNCH_PATH"] != filepath.Clean(dir) {
-		t.Errorf("CMDK_LAUNCH_PATH = %q", envMap["CMDK_LAUNCH_PATH"])
-	}
 }
 
 func TestRun_SessionWindowCreatesManagedWindow(t *testing.T) {
@@ -811,13 +808,6 @@ func TestRun_SessionWindowCreatesManagedWindow(t *testing.T) {
 	}
 	if !gotOpts.Switch {
 		t.Error("Switch = false, want true")
-	}
-	envMap := envSliceToMap(gotOpts.Env)
-	if envMap["CMDK_LAUNCH_PATH"] != filepath.Clean(dir) {
-		t.Errorf("CMDK_LAUNCH_PATH = %q", envMap["CMDK_LAUNCH_PATH"])
-	}
-	if envMap["CMDK_LAUNCH_BASENAME"] != filepath.Base(dir) {
-		t.Errorf("CMDK_LAUNCH_BASENAME = %q", envMap["CMDK_LAUNCH_BASENAME"])
 	}
 }
 
