@@ -322,9 +322,9 @@ func resolveLaunchPathCmd(cmdTemplate string, data map[string]string, timeout ti
 		stderrCh <- readCommandDiagnostic(stderr, launchPathCmdMaxStderrBytes)
 	}()
 
-	waitErr := cmd.Wait()
 	stdoutResult := <-stdoutCh
 	stderrResult := <-stderrCh
+	waitErr := cmd.Wait()
 	stderrText := formatCommandDiagnostic(stderrResult, launchPathCmdMaxStderrBytes)
 
 	if ctx.Err() == context.DeadlineExceeded {
