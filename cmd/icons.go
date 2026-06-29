@@ -18,63 +18,71 @@ var (
 	flagIconFzf    bool
 )
 
-var docsIconsCmd = &cobra.Command{
-	Use:   "icons",
-	Short: "List supported icon aliases",
-	Args:  cobra.NoArgs,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		hasSetFlag := flagIconCod || flagIconDev || flagIconOct
-		hasAnyFlag := hasSetFlag || flagIconFilter != "" || flagIconFzf
+func newIconsCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "icons",
+		Short: "List supported icon aliases",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			hasSetFlag := flagIconCod || flagIconDev || flagIconOct
+			hasAnyFlag := hasSetFlag || flagIconFilter != "" || flagIconFzf
 
-		if !hasAnyFlag {
-			printIconHelp()
-			return nil
-		}
-
-		showAll := !hasSetFlag
-
-		entries := icon.All()
-		filterLower := strings.ToLower(flagIconFilter)
-
-		var filtered []icon.Entry
-		for _, e := range entries {
-			set := setFromAlias(e.Alias)
-			if !showAll && !matchesSetFlag(set) {
-				continue
+			if !hasAnyFlag {
+				printIconHelp()
+				return nil
 			}
-			if filterLower != "" && !matchesFilter(e, filterLower) {
-				continue
-			}
-			filtered = append(filtered, e)
-		}
 
-		if len(filtered) == 0 {
-			emitIconsEmptyHint()
-			return nil
-		}
+			showAll := !hasSetFlag
 
-		if flagIconFzf {
-			for _, e := range filtered {
+			entries := icon.All()
+			filterLower := strings.ToLower(flagIconFilter)
+
+			var filtered []icon.Entry
+			for _, e := range entries {
 				set := setFromAlias(e.Alias)
-				fmt.Printf("%s  %-40s [%s]  %s\n", e.Icon, ":"+e.Alias+":", set, e.Description)
+				if !showAll && !matchesSetFlag(set) {
+					continue
+				}
+				if filterLower != "" && !matchesFilter(e, filterLower) {
+					continue
+				}
+				filtered = append(filtered, e)
+			}
+
+			if len(filtered) == 0 {
+				emitIconsEmptyHint()
+				return nil
+			}
+
+			if flagIconFzf {
+				for _, e := range filtered {
+					set := setFromAlias(e.Alias)
+					fmt.Printf("%s  %-40s [%s]  %s\n", e.Icon, ":"+e.Alias+":", set, e.Description)
+				}
+				return nil
+			}
+
+			var curPrefix string
+			for _, e := range filtered {
+				prefix := aliasPrefix(e.Alias)
+				if prefix != curPrefix {
+					if curPrefix != "" {
+						fmt.Println()
+					}
+					fmt.Println(prefixHeading(prefix))
+					curPrefix = prefix
+				}
+				fmt.Printf("  %s  %-40s %s\n", e.Icon, ":"+e.Alias+":", e.Description)
 			}
 			return nil
-		}
-
-		var curPrefix string
-		for _, e := range filtered {
-			prefix := aliasPrefix(e.Alias)
-			if prefix != curPrefix {
-				if curPrefix != "" {
-					fmt.Println()
-				}
-				fmt.Println(prefixHeading(prefix))
-				curPrefix = prefix
-			}
-			fmt.Printf("  %s  %-40s %s\n", e.Icon, ":"+e.Alias+":", e.Description)
-		}
-		return nil
-	},
+		},
+	}
+	cmd.Flags().BoolVar(&flagIconCod, "cod", false, "Show Codicons")
+	cmd.Flags().BoolVar(&flagIconDev, "dev", false, "Show Devicons")
+	cmd.Flags().BoolVar(&flagIconOct, "oct", false, "Show Octicons")
+	cmd.Flags().StringVar(&flagIconFilter, "filter", "", "Filter by substring match on alias or description")
+	cmd.Flags().BoolVar(&flagIconFzf, "fzf", false, "Flat output for piping to fzf")
+	return cmd
 }
 
 func emitIconsEmptyHint() {
@@ -201,13 +209,4 @@ func iconSetCounts() map[string]int {
 		counts[setFromAlias(e.Alias)]++
 	}
 	return counts
-}
-
-func init() {
-	docsIconsCmd.Flags().BoolVar(&flagIconCod, "cod", false, "Show Codicons")
-	docsIconsCmd.Flags().BoolVar(&flagIconDev, "dev", false, "Show Devicons")
-	docsIconsCmd.Flags().BoolVar(&flagIconOct, "oct", false, "Show Octicons")
-	docsIconsCmd.Flags().StringVar(&flagIconFilter, "filter", "", "Filter by substring match on alias or description")
-	docsIconsCmd.Flags().BoolVar(&flagIconFzf, "fzf", false, "Flat output for piping to fzf")
-	rootCmd.AddCommand(docsIconsCmd)
 }

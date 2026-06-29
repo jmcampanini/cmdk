@@ -1,0 +1,26 @@
+package cmd
+
+import (
+	"fmt"
+	"path/filepath"
+
+	"github.com/spf13/cobra"
+
+	"github.com/jmcampanini/cmdk/internal/logging"
+)
+
+func newLogsPathCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "path",
+		Short: "Print the log file path",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := logging.DefaultLogPath()
+			if !filepath.IsAbs(path) {
+				return fmt.Errorf("cannot determine log file location: $HOME is not set")
+			}
+			fmt.Println(path)
+			return nil
+		},
+	}
+}
