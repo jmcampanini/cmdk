@@ -996,7 +996,8 @@ func (m Model) errorDetailsBodyHeight() int {
 }
 
 func (m Model) errorDetailsLines() []string {
-	wrapped := ansi.Wrap(m.errorDetailItem.Display, m.errorDetailsContentWidth(), " ")
+	display := escapeTerminalControls(m.errorDetailItem.Display)
+	wrapped := ansi.Wrap(display, m.errorDetailsContentWidth(), " ")
 	if wrapped == "" {
 		return []string{""}
 	}
@@ -1014,7 +1015,8 @@ func (m Model) errorDetailsView() string {
 	var b strings.Builder
 	b.WriteString(pad + m.errorStyle.Render("Error details") + "\n")
 	if m.errorDetailItem.Source != "" {
-		b.WriteString(pad + m.stackStyle.Render("Source: "+m.errorDetailItem.Source) + "\n")
+		source := escapeTerminalControls(m.errorDetailItem.Source)
+		b.WriteString(pad + m.stackStyle.Render("Source: "+source) + "\n")
 	}
 	b.WriteByte('\n')
 	for _, line := range lines[scroll:end] {

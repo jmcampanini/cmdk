@@ -599,6 +599,30 @@ func TestErrorDetailsWrapsWithoutTruncation(t *testing.T) {
 	}
 }
 
+func TestErrorDetailsEscapesTerminalControls(t *testing.T) {
+	msg := "before \x1b]52;c;AAAA\a after\ncolor \x1b[31mred\rreturn\t-tab\x9b"
+	m := newTestModel(nil, testRegistry())
+	m = setWindowSize(t, m, 80, 12)
+	m = m.openErrorDetails(item.Item{Type: "error", Source: "evil\x1b[31m", Display: msg})
+
+	body := strings.Join(m.errorDetailsLines(), "\n")
+	for _, raw := range []string{"\x1b", "\a", "\r", "\t", "\x9b"} {
+		if strings.Contains(body, raw) {
+			t.Fatalf("details body should not contain raw terminal control %q: %q", raw, body)
+		}
+	}
+	for _, escaped := range []string{`\x1b]52;c;AAAA\a`, `\x1b[31mred\rreturn\t-tab\x9b`} {
+		if !strings.Contains(body, escaped) {
+			t.Fatalf("details body should contain escaped control text %q: %q", escaped, body)
+		}
+	}
+
+	content := ansi.Strip(m.errorDetailsView())
+	if !strings.Contains(content, `Source: evil\x1b[31m`) {
+		t.Fatalf("details source should be escaped, got:\n%s", content)
+	}
+}
+
 func TestErrorDetailsScrollingClamps(t *testing.T) {
 	var b strings.Builder
 	for i := 1; i <= 20; i++ {
