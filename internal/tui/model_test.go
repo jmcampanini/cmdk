@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"image/color"
 	"reflect"
 	"strings"
@@ -465,18 +466,18 @@ func TestNextListWithUnmappedType_StaysOnCurrentList(t *testing.T) {
 	}
 }
 
-func TestEnterOnErrorItem_NoAction(t *testing.T) {
+func TestEnterOnErrorItem_OpensDetails(t *testing.T) {
+	errorText := "zoxide error: command not found with long diagnostic details"
 	items := []list.Item{
 		item.Item{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute},
-		item.Item{Type: "error", Display: "zoxide error: command not found"},
+		item.Item{Type: "error", Source: "zoxide", Display: errorText},
 	}
 	reg := generator.NewRegistry()
 	reg.Register("root", func(accumulated []item.Item, ctx generator.Context) []item.Item { return nil })
 	reg.MapType("", "root")
 
 	m := newTestModel(items, reg)
-	m.list.SetSize(80, 40)
-
+	m = setWindowSize(t, m, 80, 40)
 	m = exitFilterMode(t, m)
 
 	result, _ := m.Update(downMsg)
@@ -489,10 +490,84 @@ func TestEnterOnErrorItem_NoAction(t *testing.T) {
 		t.Error("Enter on error item should not quit")
 	}
 	if m.Selected() != nil {
-		t.Error("Selected() should be nil — error item is non-selectable")
+		t.Error("Selected() should be nil — error item is non-executable")
+	}
+	if m.mode != viewErrorDetails {
+		t.Errorf("mode = %d, want viewErrorDetails (%d)", m.mode, viewErrorDetails)
+	}
+	if m.errorReturnMode != viewList {
+		t.Errorf("errorReturnMode = %d, want viewList (%d)", m.errorReturnMode, viewList)
+	}
+	content := ansi.Strip(m.View().Content)
+	if !strings.Contains(content, "Error details") || !strings.Contains(content, errorText) {
+		t.Errorf("details view should contain heading and full error text, got:\n%s", content)
+	}
+	if !strings.Contains(content, "Source: zoxide") {
+		t.Errorf("details view should contain source metadata, got:\n%s", content)
 	}
 	if len(m.list.Items()) != 2 {
 		t.Errorf("list should still have 2 items, got %d", len(m.list.Items()))
+	}
+}
+
+func TestEnterOnErrorItemDuringFiltering_OpensDetails(t *testing.T) {
+	errorText := "config error: invalid table"
+	items := []list.Item{
+		item.Item{Type: "error", Display: errorText},
+	}
+	m := newTestModel(items, testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+
+	if m.list.FilterState() != list.Filtering {
+		t.Fatal("expected root list to start in filtering mode")
+	}
+
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if cmd != nil {
+		t.Error("Enter on error item should not quit")
+	}
+	if m.mode != viewErrorDetails {
+		t.Errorf("mode = %d, want viewErrorDetails (%d)", m.mode, viewErrorDetails)
+	}
+	content := ansi.Strip(m.errorDetailsView())
+	if !strings.Contains(content, errorText) {
+		t.Errorf("details view should contain %q, got %q", errorText, content)
+	}
+}
+
+func TestErrorDetailsEscReturnsToRootList(t *testing.T) {
+	items := []list.Item{
+		item.Item{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute},
+		item.Item{Type: "error", Display: "zoxide error: command not found"},
+	}
+	m := newTestModel(items, testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+	m = exitFilterMode(t, m)
+
+	result, _ := m.Update(downMsg)
+	m = result.(Model)
+	result, _ = m.Update(enterMsg)
+	m = result.(Model)
+	if m.mode != viewErrorDetails {
+		t.Fatal("expected error details mode")
+	}
+
+	result, cmd := m.Update(escMsg)
+	m = result.(Model)
+
+	if cmd != nil {
+		t.Error("Esc from error details should not quit")
+	}
+	if m.mode != viewList {
+		t.Errorf("mode = %d, want viewList (%d)", m.mode, viewList)
+	}
+	if m.list.Index() != 1 {
+		t.Errorf("list index = %d, want highlighted error index 1", m.list.Index())
+	}
+	if got := m.list.SelectedItem().(item.Item).Type; got != "error" {
+		t.Errorf("selected item type = %q, want error", got)
 	}
 }
 
@@ -518,6 +593,117 @@ func setWindowSize(t *testing.T, m Model, w, h int) Model {
 	t.Helper()
 	result, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	return result.(Model)
+}
+
+func TestErrorDetailsWrapsWithoutTruncation(t *testing.T) {
+	msg := "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron tail-marker"
+	m := newTestModel(nil, testRegistry())
+	m = setWindowSize(t, m, 24, 10)
+	m = m.openErrorDetails(item.Item{Type: "error", Display: msg})
+
+	lines := m.errorDetailsLines()
+	if len(lines) < 3 {
+		t.Fatalf("wrapped line count = %d, want at least 3: %#v", len(lines), lines)
+	}
+	contentWidth := m.errorDetailsContentWidth()
+	for _, line := range lines {
+		if width := ansi.StringWidth(line); width > contentWidth {
+			t.Errorf("wrapped line %q width = %d, want <= %d", line, width, contentWidth)
+		}
+	}
+
+	content := ansi.Strip(m.errorDetailsView())
+	if strings.Contains(content, "…") {
+		t.Errorf("details view should not truncate with ellipsis, got:\n%s", content)
+	}
+	if !strings.Contains(content, "alpha beta") {
+		t.Errorf("details view should contain the start of the full error, got:\n%s", content)
+	}
+}
+
+func TestErrorDetailsEscapesTerminalControls(t *testing.T) {
+	msg := "before \x1b]52;c;AAAA\a after\ncolor \x1b[31mred\rreturn\t-tab\x9b"
+	m := newTestModel(nil, testRegistry())
+	m = setWindowSize(t, m, 80, 12)
+	m = m.openErrorDetails(item.Item{Type: "error", Source: "evil\x1b[31m", Display: msg})
+
+	body := strings.Join(m.errorDetailsLines(), "\n")
+	for _, raw := range []string{"\x1b", "\a", "\r", "\t", "\x9b"} {
+		if strings.Contains(body, raw) {
+			t.Fatalf("details body should not contain raw terminal control %q: %q", raw, body)
+		}
+	}
+	for _, escaped := range []string{`\x1b]52;c;AAAA\a`, `\x1b[31mred\rreturn\t-tab\x9b`} {
+		if !strings.Contains(body, escaped) {
+			t.Fatalf("details body should contain escaped control text %q: %q", escaped, body)
+		}
+	}
+
+	content := ansi.Strip(m.errorDetailsView())
+	if !strings.Contains(content, `Source: evil\x1b[31m`) {
+		t.Fatalf("details source should be escaped, got:\n%s", content)
+	}
+}
+
+func TestErrorDetailsScrollingClamps(t *testing.T) {
+	var b strings.Builder
+	for i := 1; i <= 20; i++ {
+		if i > 1 {
+			b.WriteByte('\n')
+		}
+		fmt.Fprintf(&b, "ERR %03d short line", i)
+	}
+
+	m := newTestModel(nil, testRegistry())
+	m = setWindowSize(t, m, 80, 8)
+	m = m.openErrorDetails(item.Item{Type: "error", Display: b.String()})
+
+	content := ansi.Strip(m.errorDetailsView())
+	if !strings.Contains(content, "ERR 001") {
+		t.Fatalf("initial details view should show first line, got:\n%s", content)
+	}
+	if strings.Contains(content, "ERR 020") {
+		t.Fatalf("initial details view should not show last line before scrolling, got:\n%s", content)
+	}
+
+	result, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
+	m = result.(Model)
+	if m.errorDetailScroll <= 0 {
+		t.Fatalf("PageDown should scroll down, got scroll=%d", m.errorDetailScroll)
+	}
+
+	result, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
+	m = result.(Model)
+	maxScroll := m.maxErrorDetailScroll()
+	if m.errorDetailScroll != maxScroll {
+		t.Fatalf("End scroll = %d, want max %d", m.errorDetailScroll, maxScroll)
+	}
+	content = ansi.Strip(m.errorDetailsView())
+	if !strings.Contains(content, "ERR 020") {
+		t.Fatalf("End should reveal last line, got:\n%s", content)
+	}
+
+	result, _ = m.Update(downMsg)
+	m = result.(Model)
+	if m.errorDetailScroll != maxScroll {
+		t.Errorf("Down at bottom scroll = %d, want clamped max %d", m.errorDetailScroll, maxScroll)
+	}
+
+	result, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyHome})
+	m = result.(Model)
+	if m.errorDetailScroll != 0 {
+		t.Fatalf("Home scroll = %d, want 0", m.errorDetailScroll)
+	}
+	content = ansi.Strip(m.errorDetailsView())
+	if !strings.Contains(content, "ERR 001") {
+		t.Fatalf("Home should reveal first line, got:\n%s", content)
+	}
+
+	result, _ = m.Update(upMsg)
+	m = result.(Model)
+	if m.errorDetailScroll != 0 {
+		t.Errorf("Up at top scroll = %d, want clamped 0", m.errorDetailScroll)
+	}
 }
 
 func TestStackView_EmptyAtRoot(t *testing.T) {
@@ -1795,7 +1981,7 @@ func TestAutoSelectSingle_MultipleActions_ShowsList(t *testing.T) {
 	}
 }
 
-func TestPickerStage_EnterOnErrorItem_NoOp(t *testing.T) {
+func TestPickerStage_EnterOnErrorItem_OpensDetails(t *testing.T) {
 	m := newTestModel(pickerErrorItems(), testRegistry())
 	m = setWindowSize(t, m, 80, 40)
 
@@ -1803,21 +1989,43 @@ func TestPickerStage_EnterOnErrorItem_NoOp(t *testing.T) {
 	if m.mode != viewPicker {
 		t.Fatal("expected viewPicker")
 	}
+	if m.pickerList.FilterState() != list.Filtering {
+		t.Fatal("picker should start in filtering mode")
+	}
 
-	// Exit filter mode, then press Enter on the error item.
-	result, _ := m.Update(escMsg)
-	m = result.(Model)
 	result, cmd := m.Update(enterMsg)
 	m = result.(Model)
 
+	if cmd != nil {
+		t.Error("Enter on picker error item should not quit")
+	}
 	if m.Selected() != nil {
-		t.Error("Selected() should be nil — error items are not selectable")
+		t.Error("Selected() should be nil — error items are non-executable")
+	}
+	if m.mode != viewErrorDetails {
+		t.Errorf("mode = %d, want viewErrorDetails (%d)", m.mode, viewErrorDetails)
+	}
+	if m.errorReturnMode != viewPicker {
+		t.Errorf("errorReturnMode = %d, want viewPicker (%d)", m.errorReturnMode, viewPicker)
+	}
+	content := ansi.Strip(m.errorDetailsView())
+	if !strings.Contains(content, "command error") {
+		t.Errorf("details view should contain picker command error, got:\n%s", content)
+	}
+
+	result, cmd = m.Update(escMsg)
+	m = result.(Model)
+	if cmd != nil {
+		t.Error("Esc from picker error details should not quit")
 	}
 	if m.mode != viewPicker {
-		t.Errorf("mode = %d, want viewPicker (%d)", m.mode, viewPicker)
+		t.Errorf("mode after Esc = %d, want viewPicker (%d)", m.mode, viewPicker)
 	}
-	if cmd != nil {
-		t.Error("Enter on error item should not produce a quit command")
+	if len(m.pickerList.Items()) != 1 {
+		t.Fatalf("picker list items = %d, want 1 error row", len(m.pickerList.Items()))
+	}
+	if got := m.pickerList.Items()[0].(item.Item).Type; got != "error" {
+		t.Errorf("picker row type = %q, want error", got)
 	}
 }
 

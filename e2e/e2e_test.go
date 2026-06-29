@@ -1003,7 +1003,7 @@ func TestE2E_ZoxideUnavailable_ErrorItem(t *testing.T) {
 	navigateToWindowItems(t, sess)
 }
 
-func TestE2E_ErrorItemNotSelectable(t *testing.T) {
+func TestE2E_ErrorItemOpensDetails(t *testing.T) {
 	if !hasZoxide() {
 		t.Skip("zoxide not available — can't test error item scenario")
 	}
@@ -1020,16 +1020,78 @@ func TestE2E_ErrorItemNotSelectable(t *testing.T) {
 	}, 3*time.Second)
 
 	sendKeys(t, sess, "Enter")
-	time.Sleep(500 * time.Millisecond)
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "Error details") && strings.Contains(s, "zoxide error")
+	}, defaultTimeout)
 
 	if !sessionExists(sess) {
-		t.Fatal("session should still exist — error items should not be selectable")
+		t.Fatal("session should still exist after opening error details")
 	}
 
-	content := capturePane(t, sess)
-	if !strings.Contains(content, "zoxide error") {
-		t.Errorf("error item should still be visible\nCapture:\n%s", content)
+	sendKeys(t, sess, "Escape")
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "zoxide error") && !strings.Contains(s, "Error details")
+	}, defaultTimeout)
+}
+
+func TestE2E_LongPickerErrorDetailsWrapsAndScrolls(t *testing.T) {
+	tmp := t.TempDir()
+	script := filepath.Join(tmp, "long-picker-error.sh")
+	scriptBody := `#!/bin/sh
+i=1
+while [ "$i" -le 140 ]; do
+  printf 'ERR %03d this is a deliberately very long stderr line for cmdk wrapping and scrolling verification with enough words to wrap naturally across a narrow pane; token=%s\n' "$i" "abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789" >&2
+  i=$((i + 1))
+done
+exit 7
+`
+	if err := os.WriteFile(script, []byte(scriptBody), 0o644); err != nil {
+		t.Fatal(err)
 	}
+	if err := os.Chmod(script, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	xdg := writeConfig(t, fmt.Sprintf(`
+[[actions]]
+name = "Long Picker Error"
+matches = "root"
+cmd = "true"
+stages = [
+  { type = "picker", key = "choice", source = %q },
+]
+`, shellQuoteE2E(script)))
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	filterAndExecute(t, sess, "Long")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "command error")
+	}, defaultTimeout)
+
+	sendKeys(t, sess, "Enter")
+	content := waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "Error details") &&
+			strings.Contains(s, "ERR 001") &&
+			strings.Contains(s, "deliberately very long stderr line")
+	}, defaultTimeout)
+	if !strings.Contains(content, "wrapping and scrolling") {
+		t.Fatalf("details should show wrapped stderr text\nCapture:\n%s", content)
+	}
+
+	sendKeys(t, sess, "NPage")
+	time.Sleep(100 * time.Millisecond)
+	sendKeys(t, sess, "End")
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "Error details") && strings.Contains(s, "ERR 140")
+	}, defaultTimeout)
+
+	sendKeys(t, sess, "Escape")
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "command error") && !strings.Contains(s, "Error details")
+	}, defaultTimeout)
 }
 
 func TestE2E_ExitCodePropagation(t *testing.T) {
