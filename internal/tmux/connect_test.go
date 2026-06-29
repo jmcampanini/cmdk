@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -104,6 +105,23 @@ func attachWithRunner(t *testing.T, runner *scriptedTmuxRunner, plan resolver.Pl
 	return err
 }
 
+func tmuxListSessionsExitStatusError(t *testing.T, status int, stderr string) error {
+	t.Helper()
+	cmd := exec.Command("sh", "-c", "exit "+strconv.Itoa(status))
+	err := cmd.Run()
+	if err == nil {
+		t.Fatalf("expected exit status %d", status)
+	}
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("error = %T %[1]v, want *exec.ExitError", err)
+	}
+	if exitErr.ExitCode() != status {
+		t.Fatalf("exit code = %d, want %d", exitErr.ExitCode(), status)
+	}
+	return tmuxCommandError([]string{"list-sessions", "-F", cmdkSessionKeyListFormat}, exitErr, stderr)
+}
+
 func TestAttachResolvedSessionAttachesExistingManagedSession(t *testing.T) {
 	plan := repoSessionWindowPlan()
 	runner := newScriptedTmuxRunner(t,
@@ -135,7 +153,7 @@ func TestAttachResolvedSessionCreatesMissingSessionThenAttaches(t *testing.T) {
 func TestAttachResolvedSessionTreatsNoServerAsMissing(t *testing.T) {
 	plan := directorySessionWindowPlan()
 	runner := newScriptedTmuxRunner(t,
-		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, err: errors.New("tmux list-sessions: exit status 1: no server running on /tmp/tmux-501/default")},
+		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, err: tmuxListSessionsExitStatusError(t, 1, "no server running on /tmp/tmux-501/default")},
 		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionIDsFormat, "-s", plan.PlannedTmuxSessionName, "-n", plan.PlannedTmuxWindowName, "-c", plan.LaunchPath}, output: "$4\t@8\n"},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionKindOption, plan.SessionKind}},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionKeyOption, plan.SessionKey}},
@@ -145,6 +163,37 @@ func TestAttachResolvedSessionTreatsNoServerAsMissing(t *testing.T) {
 
 	if err := attachWithRunner(t, runner, plan); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAttachResolvedSessionTreatsMissingSocketAsMissing(t *testing.T) {
+	plan := directorySessionWindowPlan()
+	runner := newScriptedTmuxRunner(t,
+		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, err: tmuxListSessionsExitStatusError(t, 1, "error connecting to /private/tmp/tmux-501/default (No such file or directory)")},
+		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionIDsFormat, "-s", plan.PlannedTmuxSessionName, "-n", plan.PlannedTmuxWindowName, "-c", plan.LaunchPath}, output: "$4\t@8\n"},
+		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionKindOption, plan.SessionKind}},
+		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionKeyOption, plan.SessionKey}},
+		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionDisplayOption, plan.SessionDisplay}},
+		scriptedTmuxCall{args: []string{"attach-session", "-t", "$4"}, run: true},
+	)
+
+	if err := attachWithRunner(t, runner, plan); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAttachResolvedSessionPropagatesListSessionsCommandErrors(t *testing.T) {
+	plan := directorySessionWindowPlan()
+	runner := newScriptedTmuxRunner(t,
+		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, err: tmuxListSessionsExitStatusError(t, 42, "boom stderr")},
+	)
+
+	err := attachWithRunner(t, runner, plan)
+	if err == nil {
+		t.Fatal("expected list-sessions error")
+	}
+	if !strings.Contains(err.Error(), "boom stderr") {
+		t.Errorf("error = %q, want stderr context", err.Error())
 	}
 }
 

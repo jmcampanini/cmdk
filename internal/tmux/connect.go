@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 	"unicode"
 
@@ -109,9 +110,12 @@ func (m sessionWindowManager) attachResolvedSession(ctx context.Context, plan re
 		return err
 	}
 
-	sessionID, err := m.findManagedSessionAllowNoServer(ctx, plan.SessionKey)
+	sessionID, err := m.findManagedSession(ctx, plan.SessionKey)
 	if err != nil {
-		return err
+		if !isTmuxListSessionsUnavailable(err) {
+			return err
+		}
+		sessionID = ""
 	}
 	if sessionID == "" {
 		sessionID, _, err = m.createSession(ctx, plan, plan.PlannedTmuxWindowName, "")
@@ -179,16 +183,11 @@ func containsControl(s string) bool {
 	return strings.ContainsFunc(s, unicode.IsControl)
 }
 
-func (m sessionWindowManager) findManagedSessionAllowNoServer(ctx context.Context, sessionKey string) (string, error) {
-	sessionID, err := m.findManagedSession(ctx, sessionKey)
-	if err != nil && isNoTmuxServerError(err) {
-		return "", nil
-	}
-	return sessionID, err
-}
-
-func isNoTmuxServerError(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "no server running")
+func isTmuxListSessionsUnavailable(err error) bool {
+	// tmux list-sessions exits 1 both when no server is running and when the
+	// socket path is absent; attach recovers by trying to create the session.
+	var exitErr *exec.ExitError
+	return errors.As(err, &exitErr) && exitErr.ExitCode() == 1
 }
 
 func (m sessionWindowManager) findManagedSession(ctx context.Context, sessionKey string) (string, error) {
