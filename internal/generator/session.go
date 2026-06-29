@@ -3,7 +3,6 @@ package generator
 import (
 	"context"
 	"errors"
-	"maps"
 	"time"
 
 	"github.com/jmcampanini/cmdk/internal/item"
@@ -14,15 +13,15 @@ import (
 type SessionWindowsFunc func(context.Context, item.Item) ([]item.Item, error)
 
 const (
-	sessionConnectCommand      = `tmux switch-client -t {{sq .session_id}}`
+	sessionSwitchCommand       = `tmux switch-client -t {{sq .session_id}}`
 	defaultSessionFetchTimeout = 2 * time.Second
 )
 
 // NewSessionGenerator builds the child list shown after selecting a tmux
-// session: built-in Connect first, then user-defined session actions, then
-// windows in that session. Connect and configured actions are type "action"
-// while windows are type "window", so GroupAndOrder preserves the required
-// Connect/actions-before-windows display order.
+// session: built-in Switch to session first, then user-defined session actions,
+// then windows in that session. Switch to session and configured actions are
+// type "action" while windows are type "window", so GroupAndOrder preserves the
+// required actions-before-windows display order.
 func NewSessionGenerator(fetchWindows SessionWindowsFunc) GeneratorFunc {
 	actions := NewActionsGenerator()
 
@@ -35,7 +34,7 @@ func NewSessionGenerator(fetchWindows SessionWindowsFunc) GeneratorFunc {
 			return []item.Item{ErrorItem(Source{Name: "session"}, errors.New("missing session_id"))}
 		}
 
-		items := []item.Item{sessionConnectItem(session, ctx.PaneID)}
+		items := []item.Item{sessionSwitchItem(session, ctx.PaneID)}
 		items = append(items, actions(accumulated, ctx)...)
 		items = append(items, fetchSessionWindows(session, ctx, fetchWindows)...)
 		return items
@@ -50,24 +49,15 @@ func selectedSession(accumulated []item.Item) (item.Item, bool) {
 	return session, session.Type == "session"
 }
 
-func sessionConnectItem(session item.Item, paneID string) item.Item {
+func sessionSwitchItem(session item.Item, paneID string) item.Item {
 	return item.Item{
 		Type:    "action",
 		Source:  "builtin",
-		Display: "Connect",
+		Display: "Switch to session",
 		Action:  item.ActionExecute,
-		Cmd:     sessionConnectCommand,
-		Data:    sessionData(session, paneID),
+		Cmd:     sessionSwitchCommand,
+		Data:    itemDataWithPaneID(session.Data, paneID),
 	}
-}
-
-func sessionData(session item.Item, paneID string) map[string]string {
-	data := make(map[string]string, len(session.Data)+1)
-	maps.Copy(data, session.Data)
-	if paneID != "" {
-		data["pane_id"] = paneID
-	}
-	return data
 }
 
 func fetchSessionWindows(session item.Item, ctx Context, fetchWindows SessionWindowsFunc) []item.Item {

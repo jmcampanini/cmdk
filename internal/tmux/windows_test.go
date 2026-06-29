@@ -308,7 +308,7 @@ func TestParseWindowsForSession(t *testing.T) {
 		t.Errorf("Cmd = %q", items[0].Cmd)
 	}
 	if _, ok := items[0].Data["bell"]; ok {
-		t.Error("session child windows should not set bell data that would reorder them above Connect")
+		t.Error("session child windows should not set bell data that would reorder them above Switch to session")
 	}
 }
 

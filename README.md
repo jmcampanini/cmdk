@@ -42,6 +42,6 @@ For the full command reference, run `cmdk --help`. See also:
 - `cmdk config --provenance` — effective configuration and source provenance
 - `cmdk logs --help` — where logs go and how to inspect them
 - `cmdk session resolve <path>` — inspect the planned session for a path
-- `cmdk session connect <path>` — create or switch to a cmdk-managed tmux session for a path
+- `cmdk session window <path> --new` — create a new window in the cmdk-managed tmux session for a path
 - `cmdk docs` — configuration reference
 - `cmdk icons` — supported icon aliases

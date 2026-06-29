@@ -298,9 +298,9 @@ func drillIntoSession(t *testing.T, sess string) {
 	// When only the session remains, auto-select may drill into it immediately.
 	sendKeys(t, sess, "Enter")
 	content := waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "clear filter") || strings.Contains(s, "Connect")
+		return strings.Contains(s, "clear filter") || strings.Contains(s, "Switch to session")
 	}, defaultTimeout)
-	if strings.Contains(content, "Connect") {
+	if strings.Contains(content, "Switch to session") {
 		return
 	}
 
@@ -310,7 +310,7 @@ func drillIntoSession(t *testing.T, sess string) {
 	sendKeys(t, sess, "Enter")
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "Connect")
+		return strings.Contains(s, "Switch to session")
 	}, defaultTimeout)
 }
 
@@ -437,29 +437,29 @@ matches = "session"
 	drillIntoSession(t, sess)
 
 	content := waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "Connect") &&
+		return strings.Contains(s, "Switch to session") &&
 			strings.Contains(s, "xq-sess-action") &&
 			strings.Contains(s, iconWindow)
 	}, defaultTimeout)
 
-	connectIdx := strings.Index(content, "Connect")
+	switchIdx := strings.Index(content, "Switch to session")
 	actionIdx := strings.Index(content, "xq-sess-action")
 	windowIdx := strings.Index(content, iconWindow)
-	if connectIdx < 0 || connectIdx > actionIdx || actionIdx > windowIdx {
-		t.Errorf("expected order Connect < session action < window; got Connect@%d action@%d window@%d:\n%s",
-			connectIdx, actionIdx, windowIdx, content)
+	if switchIdx < 0 || switchIdx > actionIdx || actionIdx > windowIdx {
+		t.Errorf("expected order Switch to session < session action < window; got switch@%d action@%d window@%d:\n%s",
+			switchIdx, actionIdx, windowIdx, content)
 	}
 }
 
-func TestE2E_SessionConnectSwitchesAndExits(t *testing.T) {
+func TestE2E_SessionSwitchActionSwitchesAndExits(t *testing.T) {
 	sess := startSession(t)
 	defer killSession(t, sess)
 
 	waitForReady(t, sess)
 	drillIntoSession(t, sess)
 
-	// Connect is the first child item. Cancel the empty child-list filter to
-	// enter browse mode with the cursor on Connect, then Enter executes it.
+	// Switch to session is the first child item. Cancel the empty child-list
+	// filter to enter browse mode with the cursor on it, then Enter executes it.
 	exitFilterModeE2E(t, sess)
 	sendKeys(t, sess, "Enter")
 	waitForExit(t, sess)
@@ -494,7 +494,7 @@ auto_select_single = false
 	sendKeys(t, sess, "Enter")
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "New window")
+		return strings.Contains(s, "New window") && strings.Contains(s, "New session window")
 	}, defaultTimeout)
 }
 
@@ -514,7 +514,7 @@ auto_select_single = false
 	sendKeys(t, sess, "Enter")
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "New window")
+		return strings.Contains(s, "New window") && strings.Contains(s, "New session window")
 	}, defaultTimeout)
 
 	// First Escape exits filter mode (drill-down re-enters filter).
@@ -557,12 +557,12 @@ func shellQuoteE2E(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
-func runDetachedSessionConnect(t *testing.T, path string) string {
+func runDetachedSessionWindowNew(t *testing.T, path string) string {
 	t.Helper()
 	xdg := writeConfig(t, "")
-	marker := filepath.Join(t.TempDir(), "connect-exit")
-	sess := "cmdk-connect-" + strings.ReplaceAll(t.Name(), "/", "-") + fmt.Sprintf("-%d", time.Now().UnixNano())
-	shellCmd := fmt.Sprintf("%s session connect %s; echo EXITCODE=$? > %s; sleep 1",
+	marker := filepath.Join(t.TempDir(), "window-exit")
+	sess := "cmdk-window-" + strings.ReplaceAll(t.Name(), "/", "-") + fmt.Sprintf("-%d", time.Now().UnixNano())
+	shellCmd := fmt.Sprintf("%s session window %s --new; echo EXITCODE=$? > %s; sleep 1",
 		shellQuoteE2E(binaryPath), shellQuoteE2E(path), shellQuoteE2E(marker))
 	cmd := tmuxCmd("new-session", "-d", "-s", sess, "-x", "120", "-y", "40",
 		"env", "XDG_CONFIG_HOME="+xdg, "sh", "-c", shellCmd)
@@ -625,17 +625,17 @@ func windowNamesE2E(t *testing.T, sessionID string) map[string]string {
 
 // Detached e2e panes have no current tmux client, so the final switch-client
 // may exit nonzero. These tests assert the create/metadata/window steps that
-// happen before that Phase 3 switch failure.
-func TestE2E_SessionConnectCreatesNonGitDirectorySession(t *testing.T) {
+// happen before that switch failure.
+func TestE2E_SessionWindowCreatesNonGitDirectorySession(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "scratch")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	dirReal := realPathE2E(t, dir)
 
-	result := runDetachedSessionConnect(t, dir)
+	result := runDetachedSessionWindowNew(t, dir)
 	if !strings.Contains(result, "EXITCODE=") {
-		t.Fatalf("missing connect exit marker: %q", result)
+		t.Fatalf("missing window exit marker: %q", result)
 	}
 
 	session := findManagedSessionE2E(t, dirReal)
@@ -651,7 +651,41 @@ func TestE2E_SessionConnectCreatesNonGitDirectorySession(t *testing.T) {
 	}
 }
 
-func TestE2E_SessionConnectCreatesRepoWorktreeSessionAndWindows(t *testing.T) {
+func TestE2E_SessionWindowCommandCreatesRunningCommandWindow(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "scratch")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dirReal := realPathE2E(t, dir)
+	commandMarker := filepath.Join(t.TempDir(), "command-ran")
+	exitMarker := filepath.Join(t.TempDir(), "window-exit")
+	xdg := writeConfig(t, "")
+	sess := "cmdk-window-command-" + strings.ReplaceAll(t.Name(), "/", "-") + fmt.Sprintf("-%d", time.Now().UnixNano())
+	commandScript := fmt.Sprintf("printf done > %s; sleep 1", shellQuoteE2E(commandMarker))
+	shellCmd := fmt.Sprintf("%s session window %s --name runner -- sh -lc %s; echo EXITCODE=$? > %s; sleep 1",
+		shellQuoteE2E(binaryPath), shellQuoteE2E(dir), shellQuoteE2E(commandScript), shellQuoteE2E(exitMarker))
+	cmd := tmuxCmd("new-session", "-d", "-s", sess, "-x", "120", "-y", "40",
+		"env", "XDG_CONFIG_HOME="+xdg, "sh", "-c", shellCmd)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("tmux new-session failed: %v\n%s", err, out)
+	}
+	t.Cleanup(func() { killSession(t, sess) })
+
+	if result := waitForFile(t, exitMarker, defaultTimeout); !strings.Contains(result, "EXITCODE=") {
+		t.Fatalf("missing window exit marker: %q", result)
+	}
+	if got := waitForFile(t, commandMarker, defaultTimeout); got != "done" {
+		t.Fatalf("command marker = %q, want done", got)
+	}
+
+	session := findManagedSessionE2E(t, dirReal)
+	windows := windowNamesE2E(t, session.ID)
+	if windows["runner"] != dirReal {
+		t.Errorf("runner window cwd = %q, want %q (all windows: %v)", windows["runner"], dirReal, windows)
+	}
+}
+
+func TestE2E_SessionWindowCreatesRepoWorktreeSessionAndWindows(t *testing.T) {
 	requireGitE2E(t)
 	container := filepath.Join(t.TempDir(), "dotfiles")
 	main := filepath.Join(container, "main")
@@ -663,9 +697,9 @@ func TestE2E_SessionConnectCreatesRepoWorktreeSessionAndWindows(t *testing.T) {
 	featureReal := realPathE2E(t, feature)
 	mainReal := realPathE2E(t, main)
 
-	result := runDetachedSessionConnect(t, feature)
+	result := runDetachedSessionWindowNew(t, feature)
 	if !strings.Contains(result, "EXITCODE=") {
-		t.Fatalf("missing connect exit marker: %q", result)
+		t.Fatalf("missing window exit marker: %q", result)
 	}
 
 	session := findManagedSessionE2E(t, containerReal)
@@ -677,9 +711,9 @@ func TestE2E_SessionConnectCreatesRepoWorktreeSessionAndWindows(t *testing.T) {
 		t.Errorf("wt-feature window cwd = %q, want %q (all windows: %v)", windows["wt-feature"], featureReal, windows)
 	}
 
-	result = runDetachedSessionConnect(t, main)
+	result = runDetachedSessionWindowNew(t, main)
 	if !strings.Contains(result, "EXITCODE=") {
-		t.Fatalf("missing second connect exit marker: %q", result)
+		t.Fatalf("missing second window exit marker: %q", result)
 	}
 	windows = windowNamesE2E(t, session.ID)
 	if windows["main"] != mainReal {
@@ -821,7 +855,9 @@ matches = "dir"
 	sendKeys(t, sess, "Enter")
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "New window") && strings.Contains(s, "xq-yazi-action")
+		return strings.Contains(s, "New window") &&
+			strings.Contains(s, "New session window") &&
+			strings.Contains(s, "xq-yazi-action")
 	}, defaultTimeout)
 }
 
@@ -848,17 +884,19 @@ matches = "dir"
 
 	content := waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, "New window") &&
+			strings.Contains(s, "New session window") &&
 			strings.Contains(s, "xq-alpha-dirc") &&
 			strings.Contains(s, "xq-beta-dirc")
 	}, defaultTimeout)
 
 	newWindowIdx := strings.Index(content, "New window")
+	newSessionWindowIdx := strings.Index(content, "New session window")
 	alphaIdx := strings.Index(content, "xq-alpha-dirc")
 	betaIdx := strings.Index(content, "xq-beta-dirc")
 
-	if newWindowIdx > alphaIdx || alphaIdx > betaIdx {
-		t.Errorf("items not in expected order: New window@%d alpha@%d beta@%d\nCapture:\n%s",
-			newWindowIdx, alphaIdx, betaIdx, content)
+	if newWindowIdx > newSessionWindowIdx || newSessionWindowIdx > alphaIdx || alphaIdx > betaIdx {
+		t.Errorf("items not in expected order: New window@%d New session window@%d alpha@%d beta@%d\nCapture:\n%s",
+			newWindowIdx, newSessionWindowIdx, alphaIdx, betaIdx, content)
 	}
 }
 
@@ -877,7 +915,7 @@ auto_select_single = false
 	sendKeys(t, sess, "Enter")
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "New window")
+		return strings.Contains(s, "New window") && strings.Contains(s, "New session window")
 	}, defaultTimeout)
 }
 

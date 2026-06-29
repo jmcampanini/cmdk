@@ -76,17 +76,22 @@ func TestRenderHelp_ContainsLiveDefaults(t *testing.T) {
 	}
 }
 
-func TestRenderHelp_ContainsSessionConnectDocs(t *testing.T) {
+func TestRenderHelp_ContainsSessionWindowDocs(t *testing.T) {
 	output := RenderHelp()
 	for _, want := range []string{
-		"cmdk session connect <path>",
+		"cmdk session window <path> --new",
+		"cmdk session window <path> [--name <name>] -- <command> [args...]",
 		"@cmdk_session_key",
 		"@cmdk_session_display",
 		"switch-client",
+		"Switch to session",
 	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("RenderHelp() should contain %q", want)
 		}
+	}
+	if strings.Contains(output, "cmdk session connect") {
+		t.Error("RenderHelp() should not mention removed session connect command")
 	}
 }
 

@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -20,20 +21,28 @@ type sessionResolveOptions struct {
 	json bool
 }
 
-var connectResolvedSession = tmux.ConnectResolvedSession
+type sessionWindowOptions struct {
+	newShell      bool
+	name          string
+	nameSet       bool
+	dashSeen      bool
+	argsLenAtDash int
+}
+
+var createResolvedSessionWindow = tmux.CreateResolvedSessionWindow
 
 var sessionCmd = &cobra.Command{
 	Use:   "session",
-	Short: "Resolve and connect cmdk sessions",
-	Long: `Resolve and connect cmdk sessions.
+	Short: "Resolve and manage cmdk sessions",
+	Long: `Resolve and manage cmdk sessions.
 
 Session commands turn existing directories into cmdk session plans and can
-create or reuse tmux sessions for those plans.`,
+create fresh tmux windows inside cmdk-managed sessions for those plans.`,
 }
 
 var (
 	sessionResolveCmd = newSessionResolveCommand()
-	sessionConnectCmd = newSessionConnectCommand()
+	sessionWindowCmd  = newSessionWindowCommand()
 )
 
 func newSessionResolveCommand() *cobra.Command {
@@ -45,14 +54,14 @@ func newSessionResolveCommand() *cobra.Command {
 
 The path must exist and be a directory. The resolver classifies the path as a
 repo session or directory session, computes cmdk's logical session_key, and
-shows the tmux-safe names cmdk passes to tmux when connecting. This command does
-not create tmux sessions.
+shows the tmux-safe names cmdk passes to tmux when creating managed session
+windows. This command does not create tmux sessions or windows.
 
 Fields:
   session_kind                 repo or directory
   session_key                  cmdk grouping key; not tmux #{session_id}
   session_display              display path derived from cmdk path formatting
-  launch_path                  filesystem path for the initial/current window cwd
+  launch_path                  filesystem path for new managed windows' cwd
   planned_tmux_session_name    tmux-safe name cmdk passes to tmux -s on create
   planned_tmux_window_name     tmux window name cmdk passes to tmux -n on create
 
@@ -68,28 +77,45 @@ path identity and the directory basename as their planned tmux window name.`,
 	return cmd
 }
 
-func newSessionConnectCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "connect <path>",
-		Short: "Create or switch to a cmdk-managed tmux session for a path",
-		Long: `Create or switch to a cmdk-managed tmux session for an existing directory.
+func newSessionWindowCommand() *cobra.Command {
+	options := sessionWindowOptions{}
+	cmd := &cobra.Command{
+		Use:   "window <path> [--name <name>] (--new | -- <command> [args...])",
+		Short: "Create a new tmux window in a cmdk-managed session for a path",
+		Long: `Create a fresh tmux window in the cmdk-managed session for a path.
 
-The path is required. Repo worktrees share one cmdk-managed tmux session per
-repo/container and use one window per worktree. Non-repo directories get one
-session whose default window uses the directory basename.
+The path is required, must exist, and must be a directory. cmdk resolves the path
+using the same session resolver as "cmdk session resolve": repo/worktree paths
+share a managed repo/container session, while non-repo directories get one
+managed session per canonical directory.
 
-cmdk recognizes managed sessions by @cmdk_session_key metadata, not by tmux
-session name. When cmdk creates a session it sets @cmdk_session_kind,
-@cmdk_session_key, and @cmdk_session_display. Existing managed sessions are
-reused without refreshing metadata.
+Exactly one mode is required:
+  --new                    create an interactive shell window
+  -- <command> [args...]   create a command window
 
-The final switch uses tmux switch-client and requires a current tmux client;
-Phase 3 does not attach from outside tmux.`,
-		Args: cobra.ExactArgs(1),
+The new window's cwd is the resolved launch_path. The default window name is the
+resolved planned_tmux_window_name; --name overrides it for either mode and must
+not be empty.
+
+Command args after -- are treated as argv-style input and are shell-quoted before
+being passed to tmux as its shell-command string. Shell metacharacters are
+literal by default; invoke a shell explicitly for shell features, for example:
+
+  cmdk session window . --name tests -- sh -lc 'npm test | tee test.log'
+
+cmdk creates a fresh window every time, tracks it by the returned tmux window_id,
+and switches the current tmux client to <session_id>:<window_id>.`,
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runSessionConnectCommand(cmd, args[0])
+			options.nameSet = cmd.Flags().Changed("name")
+			options.argsLenAtDash = cmd.Flags().ArgsLenAtDash()
+			options.dashSeen = options.argsLenAtDash >= 0
+			return runSessionWindowCommand(cmd, args, options)
 		},
 	}
+	cmd.Flags().BoolVar(&options.newShell, "new", false, "create a fresh interactive shell window")
+	cmd.Flags().StringVar(&options.name, "name", "", "override the tmux window name")
+	return cmd
 }
 
 func runSessionResolveCommand(cmd *cobra.Command, path string, options sessionResolveOptions) error {
@@ -106,13 +132,63 @@ func runSessionResolveCommand(cmd *cobra.Command, path string, options sessionRe
 	return writeSessionPlan(cmd.OutOrStdout(), plan)
 }
 
-func runSessionConnectCommand(cmd *cobra.Command, path string) error {
+func runSessionWindowCommand(cmd *cobra.Command, args []string, options sessionWindowOptions) error {
+	if len(args) == 0 {
+		return errors.New("path is required")
+	}
+	if options.nameSet && options.name == "" {
+		return errors.New("--name cannot be empty")
+	}
+	path, commandArgs, commandDelimiter, err := splitSessionWindowArgs(args, options)
+	if err != nil {
+		return err
+	}
+	haveCommand := len(commandArgs) > 0
+	if haveCommand && !commandDelimiter {
+		return errors.New("command args must follow --")
+	}
+	if options.newShell && haveCommand {
+		return errors.New("--new cannot be used with command args")
+	}
+	if !options.newShell && !haveCommand {
+		return errors.New("session window requires --new or command args after --")
+	}
+
 	plan, err := resolveSessionPlanForCommand(cmd, path)
 	if err != nil {
 		return err
 	}
 
-	return connectResolvedSession(sessionConnectContext(cmd), plan)
+	return createResolvedSessionWindow(sessionMutationContext(cmd), plan, tmux.SessionWindowOptions{
+		Name:     options.name,
+		NewShell: options.newShell,
+		Command:  commandArgs,
+		Switch:   true,
+	})
+}
+
+func splitSessionWindowArgs(args []string, options sessionWindowOptions) (path string, commandArgs []string, commandDelimiter bool, err error) {
+	if len(args) == 0 {
+		return "", nil, false, errors.New("path is required")
+	}
+
+	if options.dashSeen {
+		switch options.argsLenAtDash {
+		case 0:
+			path = args[0]
+			rest := args[1:]
+			if len(rest) > 0 && rest[0] == "--" {
+				return path, rest[1:], true, nil
+			}
+			return path, rest, false, nil
+		case 1:
+			return args[0], args[1:], true, nil
+		default:
+			return "", nil, false, errors.New("expected exactly one path before --")
+		}
+	}
+
+	return args[0], args[1:], false, nil
 }
 
 func resolveSessionPlanForCommand(cmd *cobra.Command, path string) (resolver.Plan, error) {
@@ -176,10 +252,10 @@ func sessionResolveContext(cmd *cobra.Command, cfg config.Config) (context.Conte
 	return context.WithTimeout(ctx, resolveTimeout)
 }
 
-func sessionConnectContext(cmd *cobra.Command) context.Context {
-	// Do not reuse sessionResolveContext here. Connection performs tmux mutations,
-	// so it must not inherit the [timeout].fetch deadline that may already have
-	// been mostly consumed by git/config resolution.
+func sessionMutationContext(cmd *cobra.Command) context.Context {
+	// Do not reuse sessionResolveContext here. tmux mutations must not inherit the
+	// [timeout].fetch deadline that may already have been mostly consumed by
+	// git/config resolution.
 	ctx := cmd.Context()
 	if ctx == nil {
 		return context.Background()
@@ -208,6 +284,6 @@ func writeSessionPlan(out io.Writer, plan resolver.Plan) error {
 }
 
 func init() {
-	sessionCmd.AddCommand(sessionResolveCmd, sessionConnectCmd)
+	sessionCmd.AddCommand(sessionResolveCmd, sessionWindowCmd)
 	rootCmd.AddCommand(sessionCmd)
 }

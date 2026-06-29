@@ -184,7 +184,7 @@ const (
 
 // Keep window_bell_flag as a sentinel field so empty window names preserve
 // the expected tab count. TODO: surface this flag in the TUI for session child
-// windows without setting Data["bell"] and reordering them above Connect.
+// windows without setting Data["bell"] and reordering them above Switch to session.
 var windowsForSessionFormat = tmuxFormatFields(
 	"#{window_index}",
 	"#{window_id}",
