@@ -56,6 +56,7 @@ type Model struct {
 	bellToTop        bool
 	wrapList         bool
 	startInFilter    bool
+	autoDetectTheme  bool
 	inline           bool
 }
 
@@ -86,6 +87,11 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 	if beh.InlineActions && baseItems != nil {
 		m.list.SetItems(m.buildRootItems())
 	}
+	return m
+}
+
+func (m Model) WithAutoThemeDetection() Model {
+	m.autoDetectTheme = true
 	return m
 }
 
@@ -202,12 +208,12 @@ func (m Model) Selected() *item.Item {
 }
 
 func (m Model) Init() tea.Cmd {
-	if len(m.asyncSources) == 0 {
-		return nil
+	cmds := make([]tea.Cmd, 0, len(m.asyncSources)+1)
+	if m.autoDetectTheme {
+		cmds = append(cmds, tea.RequestBackgroundColor)
 	}
-	cmds := make([]tea.Cmd, len(m.asyncSources))
-	for i, src := range m.asyncSources {
-		cmds[i] = fetchSourceCmd(src)
+	for _, src := range m.asyncSources {
+		cmds = append(cmds, fetchSourceCmd(src))
 	}
 	return tea.Batch(cmds...)
 }
@@ -221,6 +227,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pickerList.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
 		}
 		return m, nil
+	}
+
+	if bg, ok := msg.(tea.BackgroundColorMsg); ok {
+		return m.handleBackgroundColor(bg), nil
 	}
 
 	if result, ok := msg.(sourceResultMsg); ok {
@@ -241,6 +251,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.list, cmd = updateFilterableList(m.list, msg)
 	return m, cmd
+}
+
+func (m Model) handleBackgroundColor(msg tea.BackgroundColorMsg) Model {
+	if !m.autoDetectTheme {
+		return m
+	}
+
+	next := theme.FromBackground(msg.IsDark())
+	log.Debug("theme auto-detected", "theme", next.Name, "background", msg.String())
+	if next.Name == m.theme.Name {
+		return m
+	}
+	return m.applyTheme(next)
+}
+
+func (m Model) applyTheme(t theme.Theme) Model {
+	m.theme = t
+	m.stackStyle = lipgloss.NewStyle().Foreground(t.Overlay0)
+	m.filterStyle = lipgloss.NewStyle().Inline(true).Background(t.TextboxBg)
+	m.errorStyle = lipgloss.NewStyle().Foreground(t.Error)
+	applyFilterListTheme(&m.list, t)
+	if m.mode == viewPicker || len(m.pickerList.Items()) > 0 {
+		applyFilterListTheme(&m.pickerList, t)
+	}
+	return m
+}
+
+func applyFilterListTheme(l *list.Model, t theme.Theme) {
+	l.SetDelegate(newItemDelegate(t))
+	applyListStyles(l, t)
 }
 
 func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
