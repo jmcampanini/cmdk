@@ -782,8 +782,9 @@ func runPickerSourceWithDiagnostics(rendered string, timeout time.Duration, stag
 		defer cancel()
 	}
 
-	// TODO(#87): Replace these unbounded stdout/stderr buffers with the shared
-	// external command-output helper once bounded handling is standardized.
+	// TODO(#87): Known accepted risk: these stdout/stderr buffers are unbounded
+	// and may retain large command output until #87 replaces them with the shared
+	// bounded external command-output helper.
 	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, "sh", "-c", rendered)
 	cmd.Stdout = &stdout
