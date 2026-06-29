@@ -13,7 +13,7 @@ import (
 	resolver "github.com/jmcampanini/cmdk/internal/session"
 )
 
-func useAttachTestHooks(t *testing.T, check func(context.Context, resolver.Plan) error) *bool {
+func useAttachTestHooks(t *testing.T, check func(context.Context, resolver.Plan) error) func() bool {
 	t.Helper()
 	oldAttach := attachResolvedSession
 	oldInside := isInsideTmux
@@ -30,7 +30,7 @@ func useAttachTestHooks(t *testing.T, check func(context.Context, resolver.Plan)
 		attachResolvedSession = oldAttach
 		isInsideTmux = oldInside
 	})
-	return &called
+	return func() bool { return called }
 }
 
 func writeStartupConfig(t *testing.T, xdg, path string) {
@@ -93,7 +93,7 @@ func TestRunAttachCommandRequiresConfiguredOrExplicitPath(t *testing.T) {
 	if !strings.Contains(err.Error(), "[startup].path") || !strings.Contains(err.Error(), "cmdk attach <path>") {
 		t.Errorf("error = %q, want setup guidance", err.Error())
 	}
-	if *called {
+	if called() {
 		t.Fatal("attach should not be called when startup path is missing")
 	}
 }
@@ -110,8 +110,9 @@ func TestRunAttachCommandUsesConfiguredStartupPath(t *testing.T) {
 		if _, ok := ctx.Deadline(); ok {
 			t.Fatal("attach context unexpectedly inherited resolve timeout")
 		}
-		if plan.SessionKey != realAttachPath(t, dir) {
-			t.Errorf("SessionKey = %q, want %q", plan.SessionKey, realAttachPath(t, dir))
+		want := realAttachPath(t, dir)
+		if plan.SessionKey != want {
+			t.Errorf("SessionKey = %q, want %q", plan.SessionKey, want)
 		}
 		return nil
 	})
@@ -119,7 +120,7 @@ func TestRunAttachCommandUsesConfiguredStartupPath(t *testing.T) {
 	if err := runAttachCommand(&cobra.Command{}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if !*called {
+	if !called() {
 		t.Fatal("attach was not called")
 	}
 }
@@ -146,7 +147,7 @@ func TestRunAttachCommandPathArgOverridesConfiguredStartupPath(t *testing.T) {
 	if err := runAttachCommand(&cobra.Command{}, []string{explicit}); err != nil {
 		t.Fatal(err)
 	}
-	if !*called {
+	if !called() {
 		t.Fatal("attach was not called")
 	}
 }
@@ -172,7 +173,7 @@ func TestRunAttachCommandExpandsHomeInConfiguredStartupPath(t *testing.T) {
 	if err := runAttachCommand(&cobra.Command{}, nil); err != nil {
 		t.Fatal(err)
 	}
-	if !*called {
+	if !called() {
 		t.Fatal("attach was not called")
 	}
 }

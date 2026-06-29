@@ -29,7 +29,12 @@ func ConfigDocs() []SectionDoc {
 			Name:        "startup",
 			Description: "Defaults for entering a cmdk-managed tmux session from outside tmux.",
 			Fields: []FieldDoc{
-				{Name: "path", Type: "string", Description: "Default directory used by \"cmdk attach\" when no path argument is provided. Leading ~/ is expanded to the current user's home directory.", Validation: "optional; cannot contain control characters; must resolve to an existing directory when cmdk attach is run"},
+				{
+					Name:        "path",
+					Type:        "string",
+					Description: "Default directory used by \"cmdk attach\" when no path argument is provided. Leading ~/ is expanded to the current user's home directory.",
+					Validation:  "optional; cannot contain control characters; must resolve to an existing directory when cmdk attach is run",
+				},
 			},
 			Example: "[startup]\npath = \"~/Code/github.com/me/project\"",
 		},

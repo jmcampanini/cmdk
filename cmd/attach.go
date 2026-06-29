@@ -58,16 +58,16 @@ func runAttachCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("loading config: %w", err)
 	}
 
-	startupPath, err := attachPath(args, cfg, cfgPath)
+	path, err := attachPath(args, cfg, cfgPath)
 	if err != nil {
 		return err
 	}
-	startupPath, err = expandAttachPath(startupPath)
+	path, err = expandAttachPath(path)
 	if err != nil {
 		return err
 	}
 
-	plan, err := resolveSessionPlanWithConfig(cmd, startupPath, cfg)
+	plan, err := resolveSessionPlanWithConfig(cmd, path, cfg)
 	if err != nil {
 		return err
 	}
@@ -75,31 +75,29 @@ func runAttachCommand(cmd *cobra.Command, args []string) error {
 }
 
 func attachPath(args []string, cfg config.Config, cfgPath string) (string, error) {
-	if len(args) > 0 {
+	switch {
+	case len(args) > 0:
 		return args[0], nil
-	}
-	if cfg.Startup.Path != "" {
+	case cfg.Startup.Path != "":
 		return cfg.Startup.Path, nil
+	default:
+		return "", fmt.Errorf("startup path is not configured; set [startup].path in %s or pass a path: cmdk attach <path>", cfgPath)
 	}
-	return "", fmt.Errorf("startup path is not configured; set [startup].path in %s or pass a path: cmdk attach <path>", cfgPath)
 }
 
 func expandAttachPath(path string) (string, error) {
+	if path != "~" && !strings.HasPrefix(path, "~/") {
+		return path, nil
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("expanding ~ in startup path: %w", err)
+	}
 	if path == "~" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("expanding ~ in startup path: %w", err)
-		}
 		return home, nil
 	}
-	if strings.HasPrefix(path, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("expanding ~ in startup path: %w", err)
-		}
-		return filepath.Join(home, path[2:]), nil
-	}
-	return path, nil
+	return filepath.Join(home, path[2:]), nil
 }
 
 func init() {

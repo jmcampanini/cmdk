@@ -18,7 +18,7 @@ type scriptedTmuxCall struct {
 	args   []string
 	output string
 	err    error
-	run    bool
+	useRun bool
 }
 
 type scriptedTmuxRunner struct {
@@ -34,7 +34,7 @@ func newScriptedTmuxRunner(t *testing.T, calls ...scriptedTmuxCall) *scriptedTmu
 func (r *scriptedTmuxRunner) Output(_ context.Context, args ...string) ([]byte, error) {
 	r.t.Helper()
 	call := r.nextCall("Output", args)
-	if call.run {
+	if call.useRun {
 		r.t.Fatalf("tmux call %q used Output, want Run", args)
 	}
 	return []byte(call.output), call.err
@@ -43,7 +43,7 @@ func (r *scriptedTmuxRunner) Output(_ context.Context, args ...string) ([]byte, 
 func (r *scriptedTmuxRunner) Run(_ context.Context, args ...string) error {
 	r.t.Helper()
 	call := r.nextCall("Run", args)
-	if !call.run {
+	if !call.useRun {
 		r.t.Fatalf("tmux call %q used Run, want Output", args)
 	}
 	return call.err
@@ -126,7 +126,7 @@ func TestAttachResolvedSessionAttachesExistingManagedSession(t *testing.T) {
 	plan := repoSessionWindowPlan()
 	runner := newScriptedTmuxRunner(t,
 		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$2\t" + plan.SessionKey + "\n$3\t/other\n"},
-		scriptedTmuxCall{args: []string{"attach-session", "-t", "$2"}, run: true},
+		scriptedTmuxCall{args: []string{"attach-session", "-t", "$2"}, useRun: true},
 	)
 
 	if err := attachWithRunner(t, runner, plan); err != nil {
@@ -142,7 +142,7 @@ func TestAttachResolvedSessionCreatesMissingSessionThenAttaches(t *testing.T) {
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$1", cmdkSessionKindOption, plan.SessionKind}},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$1", cmdkSessionKeyOption, plan.SessionKey}},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$1", cmdkSessionDisplayOption, plan.SessionDisplay}},
-		scriptedTmuxCall{args: []string{"attach-session", "-t", "$1"}, run: true},
+		scriptedTmuxCall{args: []string{"attach-session", "-t", "$1"}, useRun: true},
 	)
 
 	if err := attachWithRunner(t, runner, plan); err != nil {
@@ -158,7 +158,7 @@ func TestAttachResolvedSessionTreatsNoServerAsMissing(t *testing.T) {
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionKindOption, plan.SessionKind}},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionKeyOption, plan.SessionKey}},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionDisplayOption, plan.SessionDisplay}},
-		scriptedTmuxCall{args: []string{"attach-session", "-t", "$4"}, run: true},
+		scriptedTmuxCall{args: []string{"attach-session", "-t", "$4"}, useRun: true},
 	)
 
 	if err := attachWithRunner(t, runner, plan); err != nil {
@@ -174,7 +174,7 @@ func TestAttachResolvedSessionTreatsMissingSocketAsMissing(t *testing.T) {
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionKindOption, plan.SessionKind}},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionKeyOption, plan.SessionKey}},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionDisplayOption, plan.SessionDisplay}},
-		scriptedTmuxCall{args: []string{"attach-session", "-t", "$4"}, run: true},
+		scriptedTmuxCall{args: []string{"attach-session", "-t", "$4"}, useRun: true},
 	)
 
 	if err := attachWithRunner(t, runner, plan); err != nil {
