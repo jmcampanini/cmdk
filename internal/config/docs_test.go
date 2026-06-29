@@ -79,6 +79,9 @@ func TestRenderHelp_ContainsLiveDefaults(t *testing.T) {
 func TestRenderHelp_ContainsSessionWindowDocs(t *testing.T) {
 	output := RenderHelp()
 	for _, want := range []string{
+		"cmdk attach",
+		"[startup].path",
+		"outside tmux",
 		"cmdk session window <path> --new",
 		"cmdk session window <path> [--name <name>] -- <command> [args...]",
 		"@cmdk_session_key",

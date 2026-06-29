@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -17,6 +18,7 @@ type scriptedTmuxCall struct {
 	args   []string
 	output string
 	err    error
+	useRun bool
 }
 
 type scriptedTmuxRunner struct {
@@ -31,15 +33,33 @@ func newScriptedTmuxRunner(t *testing.T, calls ...scriptedTmuxCall) *scriptedTmu
 
 func (r *scriptedTmuxRunner) Output(_ context.Context, args ...string) ([]byte, error) {
 	r.t.Helper()
+	call := r.nextCall("Output", args)
+	if call.useRun {
+		r.t.Fatalf("tmux call %q used Output, want Run", args)
+	}
+	return []byte(call.output), call.err
+}
+
+func (r *scriptedTmuxRunner) Run(_ context.Context, args ...string) error {
+	r.t.Helper()
+	call := r.nextCall("Run", args)
+	if !call.useRun {
+		r.t.Fatalf("tmux call %q used Run, want Output", args)
+	}
+	return call.err
+}
+
+func (r *scriptedTmuxRunner) nextCall(method string, args []string) scriptedTmuxCall {
+	r.t.Helper()
 	if len(r.calls) == 0 {
-		r.t.Fatalf("unexpected tmux call: %q", args)
+		r.t.Fatalf("unexpected tmux %s call: %q", method, args)
 	}
 	call := r.calls[0]
 	r.calls = r.calls[1:]
 	if !slices.Equal(args, call.args) {
 		r.t.Fatalf("tmux args mismatch\ngot:  %q\nwant: %q", args, call.args)
 	}
-	return []byte(call.output), call.err
+	return call
 }
 
 func (r *scriptedTmuxRunner) done() {
@@ -76,6 +96,105 @@ func createWindowWithRunner(t *testing.T, runner *scriptedTmuxRunner, plan resol
 	err := sessionWindowManager{runner: runner}.createResolvedWindow(context.Background(), plan, opts)
 	runner.done()
 	return err
+}
+
+func attachWithRunner(t *testing.T, runner *scriptedTmuxRunner, plan resolver.Plan) error {
+	t.Helper()
+	err := sessionWindowManager{runner: runner}.attachResolvedSession(context.Background(), plan)
+	runner.done()
+	return err
+}
+
+func tmuxListSessionsExitStatusError(t *testing.T, status int, stderr string) error {
+	t.Helper()
+	cmd := exec.Command("sh", "-c", "exit "+strconv.Itoa(status))
+	err := cmd.Run()
+	if err == nil {
+		t.Fatalf("expected exit status %d", status)
+	}
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("error = %T %[1]v, want *exec.ExitError", err)
+	}
+	if exitErr.ExitCode() != status {
+		t.Fatalf("exit code = %d, want %d", exitErr.ExitCode(), status)
+	}
+	return tmuxCommandError([]string{"list-sessions", "-F", cmdkSessionKeyListFormat}, exitErr, stderr)
+}
+
+func TestAttachResolvedSessionAttachesExistingManagedSession(t *testing.T) {
+	plan := repoSessionWindowPlan()
+	runner := newScriptedTmuxRunner(t,
+		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$2\t" + plan.SessionKey + "\n$3\t/other\n"},
+		scriptedTmuxCall{args: []string{"attach-session", "-t", "$2"}, useRun: true},
+	)
+
+	if err := attachWithRunner(t, runner, plan); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAttachResolvedSessionCreatesMissingSessionThenAttaches(t *testing.T) {
+	plan := repoSessionWindowPlan()
+	runner := newScriptedTmuxRunner(t,
+		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$9\t/other\n"},
+		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionIDsFormat, "-s", plan.PlannedTmuxSessionName, "-n", plan.PlannedTmuxWindowName, "-c", plan.LaunchPath}, output: "$1\t@1\n"},
+		scriptedTmuxCall{args: []string{"set-option", "-t", "$1", cmdkSessionKindOption, plan.SessionKind}},
+		scriptedTmuxCall{args: []string{"set-option", "-t", "$1", cmdkSessionKeyOption, plan.SessionKey}},
+		scriptedTmuxCall{args: []string{"set-option", "-t", "$1", cmdkSessionDisplayOption, plan.SessionDisplay}},
+		scriptedTmuxCall{args: []string{"attach-session", "-t", "$1"}, useRun: true},
+	)
+
+	if err := attachWithRunner(t, runner, plan); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAttachResolvedSessionTreatsNoServerAsMissing(t *testing.T) {
+	plan := directorySessionWindowPlan()
+	runner := newScriptedTmuxRunner(t,
+		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, err: tmuxListSessionsExitStatusError(t, 1, "no server running on /tmp/tmux-501/default")},
+		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionIDsFormat, "-s", plan.PlannedTmuxSessionName, "-n", plan.PlannedTmuxWindowName, "-c", plan.LaunchPath}, output: "$4\t@8\n"},
+		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionKindOption, plan.SessionKind}},
+		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionKeyOption, plan.SessionKey}},
+		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionDisplayOption, plan.SessionDisplay}},
+		scriptedTmuxCall{args: []string{"attach-session", "-t", "$4"}, useRun: true},
+	)
+
+	if err := attachWithRunner(t, runner, plan); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAttachResolvedSessionTreatsMissingSocketAsMissing(t *testing.T) {
+	plan := directorySessionWindowPlan()
+	runner := newScriptedTmuxRunner(t,
+		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, err: tmuxListSessionsExitStatusError(t, 1, "error connecting to /private/tmp/tmux-501/default (No such file or directory)")},
+		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionIDsFormat, "-s", plan.PlannedTmuxSessionName, "-n", plan.PlannedTmuxWindowName, "-c", plan.LaunchPath}, output: "$4\t@8\n"},
+		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionKindOption, plan.SessionKind}},
+		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionKeyOption, plan.SessionKey}},
+		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionDisplayOption, plan.SessionDisplay}},
+		scriptedTmuxCall{args: []string{"attach-session", "-t", "$4"}, useRun: true},
+	)
+
+	if err := attachWithRunner(t, runner, plan); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAttachResolvedSessionPropagatesListSessionsCommandErrors(t *testing.T) {
+	plan := directorySessionWindowPlan()
+	runner := newScriptedTmuxRunner(t,
+		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, err: tmuxListSessionsExitStatusError(t, 42, "boom stderr")},
+	)
+
+	err := attachWithRunner(t, runner, plan)
+	if err == nil {
+		t.Fatal("expected list-sessions error")
+	}
+	if !strings.Contains(err.Error(), "boom stderr") {
+		t.Errorf("error = %q, want stderr context", err.Error())
+	}
 }
 
 func TestCreateResolvedSessionWindowCreatesMissingSessionWithRequestedWindow(t *testing.T) {

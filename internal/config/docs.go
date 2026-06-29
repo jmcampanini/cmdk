@@ -26,6 +26,19 @@ func ConfigDocs() []SectionDoc {
 
 	return []SectionDoc{
 		{
+			Name:        "startup",
+			Description: "Defaults for entering a cmdk-managed tmux session from outside tmux.",
+			Fields: []FieldDoc{
+				{
+					Name:        "path",
+					Type:        "string",
+					Description: "Default directory used by \"cmdk attach\" when no path argument is provided. Leading ~/ is expanded to the current user's home directory.",
+					Validation:  "optional; cannot contain control characters; must resolve to an existing directory when cmdk attach is run",
+				},
+			},
+			Example: "[startup]\npath = \"~/Code/github.com/me/project\"",
+		},
+		{
 			Name:        "actions",
 			Description: "Actions shown in the launcher. Each action declares which item type\n  it matches and an optional stage pipeline to collect data before execution.",
 			Fields: []FieldDoc{
@@ -164,6 +177,20 @@ TEMPLATE VARIABLES
 
   Environment variables CMDK_PATH, CMDK_PANE_ID, etc. are also
   set when executing commands.
+
+ATTACH
+  cmdk attach enters a cmdk-managed tmux session from outside tmux. It refuses
+  to run when $TMUX is set, because it is meant to be the outer entry point into
+  tmux rather than a nested tmux command.
+
+  cmdk attach <path> resolves the path using the same session resolver as
+  "cmdk session resolve". Without a path argument, [startup].path is required.
+  Leading ~/ is expanded before resolving the path.
+
+  If the cmdk-managed session for that path already exists, cmdk attaches to it.
+  Otherwise cmdk creates the managed session, sets @cmdk_session_kind,
+  @cmdk_session_key, and @cmdk_session_display, then attaches to the new
+  session.
 
 SESSION WINDOWS
   cmdk session window <path> --new resolves an existing directory, finds or

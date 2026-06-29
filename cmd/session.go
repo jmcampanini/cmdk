@@ -200,7 +200,10 @@ func resolveSessionPlanForCommand(cmd *cobra.Command, path string) (resolver.Pla
 	if err != nil {
 		return resolver.Plan{}, fmt.Errorf("loading config: %w", err)
 	}
+	return resolveSessionPlanWithConfig(cmd, path, cfg)
+}
 
+func resolveSessionPlanWithConfig(cmd *cobra.Command, path string, cfg config.Config) (resolver.Plan, error) {
 	display, err := sessionDisplayOptions(cfg)
 	if err != nil {
 		return resolver.Plan{}, err
