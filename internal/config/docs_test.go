@@ -25,7 +25,8 @@ func TestConfigDocs_CoversAllFields(t *testing.T) {
 func collectTOMLPaths(t reflect.Type, prefix string) []string {
 	var paths []string
 	for f := range t.Fields() {
-		tomlKey := f.Tag.Get("toml")
+		tomlTag := f.Tag.Get("toml")
+		tomlKey := strings.SplitN(tomlTag, ",", 2)[0]
 		if tomlKey == "" || tomlKey == "-" {
 			continue
 		}
@@ -34,25 +35,29 @@ func collectTOMLPaths(t reflect.Type, prefix string) []string {
 		if ft.Kind() == reflect.Pointer {
 			ft = ft.Elem()
 		}
+		path := joinTOMLPath(prefix, tomlKey)
 
 		switch {
 		case ft.Kind() == reflect.Struct && ft != reflect.TypeFor[Config]():
-			paths = append(paths, collectTOMLPaths(ft, tomlKey)...)
+			paths = append(paths, collectTOMLPaths(ft, path)...)
 		case ft.Kind() == reflect.Slice && ft.Elem().Kind() == reflect.Struct:
 			paths = append(paths, collectTOMLPaths(ft.Elem(), tomlKey)...)
 		case ft.Kind() == reflect.Map && ft.Elem().Kind() == reflect.Struct:
-			paths = append(paths, collectTOMLPaths(ft.Elem(), tomlKey)...)
+			paths = append(paths, collectTOMLPaths(ft.Elem(), path)...)
 		case ft.Kind() == reflect.Map:
 			fallthrough
 		default:
-			if prefix != "" {
-				paths = append(paths, prefix+"."+tomlKey)
-			} else {
-				paths = append(paths, tomlKey)
-			}
+			paths = append(paths, path)
 		}
 	}
 	return paths
+}
+
+func joinTOMLPath(prefix string, key string) string {
+	if prefix == "" {
+		return key
+	}
+	return prefix + "." + key
 }
 
 func TestRenderHelp_ContainsAllSections(t *testing.T) {
@@ -73,6 +78,23 @@ func TestRenderHelp_ContainsLiveDefaults(t *testing.T) {
 	}
 	if !strings.Contains(output, defaults.Display.ShortenHome) {
 		t.Errorf("RenderHelp() should contain default shorten_home %q", defaults.Display.ShortenHome)
+	}
+}
+
+func TestRenderHelp_ContainsThemeRecipe(t *testing.T) {
+	output := RenderHelp()
+	for _, want := range []string{
+		"To apply an arbitrary palette:",
+		"accent = primary",
+		"Roles derive",
+		"from semantic tokens",
+		"cmdk config --validate /path/to/config.toml",
+		"Catppuccin Frappe-style semantic mapping",
+		"session_icon = \"#81c8be\"",
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("RenderHelp() should contain theme recipe text %q", want)
+		}
 	}
 }
 

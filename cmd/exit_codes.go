@@ -31,8 +31,6 @@ Subcommands follow the same convention: 0 on success, 1 on
 cmdk-detected errors. Empty results (e.g. "cmdk icons" with a filter
 that matches nothing) print a message to stderr and exit 0; an empty
 result is not treated as an error.
-
-For the log file location and how to inspect it, run "cmdk logs --help".
 `,
 	}
 }

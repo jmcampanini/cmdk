@@ -101,7 +101,7 @@ func TestDelegate_RenderActionIcon(t *testing.T) {
 	if !strings.Contains(out, iconAction) {
 		t.Errorf("expected action icon in output, got %q", out)
 	}
-	assertIconInfo(t, d.iconInfoForItem(it), iconAction, dark.TypeAction)
+	assertIconInfo(t, d.iconInfoForItem(it), iconAction, dark.Roles.ActionIcon)
 }
 
 func TestDelegate_UnknownTypeUsesDefaultPresentation(t *testing.T) {
@@ -117,7 +117,7 @@ func TestDelegate_UnknownTypeUsesDefaultPresentation(t *testing.T) {
 	if !strings.Contains(out, "some item") {
 		t.Errorf("expected display text in output, got %q", out)
 	}
-	assertIconInfo(t, d.iconInfoForItem(it), iconUnknown, dark.TypeUnknown)
+	assertIconInfo(t, d.iconInfoForItem(it), iconUnknown, dark.Roles.UnknownIcon)
 }
 
 func TestDelegate_PickerUsesDefaultPresentation(t *testing.T) {
@@ -125,7 +125,7 @@ func TestDelegate_PickerUsesDefaultPresentation(t *testing.T) {
 	d := newItemDelegate(dark)
 	it := item.Item{Type: "pick", Display: "alpha"}
 
-	assertIconInfo(t, d.iconInfoForItem(it), iconUnknown, dark.TypeUnknown)
+	assertIconInfo(t, d.iconInfoForItem(it), iconUnknown, dark.Roles.UnknownIcon)
 }
 
 func TestDelegate_ErrorUsesErrorPresentation(t *testing.T) {
@@ -133,14 +133,14 @@ func TestDelegate_ErrorUsesErrorPresentation(t *testing.T) {
 	d := newItemDelegate(dark)
 	it := item.Item{Type: "error", Display: "zoxide error: command not found", Source: "zoxide"}
 
-	assertIconInfo(t, d.iconInfoForItem(it), iconError, dark.Error)
+	assertIconInfo(t, d.iconInfoForItem(it), iconError, dark.Roles.ErrorIcon)
 }
 
 func TestDelegate_LoadingUsesGenericPresentation(t *testing.T) {
 	dark := theme.Dark()
 	d := newItemDelegate(dark)
 
-	assertIconInfo(t, d.iconInfoForItem(item.Item{Type: "loading"}), iconLoading, dark.TypeUnknown)
+	assertIconInfo(t, d.iconInfoForItem(item.Item{Type: "loading"}), iconLoading, dark.Roles.LoadingIcon)
 }
 
 func TestDelegate_ZeroWidth_NoOutput(t *testing.T) {
@@ -247,7 +247,7 @@ func TestDelegate_RenderHighlightsSelectedItemWhileFiltering(t *testing.T) {
 	var buf bytes.Buffer
 	d.Render(&buf, l, 1, visible[1])
 
-	selectedBackground := lipgloss.NewStyle().Background(dark.Surface1).Render(" ")
+	selectedBackground := lipgloss.NewStyle().Background(dark.Tokens.SelectedBg).Render(" ")
 	if !strings.Contains(buf.String(), selectedBackground) {
 		t.Errorf("filtered selected item was not highlighted; output %q does not contain %q", buf.String(), selectedBackground)
 	}

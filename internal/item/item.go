@@ -39,6 +39,22 @@ func (s Stage) EffectiveDelimiter() string {
 	return ""
 }
 
+type DiagnosticField struct {
+	Label string
+	Value string
+}
+
+type DiagnosticSection struct {
+	Title string
+	Body  string
+}
+
+type Diagnostics struct {
+	Summary  string
+	Fields   []DiagnosticField
+	Sections []DiagnosticSection
+}
+
 type Item struct {
 	Type          string
 	Source        string
@@ -55,6 +71,7 @@ type Item struct {
 	WindowName    string
 	NewShell      bool
 	Stages        []Stage
+	Diagnostics   *Diagnostics
 	InlineParent  *Item
 }
 

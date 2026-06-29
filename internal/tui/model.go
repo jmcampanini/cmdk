@@ -3,9 +3,12 @@ package tui
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -28,36 +31,40 @@ const (
 	viewList viewMode = iota
 	viewPrompt
 	viewPicker
+	viewErrorDetails
 )
 
 type Model struct {
-	list             list.Model
-	paneID           string
-	accumulated      []item.Item
-	selected         *item.Item
-	registry         *generator.Registry
-	ctx              generator.Context
-	stackStyle       lipgloss.Style
-	filterStyle      lipgloss.Style
-	winWidth         int
-	winHeight        int
-	mode             viewMode
-	stageInput       textinput.Model
-	stageLabel       string
-	stageError       string
-	errorStyle       lipgloss.Style
-	pickerList       list.Model
-	pickerKey        string
-	theme            theme.Theme
-	autoSelectSingle bool
-	baseItems        []item.Item
-	asyncSources     []AsyncSource
-	asyncResults     [][]item.Item
-	bellToTop        bool
-	wrapList         bool
-	startInFilter    bool
-	autoDetectTheme  bool
-	inline           bool
+	list              list.Model
+	paneID            string
+	accumulated       []item.Item
+	selected          *item.Item
+	registry          *generator.Registry
+	ctx               generator.Context
+	stackStyle        lipgloss.Style
+	filterStyle       lipgloss.Style
+	winWidth          int
+	winHeight         int
+	mode              viewMode
+	stageInput        textinput.Model
+	stageLabel        string
+	stageError        string
+	errorStyle        lipgloss.Style
+	pickerList        list.Model
+	pickerKey         string
+	errorReturnMode   viewMode
+	errorDetailItem   item.Item
+	errorDetailScroll int
+	theme             theme.Theme
+	autoSelectSingle  bool
+	baseItems         []item.Item
+	asyncSources      []AsyncSource
+	asyncResults      [][]item.Item
+	bellToTop         bool
+	wrapList          bool
+	startInFilter     bool
+	autoDetectTheme   bool
+	inline            bool
 }
 
 const horizontalPadding = 1
@@ -71,10 +78,6 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 		accumulated:      accumulated,
 		registry:         registry,
 		ctx:              ctx,
-		stackStyle:       lipgloss.NewStyle().Foreground(t.Overlay0),
-		filterStyle:      lipgloss.NewStyle().Inline(true).Background(t.TextboxBg),
-		errorStyle:       lipgloss.NewStyle().Foreground(t.Error),
-		theme:            t,
 		autoSelectSingle: beh.AutoSelectSingle,
 		baseItems:        baseItems,
 		asyncSources:     asyncSources,
@@ -84,6 +87,7 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 		startInFilter:    beh.StartInFilter,
 		inline:           beh.InlineActions,
 	}
+	m.setThemeStyles(t)
 	if beh.InlineActions && baseItems != nil {
 		m.list.SetItems(m.buildRootItems())
 	}
@@ -132,8 +136,8 @@ func applyListStyles(l *list.Model, t theme.Theme) {
 	// width via Title.Render(FilterInput.Prompt). A mismatch causes the filter
 	// text input to overflow or truncate.
 	l.Styles.Title = lipgloss.NewStyle().
-		Background(t.Accent).
-		Foreground(t.Base).
+		Background(t.Tokens.Accent).
+		Foreground(t.Tokens.AccentText).
 		Padding(0, 1)
 
 	// Filter prompt is a pre-rendered ANSI badge followed by a plain space
@@ -142,14 +146,14 @@ func applyListStyles(l *list.Model, t theme.Theme) {
 	promptStyle := lipgloss.NewStyle()
 
 	textboxActive := lipgloss.NewStyle().
-		Foreground(t.Text).
-		Background(t.TextboxBg)
+		Foreground(t.Tokens.Text).
+		Background(t.Tokens.InputBg)
 	textboxDim := lipgloss.NewStyle().
-		Foreground(t.Overlay0).
-		Background(t.TextboxBg)
+		Foreground(t.Tokens.Muted).
+		Background(t.Tokens.InputBg)
 
 	filterStyles := textinput.DefaultStyles(t.IsDark)
-	filterStyles.Cursor.Color = t.AccentDim
+	filterStyles.Cursor.Color = t.Tokens.Cursor
 	filterStyles.Cursor.Blink = false
 	filterStyles.Focused.Prompt = promptStyle
 	filterStyles.Blurred.Prompt = promptStyle
@@ -162,40 +166,40 @@ func applyListStyles(l *list.Model, t theme.Theme) {
 	l.Styles.Filter = filterStyles
 	l.FilterInput.SetStyles(filterStyles)
 	badge := lipgloss.NewStyle().
-		Background(t.Accent).
-		Foreground(t.Base).
+		Background(t.Tokens.Accent).
+		Foreground(t.Tokens.AccentText).
 		Padding(0, 1).
 		Render("cmdk")
 	l.FilterInput.Prompt = badge + " "
 
-	l.Styles.DefaultFilterCharacterMatch = lipgloss.NewStyle().Background(t.MatchHighlight)
+	l.Styles.DefaultFilterCharacterMatch = lipgloss.NewStyle().Background(t.Tokens.MatchBg)
 
 	l.Styles.StatusBar = lipgloss.NewStyle().
-		Foreground(t.Overlay0).
+		Foreground(t.Tokens.Muted).
 		Padding(0, horizontalPadding, 1, horizontalPadding)
 
-	l.Styles.StatusEmpty = lipgloss.NewStyle().Foreground(t.Overlay0)
-	l.Styles.StatusBarActiveFilter = lipgloss.NewStyle().Foreground(t.Text)
-	l.Styles.StatusBarFilterCount = lipgloss.NewStyle().Foreground(t.Surface2)
+	l.Styles.StatusEmpty = lipgloss.NewStyle().Foreground(t.Tokens.Muted)
+	l.Styles.StatusBarActiveFilter = lipgloss.NewStyle().Foreground(t.Tokens.Text)
+	l.Styles.StatusBarFilterCount = lipgloss.NewStyle().Foreground(t.Tokens.Subtle)
 
 	l.Styles.NoItems = lipgloss.NewStyle().
-		Foreground(t.Overlay0).
+		Foreground(t.Tokens.Muted).
 		Padding(0, horizontalPadding)
 
 	l.Styles.PaginationStyle = lipgloss.NewStyle().Padding(0, horizontalPadding)
 	l.Styles.HelpStyle = lipgloss.NewStyle().Padding(1, horizontalPadding, 0, horizontalPadding)
-	l.Styles.ArabicPagination = lipgloss.NewStyle().Foreground(t.Overlay0)
+	l.Styles.ArabicPagination = lipgloss.NewStyle().Foreground(t.Tokens.Muted)
 
 	dot := lipgloss.NewStyle().SetString("\u2022")
-	activeDot := dot.Foreground(t.Overlay1)
-	inactiveDot := dot.Foreground(t.Surface2)
+	activeDot := dot.Foreground(t.Tokens.Muted)
+	inactiveDot := dot.Foreground(t.Tokens.Subtle)
 	l.Styles.ActivePaginationDot = activeDot
 	l.Styles.InactivePaginationDot = inactiveDot
 	l.Paginator.ActiveDot = activeDot.String()
 	l.Paginator.InactiveDot = inactiveDot.String()
 
 	l.Styles.DividerDot = lipgloss.NewStyle().
-		Foreground(t.Surface2).
+		Foreground(t.Tokens.Subtle).
 		SetString(" \u2022 ")
 }
 
@@ -222,9 +226,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if ws, ok := msg.(tea.WindowSizeMsg); ok {
 		m.winWidth = ws.Width
 		m.winHeight = ws.Height
-		m.list.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
-		if m.mode == viewPicker {
-			m.pickerList.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
+		m.resizeListsForWindow()
+		if m.mode == viewErrorDetails {
+			m = m.clampErrorDetailScroll()
 		}
 		return m, nil
 	}
@@ -242,6 +246,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updatePrompt(msg)
 	case viewPicker:
 		return m.updatePicker(msg)
+	case viewErrorDetails:
+		return m.updateErrorDetails(msg)
 	}
 
 	if key, ok := msg.(tea.KeyPressMsg); ok {
@@ -253,12 +259,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+func (m *Model) resizeListsForWindow() {
+	listHeight := max(m.winHeight-m.overheadHeight(), 1)
+	m.list.SetSize(m.winWidth, listHeight)
+	if m.shouldResizePickerList() {
+		m.pickerList.SetSize(m.winWidth, listHeight)
+	}
+}
+
+func (m Model) shouldResizePickerList() bool {
+	return m.mode == viewPicker || m.errorReturnMode == viewPicker || len(m.pickerList.Items()) > 0
+}
+
 func (m Model) handleBackgroundColor(msg tea.BackgroundColorMsg) Model {
 	if !m.autoDetectTheme {
 		return m
 	}
 
-	next := theme.FromBackground(msg.IsDark())
+	next := theme.FromBackground(msg.IsDark(), m.ctx.Config.Theme)
 	log.Debug("theme auto-detected", "theme", next.Name, "background", msg.String())
 	if next.Name == m.theme.Name {
 		return m
@@ -267,15 +285,19 @@ func (m Model) handleBackgroundColor(msg tea.BackgroundColorMsg) Model {
 }
 
 func (m Model) applyTheme(t theme.Theme) Model {
-	m.theme = t
-	m.stackStyle = lipgloss.NewStyle().Foreground(t.Overlay0)
-	m.filterStyle = lipgloss.NewStyle().Inline(true).Background(t.TextboxBg)
-	m.errorStyle = lipgloss.NewStyle().Foreground(t.Error)
+	m.setThemeStyles(t)
 	applyFilterListTheme(&m.list, t)
 	if m.mode == viewPicker || len(m.pickerList.Items()) > 0 {
 		applyFilterListTheme(&m.pickerList, t)
 	}
 	return m
+}
+
+func (m *Model) setThemeStyles(t theme.Theme) {
+	m.theme = t
+	m.stackStyle = lipgloss.NewStyle().Foreground(t.Tokens.Muted)
+	m.filterStyle = lipgloss.NewStyle().Inline(true).Background(t.Tokens.InputBg)
+	m.errorStyle = lipgloss.NewStyle().Foreground(t.Tokens.Error)
 }
 
 func applyFilterListTheme(l *list.Model, t theme.Theme) {
@@ -292,7 +314,10 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if key == "enter" {
 		wasFiltering := refreshActiveFilter(&m.list)
 		sel, ok := selectedListItem(m.list)
-		if ok && sel.Type != "error" && sel.Type != "loading" {
+		if ok && sel.Type == "error" {
+			return m.openErrorDetails(sel), nil
+		}
+		if ok && sel.Type != "loading" {
 			// Reconstruct the accumulated stack as if the user drilled down,
 			// so template variables (e.g. {{.path}}) resolve correctly.
 			if sel.InlineParent != nil {
@@ -386,7 +411,10 @@ func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if key == "enter" {
 		wasFiltering := refreshActiveFilter(&m.pickerList)
 		sel, ok := selectedListItem(m.pickerList)
-		if ok && sel.Type != "error" {
+		if ok && sel.Type == "error" {
+			return m.openErrorDetails(sel), nil
+		}
+		if ok {
 			return m.pushStageResult(m.pickerKey, sel.Display, sel.Value)
 		}
 		if wasFiltering {
@@ -521,6 +549,94 @@ func selectedListItem(l list.Model) (item.Item, bool) {
 	return sel, ok
 }
 
+func (m Model) openErrorDetails(it item.Item) Model {
+	m.errorReturnMode = viewList
+	if m.mode == viewPicker {
+		m.errorReturnMode = viewPicker
+	}
+	m.errorDetailItem = safeErrorDetailItem(it)
+	m.errorDetailScroll = 0
+	m.mode = viewErrorDetails
+	return m.clampErrorDetailScroll()
+}
+
+func safeErrorDetailItem(it item.Item) item.Item {
+	it.Display = escapeTerminalControls(it.Display)
+	it.Source = escapeTerminalControls(it.Source)
+	it.Diagnostics = safeDiagnostics(it.Diagnostics)
+	return it
+}
+
+func safeDiagnostics(d *item.Diagnostics) *item.Diagnostics {
+	if d == nil {
+		return nil
+	}
+
+	diagnostics := *d
+	diagnostics.Summary = escapeTerminalControls(diagnostics.Summary)
+	diagnostics.Fields = slices.Clone(diagnostics.Fields)
+	for i := range diagnostics.Fields {
+		diagnostics.Fields[i].Label = escapeTerminalControls(diagnostics.Fields[i].Label)
+		diagnostics.Fields[i].Value = escapeTerminalControls(diagnostics.Fields[i].Value)
+	}
+	diagnostics.Sections = slices.Clone(diagnostics.Sections)
+	for i := range diagnostics.Sections {
+		diagnostics.Sections[i].Title = escapeTerminalControls(diagnostics.Sections[i].Title)
+		diagnostics.Sections[i].Body = escapeTerminalControls(diagnostics.Sections[i].Body)
+	}
+	return &diagnostics
+}
+
+func (m Model) updateErrorDetails(msg tea.Msg) (tea.Model, tea.Cmd) {
+	key, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		return m, nil
+	}
+
+	pageSize := max(m.errorDetailsBodyHeight(), 1)
+	switch key.String() {
+	case "esc":
+		if m.errorReturnMode == viewPicker {
+			m.mode = viewPicker
+		} else {
+			m.mode = viewList
+		}
+		return m, nil
+	case "ctrl+c":
+		return m, tea.Quit
+	case "down", "j":
+		m.errorDetailScroll++
+	case "up", "k":
+		m.errorDetailScroll--
+	case "pgdown", "space", " ":
+		m.errorDetailScroll += pageSize
+	case "pgup":
+		m.errorDetailScroll -= pageSize
+	case "home":
+		m.errorDetailScroll = 0
+	case "end":
+		m.errorDetailScroll = m.maxErrorDetailScroll()
+	}
+
+	return m.clampErrorDetailScroll(), nil
+}
+
+func (m Model) maxErrorDetailScroll() int {
+	return errorDetailMaxScroll(len(m.errorDetailsLines()), m.errorDetailsBodyHeight())
+}
+
+func errorDetailMaxScroll(lineCount int, bodyHeight int) int {
+	if bodyHeight <= 0 {
+		return 0
+	}
+	return max(lineCount-bodyHeight, 0)
+}
+
+func (m Model) clampErrorDetailScroll() Model {
+	m.errorDetailScroll = min(max(m.errorDetailScroll, 0), m.maxErrorDetailScroll())
+	return m
+}
+
 // findActionIndex returns the index of the last ActionStaged item in the accumulated stack.
 func (m Model) findActionIndex() int {
 	for i := len(m.accumulated) - 1; i >= 0; i-- {
@@ -582,22 +698,37 @@ func (m Model) advanceStage() Model {
 		m.mode = viewPrompt
 
 	case item.StagePicker:
+		cwd, cwdErr := os.Getwd()
+		if cwdErr != nil {
+			log.Warn("could not determine working directory for picker diagnostics", "key", stage.Key, "error", cwdErr)
+		}
 		rendered, err := execute.RenderCmd(stage.Source, data)
 		if err != nil {
 			log.Error("failed to render picker source template", "key", stage.Key, "error", err)
-			return m.initPickerWithError(stage.Key, fmt.Sprintf("template error: %s", err))
+			errItem := pickerErrorItem("template error", stage, data, cwd, cwdErr, pickerFailure{
+				Err: err,
+			})
+			return m.initPickerWithErrorItem(stage.Key, errItem)
 		}
 		pickerTimeout := m.ctx.Config.Timeout.Picker
-		items, runErr := runPickerSource(rendered, pickerTimeout, stage)
+		result, runErr := runPickerSourceWithDiagnostics(rendered, pickerTimeout, stage)
 		if runErr != nil {
 			log.Error("picker source command failed", "key", stage.Key, "command", rendered, "error", runErr)
-			return m.initPickerWithError(stage.Key, fmt.Sprintf("command error: %s", runErr))
+			errItem := pickerErrorItem("command error", stage, data, cwd, cwdErr, runErr.withRendered(rendered, pickerTimeout))
+			return m.initPickerWithErrorItem(stage.Key, errItem)
 		}
-		if len(items) == 0 {
+		if len(result.Items) == 0 {
 			log.Warn("picker source returned no items", "key", stage.Key, "command", rendered)
-			return m.initPickerWithError(stage.Key, "no items returned")
+			errItem := pickerErrorItem("no items returned", stage, data, cwd, cwdErr, pickerFailure{
+				Err:      errors.New("picker source returned no items"),
+				Rendered: rendered,
+				Timeout:  pickerTimeout,
+				Stdout:   result.Stdout,
+				Stderr:   result.Stderr,
+			})
+			return m.initPickerWithErrorItem(stage.Key, errItem)
 		}
-		m = m.initPicker(stage.Key, items)
+		m = m.initPicker(stage.Key, result.Items)
 
 	default:
 		log.Error("bug: unknown stage type", "type", stage.Type)
@@ -608,9 +739,48 @@ func (m Model) advanceStage() Model {
 	return m
 }
 
+type pickerRunResult struct {
+	Items  []item.Item
+	Stdout string
+	Stderr string
+}
+
+type pickerFailure struct {
+	Err      error
+	Rendered string
+	Timeout  time.Duration
+	Stdout   string
+	Stderr   string
+}
+
+func (f *pickerFailure) Error() string {
+	if f == nil || f.Err == nil {
+		return ""
+	}
+	return f.Err.Error()
+}
+
+func (f *pickerFailure) withRendered(rendered string, timeout time.Duration) pickerFailure {
+	if f == nil {
+		return pickerFailure{Rendered: rendered, Timeout: timeout}
+	}
+	copy := *f
+	copy.Rendered = rendered
+	copy.Timeout = timeout
+	return copy
+}
+
 // runPickerSource executes a shell command and returns one item per output line.
 // A zero timeout means no deadline is applied.
 func runPickerSource(rendered string, timeout time.Duration, stage item.Stage) ([]item.Item, error) {
+	result, failure := runPickerSourceWithDiagnostics(rendered, timeout, stage)
+	if failure != nil {
+		return nil, failure
+	}
+	return result.Items, nil
+}
+
+func runPickerSourceWithDiagnostics(rendered string, timeout time.Duration, stage item.Stage) (pickerRunResult, *pickerFailure) {
 	ctx := context.Background()
 	if timeout > 0 {
 		var cancel context.CancelFunc
@@ -618,27 +788,37 @@ func runPickerSource(rendered string, timeout time.Duration, stage item.Stage) (
 		defer cancel()
 	}
 
-	var stderr bytes.Buffer
+	// TODO(#87): Known accepted risk: these stdout/stderr buffers are unbounded
+	// and may retain large command output until #87 replaces them with the shared
+	// bounded external command-output helper.
+	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, "sh", "-c", rendered)
+	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	// TODO(#87): use a shared bounded stdout/stderr runner; picker output is
-	// currently buffered before it is parsed into rows.
-	out, err := cmd.Output()
-	if err != nil {
+	if err := cmd.Run(); err != nil {
+		failure := &pickerFailure{Stdout: stdout.String(), Stderr: stderr.String()}
 		if ctx.Err() == context.DeadlineExceeded {
-			return nil, fmt.Errorf("command timed out after %s", timeout)
+			failure.Err = fmt.Errorf("command timed out after %s", timeout)
+		} else {
+			failure.Err = fmt.Errorf("command failed: %w", err)
 		}
-		if stderr.Len() > 0 {
-			return nil, fmt.Errorf("command failed: %w\nstderr: %s", err, stderr.String())
-		}
-		return nil, fmt.Errorf("command failed: %w", err)
+		return pickerRunResult{}, failure
 	}
 
-	delim := stage.EffectiveDelimiter()
+	stdoutText := stdout.String()
+	return pickerRunResult{
+		Items:  pickerItemsFromOutput(stdoutText, stage),
+		Stdout: stdoutText,
+		Stderr: stderr.String(),
+	}, nil
+}
 
-	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
-	var items []item.Item
+func pickerItemsFromOutput(output string, stage item.Stage) []item.Item {
+	delim := stage.EffectiveDelimiter()
+	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
+	items := make([]item.Item, 0, len(lines))
 	var warnedDisplay, warnedPass bool
+
 	for _, line := range lines {
 		if delim != "" {
 			line = strings.TrimRight(line, "\r")
@@ -648,6 +828,7 @@ func runPickerSource(rendered string, timeout time.Duration, stage item.Stage) (
 		if line == "" {
 			continue
 		}
+
 		it := item.NewItem()
 		it.Type = "pick"
 		if delim != "" {
@@ -668,7 +849,8 @@ func runPickerSource(rendered string, timeout time.Duration, stage item.Stage) (
 		}
 		items = append(items, it)
 	}
-	return items, nil
+
+	return items
 }
 
 func (m Model) initPicker(key string, items []item.Item) Model {
@@ -688,8 +870,89 @@ func (m Model) initPicker(key string, items []item.Item) Model {
 	return m
 }
 
-func (m Model) initPickerWithError(key string, errMsg string) Model {
-	return m.initPicker(key, []item.Item{{Type: "error", Display: errMsg}})
+func (m Model) initPickerWithErrorItem(key string, errItem item.Item) Model {
+	errItem.Type = "error"
+	if errItem.Source == "" {
+		errItem.Source = "picker"
+	}
+	return m.initPicker(key, []item.Item{errItem})
+}
+
+func pickerErrorItem(kind string, stage item.Stage, data map[string]string, cwd string, cwdErr error, failure pickerFailure) item.Item {
+	errText := failure.Error()
+	display := kind
+	if errText != "" {
+		display = fmt.Sprintf("%s: %s", kind, errText)
+	}
+
+	it := item.NewItem()
+	it.Type = "error"
+	it.Source = "picker"
+	it.Display = display
+	it.Diagnostics = pickerDiagnostics(display, stage, data, cwd, cwdErr, failure)
+	return it
+}
+
+func pickerDiagnostics(summary string, stage item.Stage, data map[string]string, cwd string, cwdErr error, failure pickerFailure) *item.Diagnostics {
+	workingDirectory := cwd
+	if cwdErr != nil {
+		workingDirectory = fmt.Sprintf("unknown: %s", cwdErr)
+	}
+
+	timeoutValue := "none"
+	if failure.Timeout > 0 {
+		timeoutValue = failure.Timeout.String()
+	}
+
+	fields := []item.DiagnosticField{
+		{Label: "Stage key", Value: stage.Key},
+		{Label: "Working directory", Value: workingDirectory},
+		{Label: "Timeout", Value: timeoutValue},
+	}
+	if failure.Err != nil {
+		fields = append(fields, item.DiagnosticField{Label: "Error", Value: failure.Err.Error()})
+	}
+
+	sections := []item.DiagnosticSection{
+		{Title: "Data fields", Body: formatDiagnosticData(data)},
+		{Title: "Command template", Body: stage.Source},
+	}
+	if failure.Rendered != "" {
+		sections = append(sections, item.DiagnosticSection{Title: "Rendered command", Body: failure.Rendered})
+	}
+	sections = append(sections,
+		item.DiagnosticSection{Title: "stdout", Body: formatCapturedCommandOutput(failure.Stdout)},
+		item.DiagnosticSection{Title: "stderr", Body: formatCapturedCommandOutput(failure.Stderr)},
+	)
+
+	return &item.Diagnostics{Summary: summary, Fields: fields, Sections: sections}
+}
+
+func formatDiagnosticData(data map[string]string) string {
+	if len(data) == 0 {
+		return "(none)"
+	}
+	keys := make([]string, 0, len(data))
+	for k := range data {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var b strings.Builder
+	for i, k := range keys {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		fmt.Fprintf(&b, "%s: %s", k, data[k])
+	}
+	return b.String()
+}
+
+func formatCapturedCommandOutput(out string) string {
+	if out == "" {
+		return "(empty)"
+	}
+	return out
 }
 
 // completeStages extracts the action item as selected and removes it from accumulated,
@@ -866,7 +1129,143 @@ func (m Model) promptView() string {
 	return view
 }
 
+func (m Model) errorDetailsWindowWidth() int {
+	width := m.winWidth
+	if width <= 0 {
+		if m.errorReturnMode == viewPicker {
+			width = m.pickerList.Width()
+		} else {
+			width = m.list.Width()
+		}
+	}
+	if width <= 0 {
+		width = 80
+	}
+	return width
+}
+
+func (m Model) errorDetailsWindowHeight() int {
+	height := m.winHeight
+	if height <= 0 {
+		if m.errorReturnMode == viewPicker {
+			height = m.pickerList.Height() + m.overheadHeight()
+		} else {
+			height = m.list.Height() + m.overheadHeight()
+		}
+	}
+	if height <= 0 {
+		height = 24
+	}
+	return height
+}
+
+func (m Model) errorDetailsContentWidth() int {
+	return max(m.errorDetailsWindowWidth()-2*horizontalPadding, 1)
+}
+
+func (m Model) errorDetailsFrameHeight() int {
+	height := 4 // header, blank before body, blank before footer, footer
+	if m.errorDetailItem.Source != "" {
+		height++
+	}
+	return height
+}
+
+func (m Model) errorDetailsBodyHeight() int {
+	return max(m.errorDetailsWindowHeight()-m.errorDetailsFrameHeight(), 0)
+}
+
+func (m Model) errorDetailsLines() []string {
+	body := m.errorDetailItem.Display
+	if m.errorDetailItem.Diagnostics != nil {
+		body = formatDiagnosticsBody(m.errorDetailItem.Diagnostics)
+	}
+	wrapped := ansi.Wrap(body, m.errorDetailsContentWidth(), " ")
+	if wrapped == "" {
+		return []string{""}
+	}
+	return strings.Split(wrapped, "\n")
+}
+
+func formatDiagnosticsBody(d *item.Diagnostics) string {
+	if d == nil {
+		return ""
+	}
+
+	var b strings.Builder
+	if d.Summary != "" {
+		b.WriteString(d.Summary)
+	}
+	for _, field := range d.Fields {
+		if b.Len() > 0 {
+			b.WriteByte('\n')
+		}
+		writeDiagnosticLabelValue(&b, field.Label, field.Value)
+	}
+	for _, section := range d.Sections {
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString(section.Title)
+		b.WriteString(":")
+		body := section.Body
+		if body == "" {
+			body = "(empty)"
+		}
+		b.WriteByte('\n')
+		b.WriteString(body)
+	}
+	return b.String()
+}
+
+func writeDiagnosticLabelValue(b *strings.Builder, label, value string) {
+	if value == "" {
+		value = "(empty)"
+	}
+	if !strings.Contains(value, "\n") {
+		fmt.Fprintf(b, "%s: %s", label, value)
+		return
+	}
+
+	b.WriteString(label)
+	b.WriteString(":")
+	for _, line := range strings.Split(value, "\n") {
+		b.WriteString("\n  ")
+		b.WriteString(line)
+	}
+}
+
+func (m Model) errorDetailsView() string {
+	pad := strings.Repeat(" ", horizontalPadding)
+	lines := m.errorDetailsLines()
+	bodyHeight := m.errorDetailsBodyHeight()
+	maxScroll := errorDetailMaxScroll(len(lines), bodyHeight)
+	scroll := min(max(m.errorDetailScroll, 0), maxScroll)
+	end := min(scroll+bodyHeight, len(lines))
+
+	var b strings.Builder
+	b.WriteString(pad + m.errorStyle.Render("Error details") + "\n")
+	if m.errorDetailItem.Source != "" {
+		b.WriteString(pad + m.stackStyle.Render("Source: "+m.errorDetailItem.Source) + "\n")
+	}
+	b.WriteByte('\n')
+	for _, line := range lines[scroll:end] {
+		b.WriteString(pad)
+		if line != "" {
+			b.WriteString(m.errorStyle.Render(line))
+		}
+		b.WriteByte('\n')
+	}
+	b.WriteByte('\n')
+	b.WriteString(pad + m.stackStyle.Render("Esc back • ↑/↓ scroll • PgUp/PgDn page"))
+	return b.String()
+}
+
 func (m Model) View() tea.View {
+	if m.mode == viewErrorDetails {
+		return tea.NewView(m.errorDetailsView())
+	}
+
 	header := m.headerView()
 	stack := m.stackView()
 

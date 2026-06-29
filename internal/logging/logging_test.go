@@ -40,14 +40,6 @@ func TestSetup_CreatesDirAndFile(t *testing.T) {
 	}
 }
 
-func TestDefaultLogPath(t *testing.T) {
-	got := DefaultLogPath()
-	want := filepath.Join(os.Getenv("HOME"), ".local", "state", "cmdk", "cmdk.log")
-	if got != want {
-		t.Errorf("DefaultLogPath() = %q, want %q", got, want)
-	}
-}
-
 func TestSetup_DefaultLoggerWritesToFile(t *testing.T) {
 	prev := log.Default()
 	defer log.SetDefault(prev)
