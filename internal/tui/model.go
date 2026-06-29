@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"slices"
@@ -792,21 +791,13 @@ func runPickerSourceWithDiagnostics(rendered string, timeout time.Duration, stag
 		defer cancel()
 	}
 
-	stdout, err := os.CreateTemp("", "cmdk-picker-stdout-*")
-	if err != nil {
-		return pickerRunResult{}, &pickerFailure{Err: fmt.Errorf("could not create picker stdout capture: %w", err)}
-	}
-	defer func() {
-		_ = stdout.Close()
-		_ = os.Remove(stdout.Name())
-	}()
-
+	stdout := newPickerStdoutCapture(stage, pickerDiagnosticOutputLimit)
 	stderr := cappedBuffer{limit: pickerDiagnosticOutputLimit}
 	cmd := exec.CommandContext(ctx, "sh", "-c", rendered)
 	cmd.Stdout = stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		failure := &pickerFailure{Stdout: readCapturedOutput(stdout, pickerDiagnosticOutputLimit), Stderr: stderr.Captured()}
+		failure := &pickerFailure{Stdout: stdout.Captured(), Stderr: stderr.Captured()}
 		if ctx.Err() == context.DeadlineExceeded {
 			failure.Err = fmt.Errorf("command timed out after %s", timeout)
 		} else {
@@ -815,84 +806,118 @@ func runPickerSourceWithDiagnostics(rendered string, timeout time.Duration, stag
 		return pickerRunResult{}, failure
 	}
 
-	out, readErr := readAllCapturedOutput(stdout)
-	if readErr != nil {
-		return pickerRunResult{}, &pickerFailure{Err: fmt.Errorf("could not read picker stdout capture: %w", readErr), Stderr: stderr.Captured()}
-	}
-
-	items := pickerItemsFromOutput(string(out), stage)
 	return pickerRunResult{
-		Items:  items,
-		Stdout: captureBytes(out, pickerDiagnosticOutputLimit),
+		Items:  stdout.Items(),
+		Stdout: stdout.Captured(),
 		Stderr: stderr.Captured(),
 	}, nil
 }
 
 func pickerItemsFromOutput(output string, stage item.Stage) []item.Item {
-	delim := stage.EffectiveDelimiter()
-
-	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
-	var items []item.Item
-	var warnedDisplay, warnedPass bool
-	for _, line := range lines {
-		if delim != "" {
-			line = strings.TrimRight(line, "\r")
-		} else {
-			line = strings.TrimSpace(line)
-		}
-		if line == "" {
-			continue
-		}
-		it := item.NewItem()
-		it.Type = "pick"
-		if delim != "" {
-			nFields := len(strings.Split(line, delim))
-			if stage.Display > nFields && !warnedDisplay {
-				log.Warn("display index exceeds field count, using whole line", "index", stage.Display, "fields", nFields)
-				warnedDisplay = true
-			}
-			if stage.Pass > nFields && !warnedPass {
-				log.Warn("pass index exceeds field count, using whole line", "index", stage.Pass, "fields", nFields)
-				warnedPass = true
-			}
-			it.Display = extractField(line, delim, stage.Display)
-			it.Value = extractField(line, delim, stage.Pass)
-		} else {
-			it.Display = line
-			it.Value = line
-		}
-		items = append(items, it)
-	}
-	return items
+	parser := newPickerOutputParser(stage)
+	parser.Write([]byte(output))
+	return parser.Items()
 }
 
-func readAllCapturedOutput(f *os.File) ([]byte, error) {
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return nil, err
-	}
-	return io.ReadAll(f)
+type pickerStdoutCapture struct {
+	capture cappedBuffer
+	parser  pickerOutputParser
 }
 
-func readCapturedOutput(f *os.File, limit int) capturedCommandOutput {
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return capturedCommandOutput{Text: fmt.Sprintf("could not read captured output: %s", err)}
+func newPickerStdoutCapture(stage item.Stage, limit int) *pickerStdoutCapture {
+	return &pickerStdoutCapture{
+		capture: cappedBuffer{limit: limit},
+		parser:  newPickerOutputParser(stage),
 	}
-	data, err := io.ReadAll(io.LimitReader(f, int64(limit)+1))
-	if err != nil {
-		return capturedCommandOutput{Text: fmt.Sprintf("could not read captured output: %s", err)}
-	}
-	return captureBytes(data, limit)
 }
 
-func captureBytes(data []byte, limit int) capturedCommandOutput {
-	if limit < 0 {
-		limit = 0
+func (c *pickerStdoutCapture) Write(p []byte) (int, error) {
+	_, _ = c.capture.Write(p)
+	c.parser.Write(p)
+	return len(p), nil
+}
+
+func (c *pickerStdoutCapture) Items() []item.Item {
+	return c.parser.Items()
+}
+
+func (c *pickerStdoutCapture) Captured() capturedCommandOutput {
+	return c.capture.Captured()
+}
+
+type pickerOutputParser struct {
+	stage         item.Stage
+	delim         string
+	line          bytes.Buffer
+	items         []item.Item
+	finished      bool
+	warnedDisplay bool
+	warnedPass    bool
+}
+
+func newPickerOutputParser(stage item.Stage) pickerOutputParser {
+	return pickerOutputParser{stage: stage, delim: stage.EffectiveDelimiter()}
+}
+
+func (p *pickerOutputParser) Write(data []byte) {
+	for len(data) > 0 {
+		idx := bytes.IndexByte(data, '\n')
+		if idx < 0 {
+			_, _ = p.line.Write(data)
+			return
+		}
+		_, _ = p.line.Write(data[:idx])
+		p.appendLine(p.line.String())
+		p.line.Reset()
+		data = data[idx+1:]
 	}
-	truncated := len(data) > limit
-	if truncated {
-		data = data[:limit]
+}
+
+func (p *pickerOutputParser) Items() []item.Item {
+	p.finish()
+	return p.items
+}
+
+func (p *pickerOutputParser) finish() {
+	if p.finished {
+		return
 	}
-	return capturedCommandOutput{Text: string(data), Truncated: truncated, Limit: limit}
+	if p.line.Len() > 0 {
+		p.appendLine(p.line.String())
+		p.line.Reset()
+	}
+	p.finished = true
+}
+
+func (p *pickerOutputParser) appendLine(line string) {
+	if p.delim != "" {
+		line = strings.TrimRight(line, "\r")
+	} else {
+		line = strings.TrimSpace(line)
+	}
+	if line == "" {
+		return
+	}
+
+	it := item.NewItem()
+	it.Type = "pick"
+	if p.delim != "" {
+		nFields := len(strings.Split(line, p.delim))
+		if p.stage.Display > nFields && !p.warnedDisplay {
+			log.Warn("display index exceeds field count, using whole line", "index", p.stage.Display, "fields", nFields)
+			p.warnedDisplay = true
+		}
+		if p.stage.Pass > nFields && !p.warnedPass {
+			log.Warn("pass index exceeds field count, using whole line", "index", p.stage.Pass, "fields", nFields)
+			p.warnedPass = true
+		}
+		it.Display = extractField(line, p.delim, p.stage.Display)
+		it.Value = extractField(line, p.delim, p.stage.Pass)
+	} else {
+		it.Display = line
+		it.Value = line
+	}
+	p.items = append(p.items, it)
 }
 
 type cappedBuffer struct {

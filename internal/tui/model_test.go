@@ -1933,6 +1933,22 @@ func TestPickerStage_CommandErrorDetailsIncludeExecutionContext(t *testing.T) {
 	}
 }
 
+func TestRunPickerSourceWithDiagnosticsCapsFailedStdout(t *testing.T) {
+	_, failure := runPickerSourceWithDiagnostics(`i=0; while [ "$i" -lt 5000 ]; do printf '0123456789abcdef\n'; i=$((i + 1)); done; exit 7`, 0, item.Stage{})
+	if failure == nil {
+		t.Fatal("runPickerSourceWithDiagnostics should fail")
+	}
+	if !failure.Stdout.Truncated {
+		t.Fatal("failed picker stdout diagnostics should be truncated")
+	}
+	if got := len(failure.Stdout.Text); got != pickerDiagnosticOutputLimit {
+		t.Fatalf("captured stdout length = %d, want %d", got, pickerDiagnosticOutputLimit)
+	}
+	if got := formatCapturedCommandOutput(failure.Stdout); !strings.Contains(got, "[truncated after 64 KiB]") {
+		t.Fatalf("formatted stdout should note truncation, got %q", got)
+	}
+}
+
 func TestFormatCapturedCommandOutputTruncated(t *testing.T) {
 	got := formatCapturedCommandOutput(capturedCommandOutput{Text: "abc", Truncated: true, Limit: 3})
 	if got != "abc\n[truncated after 3 bytes]" {
