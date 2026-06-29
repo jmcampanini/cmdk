@@ -634,6 +634,14 @@ func TestResolveLaunchPathCmd(t *testing.T) {
 	}
 }
 
+func TestResolveLaunchPathCmd_OversizedStdout(t *testing.T) {
+	cmd := fmt.Sprintf("i=0; while [ $i -le %d ]; do printf x; i=$((i+1)); done", launchPathCmdMaxStdoutBytes)
+	_, err := resolveLaunchPathCmd(cmd, nil, time.Second, "")
+	if err == nil || !strings.Contains(err.Error(), "output exceeds") {
+		t.Fatalf("error = %v, want output limit", err)
+	}
+}
+
 func TestResolveLaunchPathCmd_Timeout(t *testing.T) {
 	_, err := resolveLaunchPathCmd("sleep 1; printf /tmp", nil, 10*time.Millisecond, "")
 	if err == nil || !strings.Contains(err.Error(), "timed out") {

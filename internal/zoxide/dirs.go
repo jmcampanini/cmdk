@@ -85,6 +85,7 @@ func ParseDirs(output string, minScore float64, home, shortenHome string, rules 
 }
 
 func ListDirs(ctx context.Context, minScore float64, home, shortenHome string, rules []pathfmt.Rule, trunc pathfmt.Truncation) ([]item.Item, error) {
+	// TODO(#87): use a shared bounded stdout/stderr runner for zoxide output.
 	out, err := exec.CommandContext(ctx, "zoxide", "query", "--list", "--score").Output()
 	if err != nil {
 		if ctx.Err() != nil {

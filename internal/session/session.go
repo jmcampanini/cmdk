@@ -303,6 +303,7 @@ func gitOutput(ctx context.Context, dir string, args ...string) ([]byte, error) 
 	cmd.Env = withoutGitEnv(os.Environ())
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
+	// TODO(#87): use a shared bounded stdout/stderr runner for git probes.
 	out, err := cmd.Output()
 	if err == nil {
 		return out, nil

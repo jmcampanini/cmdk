@@ -21,6 +21,7 @@ func (execTmuxRunner) Output(ctx context.Context, args ...string) ([]byte, error
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
+	// TODO(#87): use a shared bounded stdout/stderr runner for tmux queries.
 	out, err := cmd.Output()
 	if err == nil {
 		return out, nil

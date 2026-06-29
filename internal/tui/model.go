@@ -621,6 +621,8 @@ func runPickerSource(rendered string, timeout time.Duration, stage item.Stage) (
 	var stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, "sh", "-c", rendered)
 	cmd.Stderr = &stderr
+	// TODO(#87): use a shared bounded stdout/stderr runner; picker output is
+	// currently buffered before it is parsed into rows.
 	out, err := cmd.Output()
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"maps"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"syscall"
 	"text/template"
 	"time"
 	"unicode"
@@ -30,6 +32,9 @@ type launchMode string
 
 const (
 	defaultWindowNameTemplate = "{{.launch_basename}}"
+
+	launchPathCmdMaxStdoutBytes = 8 * 1024
+	launchPathCmdMaxStderrBytes = 32 * 1024
 
 	launchModeSessionWindow launchMode = config.LaunchModeSessionWindow
 	launchModeShell         launchMode = config.LaunchModeShell
@@ -286,22 +291,60 @@ func resolveLaunchPathCmd(cmdTemplate string, data map[string]string, timeout ti
 		defer cancel()
 	}
 
-	var stderr bytes.Buffer
+	// TODO(#87): Replace this local bounded capture with the shared external-command
+	// output helper once cmdk standardizes stdout/stderr limits repository-wide.
 	cmd := exec.CommandContext(ctx, "sh", "-c", rendered)
-	cmd.Stderr = &stderr
 	cmd.Env = envWithCMDK(data, paneID)
-	out, err := cmd.Output()
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return killCommandGroup(cmd) }
+	cmd.WaitDelay = time.Second
+
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return "", fmt.Errorf("launch_path_cmd timed out after %s", timeout)
-		}
-		if stderr.Len() > 0 {
-			return "", fmt.Errorf("launch_path_cmd failed: %w\nstderr: %s", err, stderr.String())
-		}
-		return "", fmt.Errorf("launch_path_cmd failed: %w", err)
+		return "", fmt.Errorf("launch_path_cmd stdout pipe: %w", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return "", fmt.Errorf("launch_path_cmd stderr pipe: %w", err)
 	}
 
-	path, err := parseLaunchPathCmdOutput(out)
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Errorf("launch_path_cmd start: %w", err)
+	}
+
+	stdoutCh := make(chan commandOutputResult, 1)
+	go func() {
+		out, readErr := readLaunchPathCmdStdout(stdout)
+		if readErr != nil {
+			_ = killCommandGroup(cmd)
+		}
+		stdoutCh <- commandOutputResult{data: out, err: readErr}
+	}()
+
+	stderrCh := make(chan commandOutputResult, 1)
+	go func() {
+		stderrCh <- readCommandDiagnostic(stderr, launchPathCmdMaxStderrBytes)
+	}()
+
+	waitErr := cmd.Wait()
+	stdoutResult := <-stdoutCh
+	stderrResult := <-stderrCh
+	stderrText := formatCommandDiagnostic(stderrResult, launchPathCmdMaxStderrBytes)
+
+	if ctx.Err() == context.DeadlineExceeded {
+		return "", fmt.Errorf("launch_path_cmd timed out after %s", timeout)
+	}
+	if stdoutResult.err != nil {
+		return "", stdoutResult.err
+	}
+	if waitErr != nil {
+		if stderrText != "" {
+			return "", fmt.Errorf("launch_path_cmd failed: %w\nstderr: %s", waitErr, stderrText)
+		}
+		return "", fmt.Errorf("launch_path_cmd failed: %w", waitErr)
+	}
+
+	path, err := parseLaunchPathCmdOutput(stdoutResult.data)
 	if err != nil {
 		return "", err
 	}
@@ -309,6 +352,98 @@ func resolveLaunchPathCmd(cmdTemplate string, data map[string]string, timeout ti
 		return "", errors.New("launch_path_cmd output must be an absolute path")
 	}
 	return validateExistingDirectory("launch_path_cmd output", path)
+}
+
+func killCommandGroup(cmd *exec.Cmd) error {
+	if cmd.Process == nil {
+		return nil
+	}
+	err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	if err != nil && !errors.Is(err, syscall.ESRCH) {
+		return err
+	}
+	return nil
+}
+
+type commandOutputResult struct {
+	data      []byte
+	truncated bool
+	err       error
+}
+
+func readLaunchPathCmdStdout(r io.Reader) ([]byte, error) {
+	var b bytes.Buffer
+	buf := make([]byte, 512)
+	seenNewline := false
+	for {
+		n, err := r.Read(buf)
+		if n > 0 {
+			for _, c := range buf[:n] {
+				if seenNewline {
+					return nil, errors.New("launch_path_cmd output must contain exactly one line")
+				}
+				if b.Len() >= launchPathCmdMaxStdoutBytes {
+					return nil, fmt.Errorf("launch_path_cmd output exceeds %d bytes", launchPathCmdMaxStdoutBytes)
+				}
+				b.WriteByte(c)
+				if c == '\n' {
+					seenNewline = true
+				}
+			}
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return b.Bytes(), nil
+			}
+			return nil, fmt.Errorf("read launch_path_cmd stdout: %w", err)
+		}
+	}
+}
+
+func readCommandDiagnostic(r io.Reader, limit int) commandOutputResult {
+	var b bytes.Buffer
+	buf := make([]byte, 1024)
+	truncated := false
+	for {
+		n, err := r.Read(buf)
+		if n > 0 {
+			remaining := limit - b.Len()
+			if remaining > 0 {
+				if n <= remaining {
+					b.Write(buf[:n])
+				} else {
+					b.Write(buf[:remaining])
+					truncated = true
+				}
+			} else {
+				truncated = true
+			}
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return commandOutputResult{data: b.Bytes(), truncated: truncated}
+			}
+			return commandOutputResult{data: b.Bytes(), truncated: truncated, err: err}
+		}
+	}
+}
+
+func formatCommandDiagnostic(result commandOutputResult, limit int) string {
+	text := string(result.data)
+	var notes []string
+	if result.truncated {
+		notes = append(notes, fmt.Sprintf("truncated after %d bytes", limit))
+	}
+	if result.err != nil {
+		notes = append(notes, fmt.Sprintf("read error: %v", result.err))
+	}
+	if len(notes) == 0 {
+		return text
+	}
+	if text != "" && !strings.HasSuffix(text, "\n") {
+		text += "\n"
+	}
+	return text + "[stderr " + strings.Join(notes, "; ") + "]"
 }
 
 func parseLaunchPathCmdOutput(out []byte) (string, error) {
