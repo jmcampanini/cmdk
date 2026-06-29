@@ -134,8 +134,9 @@ func TestAutoThemeDetection_IgnoresBackgroundColorWhenDisabled(t *testing.T) {
 	result, _ := m.Update(tea.BackgroundColorMsg{Color: color.White})
 	m = result.(Model)
 
-	if m.theme.Name != theme.Default().Name {
-		t.Fatalf("theme = %q, want default %q", m.theme.Name, theme.Default().Name)
+	wantTheme := theme.Default().Name
+	if m.theme.Name != wantTheme {
+		t.Fatalf("theme = %q, want default %q", m.theme.Name, wantTheme)
 	}
 }
 

@@ -20,12 +20,11 @@ func asyncTestConfig() config.Config {
 }
 
 func newAsyncTestModel(syncItems []item.Item, asyncSources []AsyncSource) Model {
-	t := theme.Default()
 	reg := generator.NewRegistry()
 	reg.Register("root", func([]item.Item, generator.Context) []item.Item { return syncItems })
 	reg.MapType("", "root")
 
-	return NewModel(rootItemsWithLoading(syncItems, asyncSources), "%1", nil, reg, generator.Context{Config: asyncTestConfig()}, t, asyncSources, syncItems)
+	return NewModel(rootItemsWithLoading(syncItems, asyncSources), "%1", nil, reg, generator.Context{Config: asyncTestConfig()}, theme.Default(), asyncSources, syncItems)
 }
 
 func rootItemsWithLoading(syncItems []item.Item, asyncSources []AsyncSource) []list.Item {
@@ -380,7 +379,6 @@ func TestSourceResult_WhileDrilledDown_DoesNotRebuild(t *testing.T) {
 	asyncSrcs := []AsyncSource{
 		{Name: "windows", Timeout: time.Second},
 	}
-	th := theme.Default()
 	reg := generator.NewRegistry()
 	reg.Register("root", func([]item.Item, generator.Context) []item.Item { return syncItems })
 	reg.Register("dir-actions", func([]item.Item, generator.Context) []item.Item {
@@ -393,7 +391,7 @@ func TestSourceResult_WhileDrilledDown_DoesNotRebuild(t *testing.T) {
 
 	listItems := rootItemsWithLoading(syncItems, asyncSrcs)
 
-	m := NewModel(listItems, "%1", nil, reg, generator.Context{Config: asyncTestConfig()}, th, asyncSrcs, syncItems)
+	m := NewModel(listItems, "%1", nil, reg, generator.Context{Config: asyncTestConfig()}, theme.Default(), asyncSrcs, syncItems)
 	m = sizeModel(m, 80, 24)
 	m = exitFilterMode(t, m)
 

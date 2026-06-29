@@ -56,7 +56,7 @@ type Model struct {
 	bellToTop        bool
 	wrapList         bool
 	startInFilter    bool
-	autoTheme        bool
+	autoDetectTheme  bool
 	inline           bool
 }
 
@@ -91,7 +91,7 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 }
 
 func (m Model) WithAutoThemeDetection() Model {
-	m.autoTheme = true
+	m.autoDetectTheme = true
 	return m
 }
 
@@ -209,7 +209,7 @@ func (m Model) Selected() *item.Item {
 
 func (m Model) Init() tea.Cmd {
 	cmds := make([]tea.Cmd, 0, len(m.asyncSources)+1)
-	if m.autoTheme {
+	if m.autoDetectTheme {
 		cmds = append(cmds, tea.RequestBackgroundColor)
 	}
 	for _, src := range m.asyncSources {
@@ -230,7 +230,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	if bg, ok := msg.(tea.BackgroundColorMsg); ok {
-		return m.handleBackgroundColor(bg)
+		return m.handleBackgroundColor(bg), nil
 	}
 
 	if result, ok := msg.(sourceResultMsg); ok {
@@ -253,17 +253,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) handleBackgroundColor(msg tea.BackgroundColorMsg) (tea.Model, tea.Cmd) {
-	if !m.autoTheme {
-		return m, nil
+func (m Model) handleBackgroundColor(msg tea.BackgroundColorMsg) Model {
+	if !m.autoDetectTheme {
+		return m
 	}
 
 	next := theme.FromBackground(msg.IsDark())
 	log.Debug("theme auto-detected", "theme", next.Name, "background", msg.String())
 	if next.Name == m.theme.Name {
-		return m, nil
+		return m
 	}
-	return m.applyTheme(next), nil
+	return m.applyTheme(next)
 }
 
 func (m Model) applyTheme(t theme.Theme) Model {

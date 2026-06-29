@@ -175,13 +175,14 @@ var rootCmd = &cobra.Command{
 		listItems := item.GroupAndOrder(initialAll, cfg.Behavior.BellToTop)
 		stop()
 
+		autoDetectTheme := themeFlag == ""
 		stop = tr.Begin("theme")
 		t, err := theme.Resolve(themeFlag)
 		stop()
 		if err != nil {
 			return err
 		}
-		if themeFlag == "" {
+		if autoDetectTheme {
 			log.Debug("theme auto fallback", "theme", t.Name)
 		}
 
@@ -197,7 +198,7 @@ var rootCmd = &cobra.Command{
 
 		stop = tr.Begin("model")
 		model := tui.NewModel(listItems, paneID, nil, reg, ctx, t, tuiAsync, syncItems)
-		if themeFlag == "" {
+		if autoDetectTheme {
 			model = model.WithAutoThemeDetection()
 		}
 		stop()
