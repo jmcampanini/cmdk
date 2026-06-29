@@ -80,18 +80,15 @@ func TestMatchesFilter(t *testing.T) {
 }
 
 func TestMatchesSetFlag(t *testing.T) {
-	flagIconCod = true
-	flagIconDev = false
-	flagIconOct = false
-	defer func() { flagIconCod = false }()
+	options := iconOptions{cod: true}
 
-	if !matchesSetFlag("cod") {
+	if !matchesSetFlag("cod", options) {
 		t.Error("expected cod to match when flagIconCod is true")
 	}
-	if matchesSetFlag("dev") {
+	if matchesSetFlag("dev", options) {
 		t.Error("expected dev not to match when flagIconDev is false")
 	}
-	if matchesSetFlag("unknown") {
+	if matchesSetFlag("unknown", options) {
 		t.Error("expected unknown set not to match")
 	}
 }
@@ -174,14 +171,9 @@ func TestEmitIconsEmptyHint(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			flagIconCod, flagIconDev, flagIconOct = tt.cod, tt.dev, tt.oct
-			flagIconFilter = tt.filter
-			defer func() {
-				flagIconCod, flagIconDev, flagIconOct = false, false, false
-				flagIconFilter = ""
-			}()
+			options := iconOptions{cod: tt.cod, dev: tt.dev, oct: tt.oct, filter: tt.filter}
 
-			got := captureStderr(t, emitIconsEmptyHint)
+			got := captureStderr(t, func() { emitIconsEmptyHint(options) })
 			for _, want := range tt.contains {
 				if !strings.Contains(got, want) {
 					t.Errorf("stderr missing %q\nstderr:\n%s", want, got)

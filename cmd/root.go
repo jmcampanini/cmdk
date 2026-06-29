@@ -36,143 +36,117 @@ var (
 	timingsJSON bool
 )
 
-var rootCmd = &cobra.Command{
-	Use:           "cmdk",
-	Short:         "Keyboard-driven tmux launcher",
-	SilenceUsage:  true,
-	SilenceErrors: true,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		timingsFlag = timingsFlag || timingsJSON
+var rootCmd *cobra.Command
 
-		tr := trace.Noop()
-		if timingsFlag {
-			processStart, err := trace.ProcessStartTime()
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "warning: could not detect process start time: %v\n", err)
-			}
-			tr = trace.New(processStart)
+func init() {
+	rootCmd = newRootCommand()
+}
+
+func newRootCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:           "cmdk",
+		Short:         "Keyboard-driven tmux launcher",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE:          runRootCommand,
+	}
+	cmd.Version = Version
+	cmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "path to config file (also validates; exits 1 on error)")
+	cmd.Flags().StringVar(&paneID, "pane-id", "", "tmux pane ID")
+	cmd.Flags().StringVar(&themeFlag, "theme", "", "color theme (light, dark)")
+	cmd.Flags().BoolVar(&timingsFlag, "timings", false, "measure and print startup phase durations")
+	cmd.Flags().BoolVar(&timingsJSON, "timings-json", false, "output timings as JSON (implies --timings)")
+	cmd.AddCommand(
+		newAttachCommand(),
+		newConfigCommand(),
+		newDocsCommand(),
+		newExitCodesCommand(),
+		newIconsCommand(),
+		newLogsCommand(),
+		newSessionCommand(),
+		newShortenCommand(),
+	)
+	return cmd
+}
+
+func runRootCommand(cmd *cobra.Command, _ []string) error {
+	timingsFlag = timingsFlag || timingsJSON
+
+	tr := trace.Noop()
+	if timingsFlag {
+		processStart, err := trace.ProcessStartTime()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not detect process start time: %v\n", err)
 		}
+		tr = trace.New(processStart)
+	}
 
-		stop := tr.Begin("logging")
-		logger, err := logging.Setup()
+	stop := tr.Begin("logging")
+	logger, err := logging.Setup()
+	stop()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: logging setup failed: %v\n", err)
+	}
+	if logger != nil {
+		defer func() { _ = logger.Close() }()
+	}
+
+	stop = tr.Begin("config")
+	cfgPath, err := resolveConfigPath()
+	if err != nil {
 		stop()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "warning: logging setup failed: %v\n", err)
-		}
-		if logger != nil {
-			defer func() { _ = logger.Close() }()
-		}
-
-		stop = tr.Begin("config")
-		cfgPath, err := resolveConfigPath()
-		if err != nil {
-			stop()
-			return err
-		}
-		cfg, cfgErr := config.Load(cfgPath)
-		if cfgErr != nil && configPath != "" {
-			stop()
-			return cfgErr
-		}
-		zoxideCfg := cfg.Sources["zoxide"]
-		shortenHome := cfg.Display.ShortenHome
-		trunc := pathfmt.Truncation{Length: cfg.Display.TruncationLength, Symbol: cfg.Display.TruncationSymbol}
-		rules := pathfmt.CompileRules(cfg.Display.Rules)
-		home, err := os.UserHomeDir()
-		if err != nil {
-			log.Warn("could not determine home directory; path shortening disabled", "error", err)
-		}
+		return err
+	}
+	cfg, cfgErr := config.Load(cfgPath)
+	if cfgErr != nil && configPath != "" {
 		stop()
+		return cfgErr
+	}
+	zoxideCfg := cfg.Sources["zoxide"]
+	shortenHome := cfg.Display.ShortenHome
+	trunc := pathfmt.Truncation{Length: cfg.Display.TruncationLength, Symbol: cfg.Display.TruncationSymbol}
+	rules := pathfmt.CompileRules(cfg.Display.Rules)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		log.Warn("could not determine home directory; path shortening disabled", "error", err)
+	}
+	stop()
 
-		sources := []generator.Source{
-			traceSource(tr, "source/windows", generator.Source{Name: "windows", Async: true, Fetch: tmux.ListWindows}),
-			traceSource(tr, "source/sessions", generator.Source{Name: "sessions", Async: true, Fetch: tmux.ListSessions}),
-			traceSource(tr, "source/zoxide", generator.Source{Name: "zoxide", Limit: zoxideCfg.Limit, Async: true, Fetch: func(ctx context.Context) ([]item.Item, error) {
-				return zoxide.ListDirs(ctx, zoxideCfg.MinScore, home, shortenHome, rules, trunc)
-			}}),
-		}
-		if cfgErr != nil {
-			sources = append(sources, traceSource(tr, "source/config", generator.Source{Name: "config", Fetch: func(context.Context) ([]item.Item, error) {
-				return nil, cfgErr
-			}}))
-		}
-		sources = append(sources, traceSource(tr, "source/actions", generator.Source{Name: "actions", Fetch: config.MatchingActions(cfg, "root")}))
+	sources := []generator.Source{
+		traceSource(tr, "source/windows", generator.Source{Name: "windows", Async: true, Fetch: tmux.ListWindows}),
+		traceSource(tr, "source/sessions", generator.Source{Name: "sessions", Async: true, Fetch: tmux.ListSessions}),
+		traceSource(tr, "source/zoxide", generator.Source{Name: "zoxide", Limit: zoxideCfg.Limit, Async: true, Fetch: func(ctx context.Context) ([]item.Item, error) {
+			return zoxide.ListDirs(ctx, zoxideCfg.MinScore, home, shortenHome, rules, trunc)
+		}}),
+	}
+	if cfgErr != nil {
+		sources = append(sources, traceSource(tr, "source/config", generator.Source{Name: "config", Fetch: func(context.Context) ([]item.Item, error) {
+			return nil, cfgErr
+		}}))
+	}
+	sources = append(sources, traceSource(tr, "source/actions", generator.Source{Name: "actions", Fetch: config.MatchingActions(cfg, "root")}))
 
-		reg := generator.NewRegistry()
-		reg.Register("dir-actions", generator.NewActionsGenerator())
-		reg.Register("session-children", generator.NewSessionGenerator(tmux.ListWindowsForSession))
-		reg.MapType("dir", "dir-actions")
-		reg.MapType("session", "session-children")
+	reg := generator.NewRegistry()
+	reg.Register("dir-actions", generator.NewActionsGenerator())
+	reg.Register("session-children", generator.NewSessionGenerator(tmux.ListWindowsForSession))
+	reg.MapType("dir", "dir-actions")
+	reg.MapType("session", "session-children")
 
-		ctx := generator.Context{PaneID: paneID, Config: cfg}
+	ctx := generator.Context{PaneID: paneID, Config: cfg}
 
-		if timingsFlag {
-			reg.Register("root", generator.NewRootGenerator(cfg.Timeout.Fetch, sources...))
-			reg.MapType("", "root")
-			gen, err := reg.Resolve(nil)
-			if err != nil {
-				return err
-			}
-			stop = tr.Begin("sources")
-			items := gen(nil, ctx)
-			stop()
-
-			stop = tr.Begin("group+order")
-			listItems := item.GroupAndOrder(items, cfg.Behavior.BellToTop)
-			stop()
-
-			stop = tr.Begin("theme")
-			t, err := theme.Resolve(themeFlag)
-			stop()
-			if err != nil {
-				return err
-			}
-
-			stop = tr.Begin("model")
-			model := tui.NewModel(listItems, paneID, nil, reg, ctx, t, nil, nil)
-			stop()
-
-			stop = tr.Begin("tea-ready")
-			wrapper := timingsModel{inner: model}
-			p := tea.NewProgram(wrapper, tea.WithoutRenderer(), tea.WithInput(nil))
-			_, err = p.Run()
-			stop()
-			if err != nil {
-				return err
-			}
-			if timingsJSON {
-				return trace.WriteJSON(os.Stdout, tr.Spans())
-			}
-			return trace.WriteTable(os.Stdout, tr.Spans())
-		}
-
-		var syncSources, asyncSources []generator.Source
-		for _, src := range sources {
-			if src.Async {
-				asyncSources = append(asyncSources, src)
-			} else {
-				syncSources = append(syncSources, src)
-			}
-		}
-
-		reg.Register("root", generator.NewRootGenerator(cfg.Timeout.Fetch, syncSources...))
+	if timingsFlag {
+		reg.Register("root", generator.NewRootGenerator(cfg.Timeout.Fetch, sources...))
 		reg.MapType("", "root")
 		gen, err := reg.Resolve(nil)
 		if err != nil {
 			return err
 		}
-		stop = tr.Begin("sources/sync")
-		syncItems := gen(nil, ctx)
+		stop = tr.Begin("sources")
+		items := gen(nil, ctx)
 		stop()
 
-		var initialAll []item.Item
-		initialAll = append(initialAll, syncItems...)
-		for _, src := range asyncSources {
-			initialAll = append(initialAll, generator.LoadingItem(src))
-		}
-
 		stop = tr.Begin("group+order")
-		listItems := item.GroupAndOrder(initialAll, cfg.Behavior.BellToTop)
+		listItems := item.GroupAndOrder(items, cfg.Behavior.BellToTop)
 		stop()
 
 		autoDetectTheme := themeFlag == ""
@@ -186,40 +160,102 @@ var rootCmd = &cobra.Command{
 			log.Debug("theme auto fallback", "theme", t.Name)
 		}
 
-		tuiAsync := make([]tui.AsyncSource, len(asyncSources))
-		for i, src := range asyncSources {
-			tuiAsync[i] = tui.AsyncSource{
-				Name:    src.Name,
-				Limit:   src.Limit,
-				Timeout: cfg.Timeout.Fetch,
-				Fetch:   src.Fetch,
-			}
-		}
-
 		stop = tr.Begin("model")
-		model := tui.NewModel(listItems, paneID, nil, reg, ctx, t, tuiAsync, syncItems)
-		if autoDetectTheme {
-			model = model.WithAutoThemeDetection()
-		}
+		model := tui.NewModel(listItems, paneID, nil, reg, ctx, t, nil, nil)
 		stop()
 
-		p := tea.NewProgram(model)
-		finalModel, err := p.Run()
+		// Timings mode writes reports to stdout, so avoid terminal probing commands
+		// such as RequestBackgroundColor that would emit escape sequences first.
+		stop = tr.Begin("tea-ready")
+		wrapper := timingsModel{inner: model}
+		p := tea.NewProgram(wrapper, tea.WithoutRenderer(), tea.WithInput(nil))
+		_, err = p.Run()
+		stop()
 		if err != nil {
 			return err
 		}
+		if timingsJSON {
+			return trace.WriteJSON(os.Stdout, tr.Spans())
+		}
+		return trace.WriteTable(os.Stdout, tr.Spans())
+	}
 
-		m, ok := finalModel.(tui.Model)
-		if !ok {
-			return fmt.Errorf("internal error: unexpected model type %T", finalModel)
+	var syncSources, asyncSources []generator.Source
+	for _, src := range sources {
+		if src.Async {
+			asyncSources = append(asyncSources, src)
+		} else {
+			syncSources = append(syncSources, src)
 		}
-		sel := m.Selected()
-		if sel == nil {
-			return nil
+	}
+
+	reg.Register("root", generator.NewRootGenerator(cfg.Timeout.Fetch, syncSources...))
+	reg.MapType("", "root")
+	gen, err := reg.Resolve(nil)
+	if err != nil {
+		return err
+	}
+	stop = tr.Begin("sources/sync")
+	syncItems := gen(nil, ctx)
+	stop()
+
+	var initialAll []item.Item
+	initialAll = append(initialAll, syncItems...)
+	for _, src := range asyncSources {
+		initialAll = append(initialAll, generator.LoadingItem(src))
+	}
+
+	stop = tr.Begin("group+order")
+	listItems := item.GroupAndOrder(initialAll, cfg.Behavior.BellToTop)
+	stop()
+
+	autoDetectTheme := themeFlag == ""
+	stop = tr.Begin("theme")
+	t, err := theme.Resolve(themeFlag)
+	stop()
+	if err != nil {
+		return err
+	}
+	if autoDetectTheme {
+		log.Debug("theme auto fallback", "theme", t.Name)
+	}
+
+	tuiAsync := make([]tui.AsyncSource, len(asyncSources))
+	for i, src := range asyncSources {
+		tuiAsync[i] = tui.AsyncSource{
+			Name:    src.Name,
+			Limit:   src.Limit,
+			Timeout: cfg.Timeout.Fetch,
+			Fetch:   src.Fetch,
 		}
-		log.Info("executing", "item", sel.Display, "cmd", sel.Cmd, "data", sel.Data)
-		return execute.Run(m.Accumulated(), *sel, paneID, syscall.Exec)
-	},
+	}
+
+	stop = tr.Begin("model")
+	model := tui.NewModel(listItems, paneID, nil, reg, ctx, t, tuiAsync, syncItems)
+	stop()
+
+	if autoDetectTheme {
+		stop = tr.Begin("theme/auto-detect")
+		model = model.WithAutoThemeDetection()
+		stop()
+	}
+
+	p := tea.NewProgram(model)
+	finalModel, err := p.Run()
+	if err != nil {
+		return err
+	}
+
+	m, ok := finalModel.(tui.Model)
+	if !ok {
+		return fmt.Errorf("internal error: unexpected model type %T", finalModel)
+	}
+	sel := m.Selected()
+	if sel == nil {
+		return nil
+	}
+	log.Info("executing", "item", sel.Display, "cmd", sel.Cmd, "data", sel.Data)
+	return execute.Run(m.Accumulated(), *sel, paneID, syscall.Exec)
 }
 
 func resolveConfigPath() (string, error) {
@@ -273,15 +309,6 @@ func (m timingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m timingsModel) View() tea.View {
 	return m.inner.View()
-}
-
-func init() {
-	rootCmd.Version = Version
-	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "path to config file (also validates; exits 1 on error)")
-	rootCmd.Flags().StringVar(&paneID, "pane-id", "", "tmux pane ID")
-	rootCmd.Flags().StringVar(&themeFlag, "theme", "", "color theme (light, dark)")
-	rootCmd.Flags().BoolVar(&timingsFlag, "timings", false, "measure and print startup phase durations")
-	rootCmd.Flags().BoolVar(&timingsJSON, "timings-json", false, "output timings as JSON (implies --timings)")
 }
 
 func Execute() {

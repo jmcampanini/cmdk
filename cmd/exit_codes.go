@@ -2,10 +2,11 @@ package cmd
 
 import "github.com/spf13/cobra"
 
-var exitCodesTopic = &cobra.Command{
-	Use:   "exit-codes",
-	Short: "Exit codes and error categories",
-	Long: `Exit codes returned by cmdk.
+func newExitCodesCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "exit-codes",
+		Short: "Exit codes and error categories",
+		Long: `Exit codes returned by cmdk.
 
   0   Success. The TUI ran to completion and either executed a selected
       action that itself returned 0, or exited without a selection.
@@ -29,8 +30,5 @@ result is not treated as an error.
 
 For the log file location and how to inspect it, run "cmdk logs --help".
 `,
-}
-
-func init() {
-	rootCmd.AddCommand(exitCodesTopic)
+	}
 }

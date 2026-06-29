@@ -18,8 +18,6 @@ var (
 	isInsideTmux          = func() bool { return os.Getenv("TMUX") != "" }
 )
 
-var attachCmd = newAttachCommand()
-
 func newAttachCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "attach [path]",
@@ -98,8 +96,4 @@ func expandAttachPath(path string) (string, error) {
 		return home, nil
 	}
 	return filepath.Join(home, path[2:]), nil
-}
-
-func init() {
-	rootCmd.AddCommand(attachCmd)
 }

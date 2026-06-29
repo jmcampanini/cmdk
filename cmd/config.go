@@ -13,8 +13,6 @@ import (
 	"github.com/jmcampanini/cmdk/internal/config"
 )
 
-var configCmd = newConfigCommand()
-
 type configCommandOptions struct {
 	showProvenance bool
 	validatePath   string
@@ -103,8 +101,4 @@ func writeProvenanceTable(out io.Writer, reporter configreporter.Reporter[config
 		}
 	}
 	return nil
-}
-
-func init() {
-	rootCmd.AddCommand(configCmd)
 }
