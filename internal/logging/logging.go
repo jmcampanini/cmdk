@@ -12,10 +12,6 @@ var defaultDir = filepath.Join(os.Getenv("HOME"), ".local", "state", "cmdk")
 
 const logFileName = "cmdk.log"
 
-func DefaultLogPath() string {
-	return filepath.Join(defaultDir, logFileName)
-}
-
 type Logger struct {
 	closer io.Closer
 }
