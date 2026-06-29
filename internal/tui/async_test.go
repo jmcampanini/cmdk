@@ -20,7 +20,7 @@ func asyncTestConfig() config.Config {
 }
 
 func newAsyncTestModel(syncItems []item.Item, asyncSources []AsyncSource) Model {
-	t := theme.Light()
+	t := theme.Default()
 	reg := generator.NewRegistry()
 	reg.Register("root", func([]item.Item, generator.Context) []item.Item { return syncItems })
 	reg.MapType("", "root")
@@ -380,7 +380,7 @@ func TestSourceResult_WhileDrilledDown_DoesNotRebuild(t *testing.T) {
 	asyncSrcs := []AsyncSource{
 		{Name: "windows", Timeout: time.Second},
 	}
-	th := theme.Light()
+	th := theme.Default()
 	reg := generator.NewRegistry()
 	reg.Register("root", func([]item.Item, generator.Context) []item.Item { return syncItems })
 	reg.Register("dir-actions", func([]item.Item, generator.Context) []item.Item {

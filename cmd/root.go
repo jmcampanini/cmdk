@@ -182,7 +182,7 @@ var rootCmd = &cobra.Command{
 			return err
 		}
 		if themeFlag == "" {
-			log.Debug("theme auto-detected", "theme", t.Name)
+			log.Debug("theme auto fallback", "theme", t.Name)
 		}
 
 		tuiAsync := make([]tui.AsyncSource, len(asyncSources))
@@ -197,6 +197,9 @@ var rootCmd = &cobra.Command{
 
 		stop = tr.Begin("model")
 		model := tui.NewModel(listItems, paneID, nil, reg, ctx, t, tuiAsync, syncItems)
+		if themeFlag == "" {
+			model = model.WithAutoThemeDetection()
+		}
 		stop()
 
 		p := tea.NewProgram(model)
