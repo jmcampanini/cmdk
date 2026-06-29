@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
 
 type tmuxRunner interface {
 	Output(context.Context, ...string) ([]byte, error)
+	Run(context.Context, ...string) error
 }
 
 type execTmuxRunner struct{}
@@ -27,6 +29,21 @@ func (execTmuxRunner) Output(ctx context.Context, args ...string) ([]byte, error
 		return nil, fmt.Errorf("tmux did not respond within the configured timeout: %w", err)
 	}
 	return nil, tmuxCommandError(args, err, stderr.String())
+}
+
+func (execTmuxRunner) Run(ctx context.Context, args ...string) error {
+	cmd := exec.CommandContext(ctx, "tmux", args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("tmux did not respond within the configured timeout: %w", err)
+		}
+		return tmuxCommandError(args, err, "")
+	}
+	return nil
 }
 
 func tmuxOutput(ctx context.Context, args ...string) ([]byte, error) {

@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	log "charm.land/log/v2"
 	"github.com/jmcampanini/go-config-loader/configloader"
@@ -62,8 +63,13 @@ type Display struct {
 	Rules            map[string]string `toml:"rules"`
 }
 
+type Startup struct {
+	Path string `toml:"path"`
+}
+
 type Config struct {
 	Actions  []Action                `toml:"actions"`
+	Startup  Startup                 `toml:"startup"`
 	Behavior Behavior                `toml:"behavior"`
 	Timeout  Timeout                 `toml:"timeout"`
 	Sources  map[string]SourceConfig `toml:"sources"`
@@ -119,6 +125,9 @@ func DefaultConfig() Config {
 }
 
 func (c Config) Validate() error {
+	if strings.ContainsFunc(c.Startup.Path, unicode.IsControl) {
+		return errors.New("startup.path cannot contain control characters")
+	}
 	if err := validateTimeout("fetch", c.Timeout.Fetch); err != nil {
 		return err
 	}

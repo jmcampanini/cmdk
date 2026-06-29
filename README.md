@@ -41,6 +41,7 @@ For the full command reference, run `cmdk --help`. See also:
 - `cmdk help exit-codes` — exit codes and error categories
 - `cmdk config --provenance` — effective configuration and source provenance
 - `cmdk logs --help` — where logs go and how to inspect them
+- `cmdk attach [path]` — from outside tmux, attach to a configured or explicit cmdk-managed session
 - `cmdk session resolve <path>` — inspect the planned session for a path
 - `cmdk session window <path> --new` — create a new window in the cmdk-managed tmux session for a path
 - `cmdk docs` — configuration reference
