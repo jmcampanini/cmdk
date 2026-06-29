@@ -81,6 +81,23 @@ func TestRenderHelp_ContainsLiveDefaults(t *testing.T) {
 	}
 }
 
+func TestRenderHelp_ContainsThemeRecipe(t *testing.T) {
+	output := RenderHelp()
+	for _, want := range []string{
+		"To apply an arbitrary palette:",
+		"accent = primary",
+		"Roles derive",
+		"from semantic tokens",
+		"cmdk config --validate /path/to/config.toml",
+		"Catppuccin Frappe-style semantic mapping",
+		"session_icon = \"#81c8be\"",
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("RenderHelp() should contain theme recipe text %q", want)
+		}
+	}
+}
+
 func TestRenderHelp_ContainsSessionWindowDocs(t *testing.T) {
 	output := RenderHelp()
 	for _, want := range []string{
