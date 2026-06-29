@@ -197,10 +197,11 @@ func validateActions(actions []Action) error {
 		if !slices.Contains(validLaunchModes, a.LaunchMode) {
 			return fmt.Errorf("actions[%d].launch_mode %q is not valid (valid: detect, session-window, shell)", i, a.LaunchMode)
 		}
+		hasLaunchPath := a.LaunchPath != "" || a.LaunchPathCmd != ""
 		if a.LaunchPath != "" && a.LaunchPathCmd != "" {
 			return fmt.Errorf("actions[%d] cannot set both launch_path and launch_path_cmd", i)
 		}
-		if a.WindowName != "" && effectiveLaunchMode(a) == LaunchModeShell {
+		if a.WindowName != "" && EffectiveLaunchMode(a.Matches, a.LaunchMode, hasLaunchPath) == LaunchModeShell {
 			return fmt.Errorf("actions[%d].window_name is only valid when effective launch_mode is session-window", i)
 		}
 		if a.Icon != "" {
@@ -215,13 +216,15 @@ func validateActions(actions []Action) error {
 	return nil
 }
 
-func effectiveLaunchMode(a Action) string {
-	switch a.LaunchMode {
+// EffectiveLaunchMode returns the concrete launch mode implied by the configured mode,
+// matched item type, and whether a launch path source is configured.
+func EffectiveLaunchMode(matchType, launchMode string, hasLaunchPath bool) string {
+	switch launchMode {
 	case "", LaunchModeDetect:
 		switch {
-		case a.Matches == matchTypeDir:
+		case matchType == matchTypeDir:
 			return LaunchModeSessionWindow
-		case a.LaunchPath != "" || a.LaunchPathCmd != "":
+		case hasLaunchPath:
 			return LaunchModeSessionWindow
 		default:
 			return LaunchModeShell

@@ -29,6 +29,8 @@ type ExecFn func(argv0 string, argv []string, envv []string) error
 type launchMode string
 
 const (
+	defaultWindowNameTemplate = "{{.launch_basename}}"
+
 	launchModeSessionWindow launchMode = config.LaunchModeSessionWindow
 	launchModeShell         launchMode = config.LaunchModeShell
 )
@@ -131,23 +133,8 @@ func RunWithConfig(accumulated []item.Item, selected item.Item, paneID string, c
 }
 
 func effectiveLaunchMode(selected item.Item) launchMode {
-	switch selected.LaunchMode {
-	case "", config.LaunchModeDetect:
-		switch {
-		case selected.MatchType == "dir":
-			return launchModeSessionWindow
-		case selected.LaunchPath != "" || selected.LaunchPathCmd != "":
-			return launchModeSessionWindow
-		default:
-			return launchModeShell
-		}
-	case config.LaunchModeSessionWindow:
-		return launchModeSessionWindow
-	case config.LaunchModeShell:
-		return launchModeShell
-	default:
-		return ""
-	}
+	hasLaunchPath := selected.LaunchPath != "" || selected.LaunchPathCmd != ""
+	return launchMode(config.EffectiveLaunchMode(selected.MatchType, selected.LaunchMode, hasLaunchPath))
 }
 
 func resolveEffectiveLaunchPath(selected item.Item, data map[string]string, mode launchMode, timeout time.Duration, paneID string) (string, bool, error) {
@@ -369,17 +356,9 @@ func runSessionWindow(selected item.Item, data map[string]string, launchPath str
 		return err
 	}
 
-	var command []string
-	if selected.NewShell {
-		if selected.Cmd != "" {
-			return errors.New("new shell session-window action cannot also set cmd")
-		}
-	} else {
-		renderedCmd, err := RenderCmd(selected.Cmd, data)
-		if err != nil {
-			return err
-		}
-		command = []string{"sh", "-lc", renderedCmd}
+	command, err := sessionWindowCommand(selected, data)
+	if err != nil {
+		return err
 	}
 
 	windowName, err := renderWindowName(selected, data)
@@ -396,10 +375,25 @@ func runSessionWindow(selected item.Item, data map[string]string, launchPath str
 	})
 }
 
+func sessionWindowCommand(selected item.Item, data map[string]string) ([]string, error) {
+	if selected.NewShell {
+		if selected.Cmd != "" {
+			return nil, errors.New("new shell session-window action cannot also set cmd")
+		}
+		return nil, nil
+	}
+
+	renderedCmd, err := RenderCmd(selected.Cmd, data)
+	if err != nil {
+		return nil, err
+	}
+	return []string{"sh", "-lc", renderedCmd}, nil
+}
+
 func renderWindowName(selected item.Item, data map[string]string) (string, error) {
 	templateText := selected.WindowName
 	if templateText == "" {
-		templateText = "{{.launch_basename}}"
+		templateText = defaultWindowNameTemplate
 	}
 	name, err := RenderCmd(templateText, data)
 	if err != nil {
