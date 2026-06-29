@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/jmcampanini/go-config-loader/configloader"
+
+	"github.com/jmcampanini/cmdk/internal/theme"
 )
 
 func TestDefaultConfig(t *testing.T) {
@@ -44,6 +46,9 @@ func TestDefaultConfig(t *testing.T) {
 	}
 	if cfg.Startup.Path != "" {
 		t.Errorf("Startup.Path = %q, want empty", cfg.Startup.Path)
+	}
+	if len(cfg.Theme) != 0 {
+		t.Errorf("Theme = %d overrides, want 0", len(cfg.Theme))
 	}
 }
 
@@ -100,6 +105,35 @@ func TestValidate_NegativeMinScore(t *testing.T) {
 	cfg.Sources["zoxide"] = SourceConfig{MinScore: -1.0}
 	if err := cfg.Validate(); err == nil {
 		t.Error("expected error for negative min_score")
+	}
+}
+
+func TestValidate_ThemeOverrides(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Theme = theme.Config{
+		theme.NameDark: {
+			Accent: "#ca9ee6",
+			Roles:  theme.RoleConfig{SessionIcon: "#81c8be"},
+		},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_InvalidThemeMode(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Theme = theme.Config{"frappe": {Accent: "#ca9ee6"}}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error for invalid theme mode")
+	}
+}
+
+func TestValidate_InvalidThemeColor(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Theme = theme.Config{theme.NameDark: {Accent: "ca9ee6"}}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error for invalid theme color")
 	}
 }
 
@@ -580,6 +614,32 @@ matches = "root"
 	}
 	if cfg.Timeout.Fetch != 1500*time.Millisecond {
 		t.Errorf("timeout.fetch = %s, want 1500ms", cfg.Timeout.Fetch)
+	}
+}
+
+func TestLoad_ThemeOverridesFromTOML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[theme.dark]
+accent = "#ca9ee6"
+match_bg = "#5b4b8a"
+
+[theme.dark.roles]
+session_icon = "#81c8be"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Theme[theme.NameDark].Accent != "#ca9ee6" {
+		t.Errorf("theme.dark.accent = %q, want #ca9ee6", cfg.Theme[theme.NameDark].Accent)
+	}
+	if cfg.Theme[theme.NameDark].Roles.SessionIcon != "#81c8be" {
+		t.Errorf("theme.dark.roles.session_icon = %q, want #81c8be", cfg.Theme[theme.NameDark].Roles.SessionIcon)
 	}
 }
 
