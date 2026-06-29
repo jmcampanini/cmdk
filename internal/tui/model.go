@@ -3,9 +3,13 @@ package tui
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -64,7 +68,10 @@ type Model struct {
 	inline            bool
 }
 
-const horizontalPadding = 1
+const (
+	horizontalPadding           = 1
+	pickerDiagnosticOutputLimit = 64 * 1024
+)
 
 func NewModel(items []list.Item, paneID string, accumulated []item.Item, registry *generator.Registry, ctx generator.Context, t theme.Theme, asyncSources []AsyncSource, baseItems []item.Item) Model {
 	beh := ctx.Config.Behavior
@@ -560,6 +567,21 @@ func (m Model) openErrorDetails(it item.Item) Model {
 func safeErrorDetailItem(it item.Item) item.Item {
 	it.Display = escapeTerminalControls(it.Display)
 	it.Source = escapeTerminalControls(it.Source)
+	if it.Diagnostics != nil {
+		diagnostics := *it.Diagnostics
+		diagnostics.Summary = escapeTerminalControls(diagnostics.Summary)
+		diagnostics.Fields = slices.Clone(diagnostics.Fields)
+		for i := range diagnostics.Fields {
+			diagnostics.Fields[i].Label = escapeTerminalControls(diagnostics.Fields[i].Label)
+			diagnostics.Fields[i].Value = escapeTerminalControls(diagnostics.Fields[i].Value)
+		}
+		diagnostics.Sections = slices.Clone(diagnostics.Sections)
+		for i := range diagnostics.Sections {
+			diagnostics.Sections[i].Title = escapeTerminalControls(diagnostics.Sections[i].Title)
+			diagnostics.Sections[i].Body = escapeTerminalControls(diagnostics.Sections[i].Body)
+		}
+		it.Diagnostics = &diagnostics
+	}
 	return it
 }
 
@@ -674,22 +696,37 @@ func (m Model) advanceStage() Model {
 		m.mode = viewPrompt
 
 	case item.StagePicker:
+		cwd, cwdErr := os.Getwd()
+		if cwdErr != nil {
+			log.Warn("could not determine working directory for picker diagnostics", "key", stage.Key, "error", cwdErr)
+		}
 		rendered, err := execute.RenderCmd(stage.Source, data)
 		if err != nil {
 			log.Error("failed to render picker source template", "key", stage.Key, "error", err)
-			return m.initPickerWithError(stage.Key, fmt.Sprintf("template error: %s", err))
+			errItem := pickerErrorItem("template error", stage, data, cwd, cwdErr, pickerFailure{
+				Err: err,
+			})
+			return m.initPickerWithErrorItem(stage.Key, errItem)
 		}
 		pickerTimeout := m.ctx.Config.Timeout.Picker
-		items, runErr := runPickerSource(rendered, pickerTimeout, stage)
+		result, runErr := runPickerSourceWithDiagnostics(rendered, pickerTimeout, stage)
 		if runErr != nil {
 			log.Error("picker source command failed", "key", stage.Key, "command", rendered, "error", runErr)
-			return m.initPickerWithError(stage.Key, fmt.Sprintf("command error: %s", runErr))
+			errItem := pickerErrorItem("command error", stage, data, cwd, cwdErr, runErr.withRendered(rendered, pickerTimeout))
+			return m.initPickerWithErrorItem(stage.Key, errItem)
 		}
-		if len(items) == 0 {
+		if len(result.Items) == 0 {
 			log.Warn("picker source returned no items", "key", stage.Key, "command", rendered)
-			return m.initPickerWithError(stage.Key, "no items returned")
+			errItem := pickerErrorItem("no items returned", stage, data, cwd, cwdErr, pickerFailure{
+				Err:      errors.New("picker source returned no items"),
+				Rendered: rendered,
+				Timeout:  pickerTimeout,
+				Stdout:   result.Stdout,
+				Stderr:   result.Stderr,
+			})
+			return m.initPickerWithErrorItem(stage.Key, errItem)
 		}
-		m = m.initPicker(stage.Key, items)
+		m = m.initPicker(stage.Key, result.Items)
 
 	default:
 		log.Error("bug: unknown stage type", "type", stage.Type)
@@ -700,9 +737,54 @@ func (m Model) advanceStage() Model {
 	return m
 }
 
+type capturedCommandOutput struct {
+	Text      string
+	Truncated bool
+	Limit     int
+}
+
+type pickerRunResult struct {
+	Items  []item.Item
+	Stdout capturedCommandOutput
+	Stderr capturedCommandOutput
+}
+
+type pickerFailure struct {
+	Err      error
+	Rendered string
+	Timeout  time.Duration
+	Stdout   capturedCommandOutput
+	Stderr   capturedCommandOutput
+}
+
+func (f *pickerFailure) Error() string {
+	if f == nil || f.Err == nil {
+		return ""
+	}
+	return f.Err.Error()
+}
+
+func (f *pickerFailure) withRendered(rendered string, timeout time.Duration) pickerFailure {
+	if f == nil {
+		return pickerFailure{Rendered: rendered, Timeout: timeout}
+	}
+	copy := *f
+	copy.Rendered = rendered
+	copy.Timeout = timeout
+	return copy
+}
+
 // runPickerSource executes a shell command and returns one item per output line.
 // A zero timeout means no deadline is applied.
 func runPickerSource(rendered string, timeout time.Duration, stage item.Stage) ([]item.Item, error) {
+	result, failure := runPickerSourceWithDiagnostics(rendered, timeout, stage)
+	if failure != nil {
+		return nil, failure
+	}
+	return result.Items, nil
+}
+
+func runPickerSourceWithDiagnostics(rendered string, timeout time.Duration, stage item.Stage) (pickerRunResult, *pickerFailure) {
 	ctx := context.Background()
 	if timeout > 0 {
 		var cancel context.CancelFunc
@@ -710,23 +792,46 @@ func runPickerSource(rendered string, timeout time.Duration, stage item.Stage) (
 		defer cancel()
 	}
 
-	var stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, "sh", "-c", rendered)
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
+	stdout, err := os.CreateTemp("", "cmdk-picker-stdout-*")
 	if err != nil {
+		return pickerRunResult{}, &pickerFailure{Err: fmt.Errorf("could not create picker stdout capture: %w", err)}
+	}
+	defer func() {
+		_ = stdout.Close()
+		_ = os.Remove(stdout.Name())
+	}()
+
+	stderr := cappedBuffer{limit: pickerDiagnosticOutputLimit}
+	cmd := exec.CommandContext(ctx, "sh", "-c", rendered)
+	cmd.Stdout = stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		failure := &pickerFailure{Stdout: readCapturedOutput(stdout, pickerDiagnosticOutputLimit), Stderr: stderr.Captured()}
 		if ctx.Err() == context.DeadlineExceeded {
-			return nil, fmt.Errorf("command timed out after %s", timeout)
+			failure.Err = fmt.Errorf("command timed out after %s", timeout)
+		} else {
+			failure.Err = fmt.Errorf("command failed: %w", err)
 		}
-		if stderr.Len() > 0 {
-			return nil, fmt.Errorf("command failed: %w\nstderr: %s", err, stderr.String())
-		}
-		return nil, fmt.Errorf("command failed: %w", err)
+		return pickerRunResult{}, failure
 	}
 
+	out, readErr := readAllCapturedOutput(stdout)
+	if readErr != nil {
+		return pickerRunResult{}, &pickerFailure{Err: fmt.Errorf("could not read picker stdout capture: %w", readErr), Stderr: stderr.Captured()}
+	}
+
+	items := pickerItemsFromOutput(string(out), stage)
+	return pickerRunResult{
+		Items:  items,
+		Stdout: captureBytes(out, pickerDiagnosticOutputLimit),
+		Stderr: stderr.Captured(),
+	}, nil
+}
+
+func pickerItemsFromOutput(output string, stage item.Stage) []item.Item {
 	delim := stage.EffectiveDelimiter()
 
-	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
+	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
 	var items []item.Item
 	var warnedDisplay, warnedPass bool
 	for _, line := range lines {
@@ -758,7 +863,55 @@ func runPickerSource(rendered string, timeout time.Duration, stage item.Stage) (
 		}
 		items = append(items, it)
 	}
-	return items, nil
+	return items
+}
+
+func readAllCapturedOutput(f *os.File) ([]byte, error) {
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+	return io.ReadAll(f)
+}
+
+func readCapturedOutput(f *os.File, limit int) capturedCommandOutput {
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return capturedCommandOutput{Text: fmt.Sprintf("could not read captured output: %s", err)}
+	}
+	data, err := io.ReadAll(io.LimitReader(f, int64(limit)+1))
+	if err != nil {
+		return capturedCommandOutput{Text: fmt.Sprintf("could not read captured output: %s", err)}
+	}
+	return captureBytes(data, limit)
+}
+
+func captureBytes(data []byte, limit int) capturedCommandOutput {
+	if limit < 0 {
+		limit = 0
+	}
+	truncated := len(data) > limit
+	if truncated {
+		data = data[:limit]
+	}
+	return capturedCommandOutput{Text: string(data), Truncated: truncated, Limit: limit}
+}
+
+type cappedBuffer struct {
+	buf   bytes.Buffer
+	limit int
+	n     int
+}
+
+func (b *cappedBuffer) Write(p []byte) (int, error) {
+	b.n += len(p)
+	remaining := b.limit - b.buf.Len()
+	if remaining > 0 {
+		_, _ = b.buf.Write(p[:min(len(p), remaining)])
+	}
+	return len(p), nil
+}
+
+func (b *cappedBuffer) Captured() capturedCommandOutput {
+	return capturedCommandOutput{Text: b.buf.String(), Truncated: b.n > b.limit, Limit: b.limit}
 }
 
 func (m Model) initPicker(key string, items []item.Item) Model {
@@ -778,8 +931,102 @@ func (m Model) initPicker(key string, items []item.Item) Model {
 	return m
 }
 
-func (m Model) initPickerWithError(key string, errMsg string) Model {
-	return m.initPicker(key, []item.Item{{Type: "error", Display: errMsg}})
+func (m Model) initPickerWithErrorItem(key string, errItem item.Item) Model {
+	errItem.Type = "error"
+	if errItem.Source == "" {
+		errItem.Source = "picker"
+	}
+	return m.initPicker(key, []item.Item{errItem})
+}
+
+func pickerErrorItem(kind string, stage item.Stage, data map[string]string, cwd string, cwdErr error, failure pickerFailure) item.Item {
+	errText := failure.Error()
+	display := kind
+	if errText != "" {
+		display = fmt.Sprintf("%s: %s", kind, errText)
+	}
+
+	it := item.NewItem()
+	it.Type = "error"
+	it.Source = "picker"
+	it.Display = display
+	it.Diagnostics = pickerDiagnostics(display, stage, data, cwd, cwdErr, failure)
+	return it
+}
+
+func pickerDiagnostics(summary string, stage item.Stage, data map[string]string, cwd string, cwdErr error, failure pickerFailure) *item.Diagnostics {
+	fields := []item.DiagnosticField{
+		{Label: "Stage key", Value: stage.Key},
+	}
+	if cwdErr != nil {
+		fields = append(fields, item.DiagnosticField{Label: "Working directory", Value: fmt.Sprintf("unknown: %s", cwdErr)})
+	} else {
+		fields = append(fields, item.DiagnosticField{Label: "Working directory", Value: cwd})
+	}
+	if failure.Timeout > 0 {
+		fields = append(fields, item.DiagnosticField{Label: "Timeout", Value: failure.Timeout.String()})
+	} else {
+		fields = append(fields, item.DiagnosticField{Label: "Timeout", Value: "none"})
+	}
+	if failure.Err != nil {
+		fields = append(fields, item.DiagnosticField{Label: "Error", Value: failure.Err.Error()})
+	}
+
+	sections := []item.DiagnosticSection{
+		{Title: "Data fields", Body: formatDiagnosticData(data)},
+		{Title: "Command template", Body: stage.Source},
+	}
+	if failure.Rendered != "" {
+		sections = append(sections, item.DiagnosticSection{Title: "Rendered command", Body: failure.Rendered})
+	}
+	sections = append(sections,
+		item.DiagnosticSection{Title: "stdout", Body: formatCapturedCommandOutput(failure.Stdout)},
+		item.DiagnosticSection{Title: "stderr", Body: formatCapturedCommandOutput(failure.Stderr)},
+	)
+
+	return &item.Diagnostics{Summary: summary, Fields: fields, Sections: sections}
+}
+
+func formatDiagnosticData(data map[string]string) string {
+	if len(data) == 0 {
+		return "(none)"
+	}
+	keys := make([]string, 0, len(data))
+	for k := range data {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var b strings.Builder
+	for i, k := range keys {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		fmt.Fprintf(&b, "%s: %s", k, data[k])
+	}
+	return b.String()
+}
+
+func formatCapturedCommandOutput(out capturedCommandOutput) string {
+	if out.Text == "" && !out.Truncated {
+		return "(empty)"
+	}
+	text := out.Text
+	if out.Truncated {
+		if text != "" && !strings.HasSuffix(text, "\n") {
+			text += "\n"
+		}
+		text += fmt.Sprintf("[truncated after %s]", formatBytes(out.Limit))
+	}
+	return text
+}
+
+func formatBytes(n int) string {
+	const kib = 1024
+	if n > 0 && n%kib == 0 {
+		return fmt.Sprintf("%d KiB", n/kib)
+	}
+	return fmt.Sprintf("%d bytes", n)
 }
 
 // completeStages extracts the action item as selected and removes it from accumulated,
@@ -1003,11 +1250,63 @@ func (m Model) errorDetailsBodyHeight() int {
 }
 
 func (m Model) errorDetailsLines() []string {
-	wrapped := ansi.Wrap(m.errorDetailItem.Display, m.errorDetailsContentWidth(), " ")
+	body := m.errorDetailItem.Display
+	if m.errorDetailItem.Diagnostics != nil {
+		body = formatDiagnosticsBody(m.errorDetailItem.Diagnostics)
+	}
+	wrapped := ansi.Wrap(body, m.errorDetailsContentWidth(), " ")
 	if wrapped == "" {
 		return []string{""}
 	}
 	return strings.Split(wrapped, "\n")
+}
+
+func formatDiagnosticsBody(d *item.Diagnostics) string {
+	if d == nil {
+		return ""
+	}
+
+	var b strings.Builder
+	if d.Summary != "" {
+		b.WriteString(d.Summary)
+	}
+	for _, field := range d.Fields {
+		if b.Len() > 0 {
+			b.WriteByte('\n')
+		}
+		writeDiagnosticLabelValue(&b, field.Label, field.Value)
+	}
+	for _, section := range d.Sections {
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString(section.Title)
+		b.WriteString(":")
+		body := section.Body
+		if body == "" {
+			body = "(empty)"
+		}
+		b.WriteByte('\n')
+		b.WriteString(body)
+	}
+	return b.String()
+}
+
+func writeDiagnosticLabelValue(b *strings.Builder, label string, value string) {
+	if value == "" {
+		value = "(empty)"
+	}
+	if !strings.Contains(value, "\n") {
+		fmt.Fprintf(b, "%s: %s", label, value)
+		return
+	}
+
+	b.WriteString(label)
+	b.WriteString(":")
+	for _, line := range strings.Split(value, "\n") {
+		b.WriteString("\n  ")
+		b.WriteString(line)
+	}
 }
 
 func (m Model) errorDetailsView() string {
