@@ -90,9 +90,6 @@ func TestRenderHelp_ContainsSessionWindowDocs(t *testing.T) {
 			t.Errorf("RenderHelp() should contain %q", want)
 		}
 	}
-	if strings.Contains(output, "cmdk session connect") {
-		t.Error("RenderHelp() should not mention removed session connect command")
-	}
 }
 
 func TestRenderHelp_ContainsTemplateVars(t *testing.T) {

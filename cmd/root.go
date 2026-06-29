@@ -148,16 +148,26 @@ func runRootCommand(cmd *cobra.Command, _ []string) error {
 		listItems := item.GroupAndOrder(items, cfg.Behavior.BellToTop)
 		stop()
 
+		autoDetectTheme := themeFlag == ""
 		stop = tr.Begin("theme")
 		t, err := theme.Resolve(themeFlag)
 		stop()
 		if err != nil {
 			return err
 		}
+		if autoDetectTheme {
+			log.Debug("theme auto fallback", "theme", t.Name)
+		}
 
 		stop = tr.Begin("model")
 		model := tui.NewModel(listItems, paneID, nil, reg, ctx, t, nil, nil)
 		stop()
+
+		if autoDetectTheme {
+			stop = tr.Begin("theme/auto-detect")
+			model = model.WithAutoThemeDetection()
+			stop()
+		}
 
 		stop = tr.Begin("tea-ready")
 		wrapper := timingsModel{inner: model}
@@ -202,14 +212,15 @@ func runRootCommand(cmd *cobra.Command, _ []string) error {
 	listItems := item.GroupAndOrder(initialAll, cfg.Behavior.BellToTop)
 	stop()
 
+	autoDetectTheme := themeFlag == ""
 	stop = tr.Begin("theme")
 	t, err := theme.Resolve(themeFlag)
 	stop()
 	if err != nil {
 		return err
 	}
-	if themeFlag == "" {
-		log.Debug("theme auto-detected", "theme", t.Name)
+	if autoDetectTheme {
+		log.Debug("theme auto fallback", "theme", t.Name)
 	}
 
 	tuiAsync := make([]tui.AsyncSource, len(asyncSources))
@@ -225,6 +236,12 @@ func runRootCommand(cmd *cobra.Command, _ []string) error {
 	stop = tr.Begin("model")
 	model := tui.NewModel(listItems, paneID, nil, reg, ctx, t, tuiAsync, syncItems)
 	stop()
+
+	if autoDetectTheme {
+		stop = tr.Begin("theme/auto-detect")
+		model = model.WithAutoThemeDetection()
+		stop()
+	}
 
 	p := tea.NewProgram(model)
 	finalModel, err := p.Run()

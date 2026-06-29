@@ -54,7 +54,7 @@ var (
 )
 
 func newTestModel(items []list.Item, reg *generator.Registry) Model {
-	return newTestModelWithTheme(items, reg, theme.Light())
+	return newTestModelWithTheme(items, reg, theme.Default())
 }
 
 func testConfig() config.Config {
@@ -66,7 +66,7 @@ func newTestModelWithTheme(items []list.Item, reg *generator.Registry, t theme.T
 }
 
 func newTestModelWithConfig(items []list.Item, reg *generator.Registry, cfg config.Config) Model {
-	return NewModel(items, "%1", nil, reg, generator.Context{Config: cfg}, theme.Light(), nil, nil)
+	return NewModel(items, "%1", nil, reg, generator.Context{Config: cfg}, theme.Default(), nil, nil)
 }
 
 func exitFilterMode(t *testing.T, m Model) Model {
@@ -90,6 +90,53 @@ func TestNewModel_InitReturnsNil(t *testing.T) {
 	m := newTestModel(testItems(), testRegistry())
 	if cmd := m.Init(); cmd != nil {
 		t.Error("Init() should return nil")
+	}
+}
+
+func TestNewModel_AutoThemeDetectionRequestsBackgroundColor(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry()).WithAutoThemeDetection()
+	cmd := m.Init()
+	if cmd == nil {
+		t.Fatal("Init() should request background color when auto theme detection is enabled")
+	}
+	if got := reflect.TypeOf(cmd()).String(); got != "tea.backgroundColorMsg" {
+		t.Fatalf("Init() command returned %s, want tea.backgroundColorMsg", got)
+	}
+}
+
+func TestAutoThemeDetection_SwitchesToLightBackground(t *testing.T) {
+	light := theme.Light()
+	m := newTestModel(testItems(), testRegistry()).WithAutoThemeDetection()
+
+	result, cmd := m.Update(tea.BackgroundColorMsg{Color: color.White})
+	if cmd != nil {
+		t.Fatalf("BackgroundColorMsg update command = %T, want nil", cmd())
+	}
+	m = result.(Model)
+
+	if m.theme.Name != light.Name {
+		t.Fatalf("theme = %q, want %q", m.theme.Name, light.Name)
+	}
+	if !reflect.DeepEqual(m.filterStyle.GetBackground(), light.TextboxBg) {
+		t.Errorf("filterStyle background = %v, want %v", m.filterStyle.GetBackground(), light.TextboxBg)
+	}
+	if !reflect.DeepEqual(m.list.Styles.Filter.Focused.Text.GetBackground(), light.TextboxBg) {
+		t.Errorf("filter text background = %v, want %v", m.list.Styles.Filter.Focused.Text.GetBackground(), light.TextboxBg)
+	}
+	if !reflect.DeepEqual(m.list.Styles.Title.GetBackground(), light.Accent) {
+		t.Errorf("title background = %v, want %v", m.list.Styles.Title.GetBackground(), light.Accent)
+	}
+}
+
+func TestAutoThemeDetection_IgnoresBackgroundColorWhenDisabled(t *testing.T) {
+	m := newTestModel(testItems(), testRegistry())
+
+	result, _ := m.Update(tea.BackgroundColorMsg{Color: color.White})
+	m = result.(Model)
+
+	wantTheme := theme.Default().Name
+	if m.theme.Name != wantTheme {
+		t.Fatalf("theme = %q, want default %q", m.theme.Name, wantTheme)
 	}
 }
 
@@ -2192,7 +2239,7 @@ func newInlineTestModel(t *testing.T) Model {
 	}
 	listItems := item.GroupAndOrder(baseItems, false)
 
-	m := NewModel(listItems, "%1", nil, reg, generator.Context{Config: cfg}, theme.Light(), nil, baseItems)
+	m := NewModel(listItems, "%1", nil, reg, generator.Context{Config: cfg}, theme.Default(), nil, baseItems)
 	m.list.SetSize(80, 40)
 	return m
 }
@@ -2320,7 +2367,7 @@ func TestInline_SelectStagedPushesParent(t *testing.T) {
 		{Type: "dir", Display: "~/proj", Action: item.ActionNextList, Data: map[string]string{"path": "/proj"}},
 	}
 	listItems := item.GroupAndOrder(baseItems, false)
-	m := NewModel(listItems, "%1", nil, reg, generator.Context{Config: cfg}, theme.Light(), nil, baseItems)
+	m := NewModel(listItems, "%1", nil, reg, generator.Context{Config: cfg}, theme.Default(), nil, baseItems)
 	m.list.SetSize(80, 40)
 
 	result, _ := m.Update(enterMsg)
@@ -2361,7 +2408,7 @@ func TestInline_AsyncRebuildExpands(t *testing.T) {
 
 	listItems := rootItemsWithLoading(syncItems, asyncSources)
 
-	m := NewModel(listItems, "%1", nil, reg, generator.Context{Config: cfg}, theme.Light(), asyncSources, syncItems)
+	m := NewModel(listItems, "%1", nil, reg, generator.Context{Config: cfg}, theme.Default(), asyncSources, syncItems)
 	m.list.SetSize(80, 40)
 
 	// Simulate async result arriving
