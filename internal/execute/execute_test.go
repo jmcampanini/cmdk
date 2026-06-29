@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -662,6 +663,43 @@ func TestResolveLaunchPathCmd_Timeout(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("error = %v, want timeout", err)
 	}
+}
+
+func TestResolveLaunchPathCmd_SignalCancellationKillsCommandGroup(t *testing.T) {
+	oldNotify := launchPathSignalNotifyContext
+	launchPathSignalNotifyContext = func(parent context.Context, signals ...os.Signal) (context.Context, context.CancelFunc) {
+		if !containsSignal(signals, os.Interrupt) {
+			t.Errorf("signals = %#v, want os.Interrupt", signals)
+		}
+		if !containsSignal(signals, syscall.SIGTERM) {
+			t.Errorf("signals = %#v, want SIGTERM", signals)
+		}
+		ctx, cancel := context.WithCancel(parent)
+		go func() {
+			time.Sleep(25 * time.Millisecond)
+			cancel()
+		}()
+		return ctx, cancel
+	}
+	t.Cleanup(func() { launchPathSignalNotifyContext = oldNotify })
+
+	start := time.Now()
+	_, err := resolveLaunchPathCmd("trap '' INT TERM; sleep 5; printf /tmp", nil, 0, "")
+	if err == nil || !strings.Contains(err.Error(), "canceled") {
+		t.Fatalf("error = %v, want canceled", err)
+	}
+	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+		t.Fatalf("resolveLaunchPathCmd took %s; signal cancellation did not kill the command group", elapsed)
+	}
+}
+
+func containsSignal(signals []os.Signal, want os.Signal) bool {
+	for _, sig := range signals {
+		if sig == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestRenderWindowName(t *testing.T) {

@@ -9,6 +9,7 @@ import (
 	"maps"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -41,11 +42,12 @@ const (
 )
 
 var (
-	resolveSessionPlan          = resolver.Resolve
-	createResolvedSessionWindow = tmux.CreateResolvedSessionWindow
-	getwd                       = os.Getwd
-	chdir                       = os.Chdir
-	lookPath                    = exec.LookPath
+	resolveSessionPlan            = resolver.Resolve
+	createResolvedSessionWindow   = tmux.CreateResolvedSessionWindow
+	getwd                         = os.Getwd
+	chdir                         = os.Chdir
+	lookPath                      = exec.LookPath
+	launchPathSignalNotifyContext = signal.NotifyContext
 )
 
 var tmplFuncs = template.FuncMap{
@@ -280,12 +282,8 @@ func resolveLaunchPathCmd(cmdTemplate string, data map[string]string, timeout ti
 		return "", fmt.Errorf("launch_path_cmd template: %w", err)
 	}
 
-	ctx := context.Background()
-	if timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
-	}
+	ctx, cancel := launchPathCommandContext(timeout)
+	defer cancel()
 
 	stdoutCapture := &launchPathStdoutCapture{limit: launchPathCmdMaxStdoutBytes}
 	stderrCapture := &boundedDiagnosticCapture{limit: launchPathCmdMaxStderrBytes}
@@ -309,8 +307,11 @@ func resolveLaunchPathCmd(cmdTemplate string, data map[string]string, timeout ti
 	waitErr := cmd.Run()
 	stderrText := formatCommandDiagnostic(stderrCapture.result(), launchPathCmdMaxStderrBytes)
 
-	if ctx.Err() == context.DeadlineExceeded {
-		return "", fmt.Errorf("launch_path_cmd timed out after %s", timeout)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		if errors.Is(ctxErr, context.DeadlineExceeded) {
+			return "", fmt.Errorf("launch_path_cmd timed out after %s", timeout)
+		}
+		return "", fmt.Errorf("launch_path_cmd canceled: %w", ctxErr)
 	}
 	if stdoutErr := stdoutCapture.Err(); stdoutErr != nil {
 		return "", stdoutErr
@@ -330,6 +331,19 @@ func resolveLaunchPathCmd(cmdTemplate string, data map[string]string, timeout ti
 		return "", errors.New("launch_path_cmd output must be an absolute path")
 	}
 	return validateExistingDirectory("launch_path_cmd output", path)
+}
+
+func launchPathCommandContext(timeout time.Duration) (context.Context, context.CancelFunc) {
+	ctx, stopSignals := launchPathSignalNotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	if timeout <= 0 {
+		return ctx, stopSignals
+	}
+
+	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, timeout)
+	return timeoutCtx, func() {
+		timeoutCancel()
+		stopSignals()
+	}
 }
 
 func killCommandGroup(cmd *exec.Cmd) error {
