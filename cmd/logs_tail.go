@@ -5,17 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/246859/tail"
 	"github.com/spf13/cobra"
-
-	"github.com/jmcampanini/cmdk/internal/logging"
 )
 
 const maxTailLines = 10000
 
-var tailLines int
+type logsTailOptions struct {
+	lines int
+}
 
 func readTail(f *os.File, n int) ([]byte, error) {
 	data, err := tail.Tail(f, n+1)
@@ -36,39 +35,44 @@ func readTail(f *os.File, n int) ([]byte, error) {
 }
 
 func newLogsTailCommand() *cobra.Command {
+	var options logsTailOptions
 	cmd := &cobra.Command{
 		Use:   "tail",
 		Short: "Print the last lines of the log file",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if tailLines <= 0 {
-				return fmt.Errorf("line count must be positive, got %d", tailLines)
-			}
-			if tailLines > maxTailLines {
-				return fmt.Errorf("line count must be at most %d, got %d", maxTailLines, tailLines)
-			}
-
-			path := logging.DefaultLogPath()
-			if !filepath.IsAbs(path) {
-				return fmt.Errorf("cannot determine log file location: $HOME is not set")
-			}
-			f, err := os.Open(path)
-			if err != nil {
-				if errors.Is(err, os.ErrNotExist) {
-					return fmt.Errorf("log file does not exist: %s", path)
-				}
-				return fmt.Errorf("could not open log file %s: %w", path, err)
-			}
-			defer func() { _ = f.Close() }()
-
-			data, err := readTail(f, tailLines)
-			if err != nil {
-				return err
-			}
-			_, err = os.Stdout.Write(data)
-			return err
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runLogsTailCommand(options)
 		},
 	}
-	cmd.Flags().IntVarP(&tailLines, "lines", "n", 25, "number of lines to display")
+	cmd.Flags().IntVarP(&options.lines, "lines", "n", 25, "number of lines to display")
 	return cmd
+}
+
+func runLogsTailCommand(options logsTailOptions) error {
+	if options.lines <= 0 {
+		return fmt.Errorf("line count must be positive, got %d", options.lines)
+	}
+	if options.lines > maxTailLines {
+		return fmt.Errorf("line count must be at most %d, got %d", maxTailLines, options.lines)
+	}
+
+	path, err := resolveLogPath()
+	if err != nil {
+		return err
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("log file does not exist: %s", path)
+		}
+		return fmt.Errorf("could not open log file %s: %w", path, err)
+	}
+	defer func() { _ = f.Close() }()
+
+	data, err := readTail(f, options.lines)
+	if err != nil {
+		return err
+	}
+	_, err = os.Stdout.Write(data)
+	return err
 }

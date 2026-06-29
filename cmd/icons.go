@@ -10,89 +10,101 @@ import (
 	"github.com/jmcampanini/cmdk/internal/icon"
 )
 
-var (
-	flagIconCod    bool
-	flagIconDev    bool
-	flagIconOct    bool
-	flagIconFilter string
-	flagIconFzf    bool
-)
+type iconOptions struct {
+	cod    bool
+	dev    bool
+	oct    bool
+	filter string
+	fzf    bool
+}
 
 func newIconsCommand() *cobra.Command {
+	var options iconOptions
 	cmd := &cobra.Command{
 		Use:   "icons",
 		Short: "List supported icon aliases",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			hasSetFlag := flagIconCod || flagIconDev || flagIconOct
-			hasAnyFlag := hasSetFlag || flagIconFilter != "" || flagIconFzf
-
-			if !hasAnyFlag {
-				printIconHelp()
-				return nil
-			}
-
-			showAll := !hasSetFlag
-
-			entries := icon.All()
-			filterLower := strings.ToLower(flagIconFilter)
-
-			var filtered []icon.Entry
-			for _, e := range entries {
-				set := setFromAlias(e.Alias)
-				if !showAll && !matchesSetFlag(set) {
-					continue
-				}
-				if filterLower != "" && !matchesFilter(e, filterLower) {
-					continue
-				}
-				filtered = append(filtered, e)
-			}
-
-			if len(filtered) == 0 {
-				emitIconsEmptyHint()
-				return nil
-			}
-
-			if flagIconFzf {
-				for _, e := range filtered {
-					set := setFromAlias(e.Alias)
-					fmt.Printf("%s  %-40s [%s]  %s\n", e.Icon, ":"+e.Alias+":", set, e.Description)
-				}
-				return nil
-			}
-
-			var curPrefix string
-			for _, e := range filtered {
-				prefix := aliasPrefix(e.Alias)
-				if prefix != curPrefix {
-					if curPrefix != "" {
-						fmt.Println()
-					}
-					fmt.Println(prefixHeading(prefix))
-					curPrefix = prefix
-				}
-				fmt.Printf("  %s  %-40s %s\n", e.Icon, ":"+e.Alias+":", e.Description)
-			}
-			return nil
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runIconsCommand(options)
 		},
 	}
-	cmd.Flags().BoolVar(&flagIconCod, "cod", false, "Show Codicons")
-	cmd.Flags().BoolVar(&flagIconDev, "dev", false, "Show Devicons")
-	cmd.Flags().BoolVar(&flagIconOct, "oct", false, "Show Octicons")
-	cmd.Flags().StringVar(&flagIconFilter, "filter", "", "Filter by substring match on alias or description")
-	cmd.Flags().BoolVar(&flagIconFzf, "fzf", false, "Flat output for piping to fzf")
+	cmd.Flags().BoolVar(&options.cod, "cod", false, "Show Codicons")
+	cmd.Flags().BoolVar(&options.dev, "dev", false, "Show Devicons")
+	cmd.Flags().BoolVar(&options.oct, "oct", false, "Show Octicons")
+	cmd.Flags().StringVar(&options.filter, "filter", "", "Filter by substring match on alias or description")
+	cmd.Flags().BoolVar(&options.fzf, "fzf", false, "Flat output for piping to fzf")
 	return cmd
 }
 
-func emitIconsEmptyHint() {
+func runIconsCommand(options iconOptions) error {
+	hasSetFlag := options.cod || options.dev || options.oct
+	hasAnyFlag := hasSetFlag || options.filter != "" || options.fzf
+	if !hasAnyFlag {
+		printIconHelp()
+		return nil
+	}
+
+	showAll := !hasSetFlag
+	filterLower := strings.ToLower(options.filter)
+	filtered := filterIconEntries(icon.All(), options, showAll, filterLower)
+	if len(filtered) == 0 {
+		emitIconsEmptyHint(options)
+		return nil
+	}
+
+	if options.fzf {
+		printIconsFzf(filtered)
+		return nil
+	}
+	printIconsGrouped(filtered)
+	return nil
+}
+
+func filterIconEntries(entries []icon.Entry, options iconOptions, showAll bool, filterLower string) []icon.Entry {
+	var filtered []icon.Entry
+	for _, e := range entries {
+		set := setFromAlias(e.Alias)
+		if !showAll && !matchesSetFlag(set, options) {
+			continue
+		}
+		if filterLower != "" && !matchesFilter(e, filterLower) {
+			continue
+		}
+		filtered = append(filtered, e)
+	}
+	return filtered
+}
+
+func printIconsFzf(entries []icon.Entry) {
+	for _, e := range entries {
+		set := setFromAlias(e.Alias)
+		fmt.Printf("%s  %-40s [%s]  %s\n", e.Icon, ":"+e.Alias+":", set, e.Description)
+	}
+}
+
+func printIconsGrouped(entries []icon.Entry) {
+	var curPrefix string
+	for _, e := range entries {
+		prefix := aliasPrefix(e.Alias)
+		if prefix != curPrefix {
+			if curPrefix != "" {
+				fmt.Println()
+			}
+			fmt.Println(prefixHeading(prefix))
+			curPrefix = prefix
+		}
+		fmt.Printf("  %s  %-40s %s\n", e.Icon, ":"+e.Alias+":", e.Description)
+	}
+}
+
+func emitIconsEmptyHint(options iconOptions) {
 	sets := []struct {
 		name   string
 		active bool
 	}{
-		{"cod", flagIconCod},
-		{"dev", flagIconDev},
-		{"oct", flagIconOct},
+		{"cod", options.cod},
+		{"dev", options.dev},
+		{"oct", options.oct},
 	}
 
 	var active, missing []string
@@ -109,8 +121,8 @@ func emitIconsEmptyHint() {
 		scope = "sets: " + strings.Join(active, ",")
 	}
 
-	if flagIconFilter != "" {
-		fmt.Fprintf(os.Stderr, "no results for filter=%q (%s)\n", flagIconFilter, scope)
+	if options.filter != "" {
+		fmt.Fprintf(os.Stderr, "no results for filter=%q (%s)\n", options.filter, scope)
 	} else {
 		fmt.Fprintf(os.Stderr, "no results (%s)\n", scope)
 	}
@@ -118,20 +130,20 @@ func emitIconsEmptyHint() {
 	if len(active) > 0 && len(missing) > 0 {
 		fmt.Fprintf(os.Stderr, "  %-24s include other icon sets\n", strings.Join(missing, " "))
 	}
-	if flagIconFilter != "" {
+	if options.filter != "" {
 		fmt.Fprintf(os.Stderr, "  %-24s broader match\n", "--filter=<shorter>")
 	}
 	fmt.Fprintf(os.Stderr, "  %-24s interactive fuzzy search\n", "cmdk icons --fzf | fzf")
 }
 
-func matchesSetFlag(set string) bool {
+func matchesSetFlag(set string, options iconOptions) bool {
 	switch set {
 	case "cod":
-		return flagIconCod
+		return options.cod
 	case "dev":
-		return flagIconDev
+		return options.dev
 	case "oct":
-		return flagIconOct
+		return options.oct
 	}
 	return false
 }

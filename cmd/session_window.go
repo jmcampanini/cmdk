@@ -95,7 +95,7 @@ func runSessionWindowCommand(cmd *cobra.Command, args []string, options sessionW
 	})
 }
 
-func splitSessionWindowArgs(args []string, options sessionWindowOptions) (path string, commandArgs []string, commandDelimiter bool, err error) {
+func splitSessionWindowArgs(args []string, options sessionWindowOptions) (string, []string, bool, error) {
 	if len(args) == 0 {
 		return "", nil, false, errors.New("path is required")
 	}
@@ -103,7 +103,7 @@ func splitSessionWindowArgs(args []string, options sessionWindowOptions) (path s
 	if options.dashSeen {
 		switch options.argsLenAtDash {
 		case 0:
-			path = args[0]
+			path := args[0]
 			rest := args[1:]
 			if len(rest) > 0 && rest[0] == "--" {
 				return path, rest[1:], true, nil

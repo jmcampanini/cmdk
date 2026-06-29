@@ -60,12 +60,7 @@ func TestLogsTail_ValidationErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			prev := tailLines
-			cmd := newLogsTailCommand()
-			tailLines = tt.n
-			defer func() { tailLines = prev }()
-
-			err := cmd.RunE(cmd, nil)
+			err := runLogsTailCommand(logsTailOptions{lines: tt.n})
 			if err == nil {
 				t.Fatal("expected error")
 			}

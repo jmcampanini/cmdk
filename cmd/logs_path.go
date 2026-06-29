@@ -14,13 +14,21 @@ func newLogsPathCommand() *cobra.Command {
 		Use:   "path",
 		Short: "Print the log file path",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			path := logging.DefaultLogPath()
-			if !filepath.IsAbs(path) {
-				return fmt.Errorf("cannot determine log file location: $HOME is not set")
+		RunE: func(_ *cobra.Command, _ []string) error {
+			path, err := resolveLogPath()
+			if err != nil {
+				return err
 			}
 			fmt.Println(path)
 			return nil
 		},
 	}
+}
+
+func resolveLogPath() (string, error) {
+	path := logging.DefaultLogPath()
+	if !filepath.IsAbs(path) {
+		return "", fmt.Errorf("cannot determine log file location: $HOME is not set")
+	}
+	return path, nil
 }

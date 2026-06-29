@@ -48,63 +48,80 @@ do not resolve aliases. See "cmdk docs" for the full display config reference.`,
   #   cmdk shorten /Users/me/Code/github.com/acme/project
   #   => …/gh/acme/project`,
 		Args: cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			var path string
-			if len(args) == 1 {
-				path = args[0]
-			} else {
-				stat, err := os.Stdin.Stat()
-				if err != nil || stat.Mode()&os.ModeCharDevice != 0 {
-					return fmt.Errorf("usage: cmdk shorten <path> or echo <path> | cmdk shorten")
-				}
-				scanner := bufio.NewScanner(os.Stdin)
-				if !scanner.Scan() {
-					if err := scanner.Err(); err != nil {
-						return fmt.Errorf("reading stdin: %w", err)
-					}
-					return fmt.Errorf("no input on stdin")
-				}
-				path = scanner.Text()
-			}
-
-			cfgPath, err := resolveConfigPath()
-			if err != nil {
-				return err
-			}
-			cfg, err := config.Load(cfgPath)
-			if err != nil {
-				return fmt.Errorf("loading config: %w", err)
-			}
-			shortenHome := cfg.Display.ShortenHome
-			trunc := pathfmt.Truncation{Length: cfg.Display.TruncationLength, Symbol: cfg.Display.TruncationSymbol}
-			if cmd.Flags().Changed("truncate") {
-				v, err := cmd.Flags().GetInt("truncate")
-				if err != nil {
-					return fmt.Errorf("reading --truncate flag: %w", err)
-				}
-				if v < 0 {
-					return fmt.Errorf("--truncate cannot be negative")
-				}
-				trunc.Length = v
-			}
-			if cmd.Flags().Changed("truncate-symbol") {
-				v, err := cmd.Flags().GetString("truncate-symbol")
-				if err != nil {
-					return fmt.Errorf("reading --truncate-symbol flag: %w", err)
-				}
-				trunc.Symbol = v
-			}
-			rules := pathfmt.CompileRules(cfg.Display.Rules)
-			home, err := os.UserHomeDir()
-			if err != nil && shortenHome != "" {
-				return fmt.Errorf("cannot shorten home prefix: %w", err)
-			}
-
-			fmt.Println(pathfmt.DisplayPath(path, home, shortenHome, rules, trunc))
-			return nil
-		},
+		RunE: runShortenCommand,
 	}
 	cmd.Flags().Int("truncate", 0, "number of rightmost path segments to display; 0 disables (overrides config)")
 	cmd.Flags().String("truncate-symbol", "", "string prepended (with implied trailing /) when truncation occurs (overrides config)")
 	return cmd
+}
+
+func runShortenCommand(cmd *cobra.Command, args []string) error {
+	path, err := shortenInputPath(args)
+	if err != nil {
+		return err
+	}
+
+	cfgPath, err := resolveConfigPath()
+	if err != nil {
+		return err
+	}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+
+	trunc, err := shortenTruncation(cmd, cfg)
+	if err != nil {
+		return err
+	}
+	shortenHome := cfg.Display.ShortenHome
+	rules := pathfmt.CompileRules(cfg.Display.Rules)
+	home, err := os.UserHomeDir()
+	if err != nil && shortenHome != "" {
+		return fmt.Errorf("cannot shorten home prefix: %w", err)
+	}
+
+	fmt.Println(pathfmt.DisplayPath(path, home, shortenHome, rules, trunc))
+	return nil
+}
+
+func shortenInputPath(args []string) (string, error) {
+	if len(args) == 1 {
+		return args[0], nil
+	}
+
+	stat, err := os.Stdin.Stat()
+	if err != nil || stat.Mode()&os.ModeCharDevice != 0 {
+		return "", fmt.Errorf("usage: cmdk shorten <path> or echo <path> | cmdk shorten")
+	}
+	scanner := bufio.NewScanner(os.Stdin)
+	if !scanner.Scan() {
+		if err := scanner.Err(); err != nil {
+			return "", fmt.Errorf("reading stdin: %w", err)
+		}
+		return "", fmt.Errorf("no input on stdin")
+	}
+	return scanner.Text(), nil
+}
+
+func shortenTruncation(cmd *cobra.Command, cfg config.Config) (pathfmt.Truncation, error) {
+	trunc := pathfmt.Truncation{Length: cfg.Display.TruncationLength, Symbol: cfg.Display.TruncationSymbol}
+	if cmd.Flags().Changed("truncate") {
+		v, err := cmd.Flags().GetInt("truncate")
+		if err != nil {
+			return pathfmt.Truncation{}, fmt.Errorf("reading --truncate flag: %w", err)
+		}
+		if v < 0 {
+			return pathfmt.Truncation{}, fmt.Errorf("--truncate cannot be negative")
+		}
+		trunc.Length = v
+	}
+	if cmd.Flags().Changed("truncate-symbol") {
+		v, err := cmd.Flags().GetString("truncate-symbol")
+		if err != nil {
+			return pathfmt.Truncation{}, fmt.Errorf("reading --truncate-symbol flag: %w", err)
+		}
+		trunc.Symbol = v
+	}
+	return trunc, nil
 }

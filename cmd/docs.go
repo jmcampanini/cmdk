@@ -14,7 +14,7 @@ func newDocsCommand() *cobra.Command {
 		Short: "Show configuration reference",
 		Long:  config.RenderHelp(),
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			fmt.Print(config.RenderHelp())
 			return nil
 		},

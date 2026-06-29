@@ -68,7 +68,7 @@ func newRootCommand() *cobra.Command {
 	return cmd
 }
 
-func runRootCommand(cmd *cobra.Command, args []string) error {
+func runRootCommand(cmd *cobra.Command, _ []string) error {
 	timingsFlag = timingsFlag || timingsJSON
 
 	tr := trace.Noop()
