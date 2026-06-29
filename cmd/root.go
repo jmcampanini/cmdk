@@ -163,12 +163,8 @@ func runRootCommand(cmd *cobra.Command, _ []string) error {
 		model := tui.NewModel(listItems, paneID, nil, reg, ctx, t, nil, nil)
 		stop()
 
-		if autoDetectTheme {
-			stop = tr.Begin("theme/auto-detect")
-			model = model.WithAutoThemeDetection()
-			stop()
-		}
-
+		// Timings mode writes reports to stdout, so avoid terminal probing commands
+		// such as RequestBackgroundColor that would emit escape sequences first.
 		stop = tr.Begin("tea-ready")
 		wrapper := timingsModel{inner: model}
 		p := tea.NewProgram(wrapper, tea.WithoutRenderer(), tea.WithInput(nil))
