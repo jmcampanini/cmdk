@@ -71,9 +71,9 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 		accumulated:      accumulated,
 		registry:         registry,
 		ctx:              ctx,
-		stackStyle:       lipgloss.NewStyle().Foreground(t.Overlay0),
-		filterStyle:      lipgloss.NewStyle().Inline(true).Background(t.TextboxBg),
-		errorStyle:       lipgloss.NewStyle().Foreground(t.Error),
+		stackStyle:       lipgloss.NewStyle().Foreground(t.Tokens.Muted),
+		filterStyle:      lipgloss.NewStyle().Inline(true).Background(t.Tokens.InputBg),
+		errorStyle:       lipgloss.NewStyle().Foreground(t.Tokens.Error),
 		theme:            t,
 		autoSelectSingle: beh.AutoSelectSingle,
 		baseItems:        baseItems,
@@ -132,8 +132,8 @@ func applyListStyles(l *list.Model, t theme.Theme) {
 	// width via Title.Render(FilterInput.Prompt). A mismatch causes the filter
 	// text input to overflow or truncate.
 	l.Styles.Title = lipgloss.NewStyle().
-		Background(t.Accent).
-		Foreground(t.Base).
+		Background(t.Tokens.Accent).
+		Foreground(t.Tokens.AccentText).
 		Padding(0, 1)
 
 	// Filter prompt is a pre-rendered ANSI badge followed by a plain space
@@ -142,14 +142,14 @@ func applyListStyles(l *list.Model, t theme.Theme) {
 	promptStyle := lipgloss.NewStyle()
 
 	textboxActive := lipgloss.NewStyle().
-		Foreground(t.Text).
-		Background(t.TextboxBg)
+		Foreground(t.Tokens.Text).
+		Background(t.Tokens.InputBg)
 	textboxDim := lipgloss.NewStyle().
-		Foreground(t.Overlay0).
-		Background(t.TextboxBg)
+		Foreground(t.Tokens.Muted).
+		Background(t.Tokens.InputBg)
 
 	filterStyles := textinput.DefaultStyles(t.IsDark)
-	filterStyles.Cursor.Color = t.AccentDim
+	filterStyles.Cursor.Color = t.Tokens.Cursor
 	filterStyles.Cursor.Blink = false
 	filterStyles.Focused.Prompt = promptStyle
 	filterStyles.Blurred.Prompt = promptStyle
@@ -162,40 +162,40 @@ func applyListStyles(l *list.Model, t theme.Theme) {
 	l.Styles.Filter = filterStyles
 	l.FilterInput.SetStyles(filterStyles)
 	badge := lipgloss.NewStyle().
-		Background(t.Accent).
-		Foreground(t.Base).
+		Background(t.Tokens.Accent).
+		Foreground(t.Tokens.AccentText).
 		Padding(0, 1).
 		Render("cmdk")
 	l.FilterInput.Prompt = badge + " "
 
-	l.Styles.DefaultFilterCharacterMatch = lipgloss.NewStyle().Background(t.MatchHighlight)
+	l.Styles.DefaultFilterCharacterMatch = lipgloss.NewStyle().Background(t.Tokens.MatchBg)
 
 	l.Styles.StatusBar = lipgloss.NewStyle().
-		Foreground(t.Overlay0).
+		Foreground(t.Tokens.Muted).
 		Padding(0, horizontalPadding, 1, horizontalPadding)
 
-	l.Styles.StatusEmpty = lipgloss.NewStyle().Foreground(t.Overlay0)
-	l.Styles.StatusBarActiveFilter = lipgloss.NewStyle().Foreground(t.Text)
-	l.Styles.StatusBarFilterCount = lipgloss.NewStyle().Foreground(t.Surface2)
+	l.Styles.StatusEmpty = lipgloss.NewStyle().Foreground(t.Tokens.Muted)
+	l.Styles.StatusBarActiveFilter = lipgloss.NewStyle().Foreground(t.Tokens.Text)
+	l.Styles.StatusBarFilterCount = lipgloss.NewStyle().Foreground(t.Tokens.Subtle)
 
 	l.Styles.NoItems = lipgloss.NewStyle().
-		Foreground(t.Overlay0).
+		Foreground(t.Tokens.Muted).
 		Padding(0, horizontalPadding)
 
 	l.Styles.PaginationStyle = lipgloss.NewStyle().Padding(0, horizontalPadding)
 	l.Styles.HelpStyle = lipgloss.NewStyle().Padding(1, horizontalPadding, 0, horizontalPadding)
-	l.Styles.ArabicPagination = lipgloss.NewStyle().Foreground(t.Overlay0)
+	l.Styles.ArabicPagination = lipgloss.NewStyle().Foreground(t.Tokens.Muted)
 
 	dot := lipgloss.NewStyle().SetString("\u2022")
-	activeDot := dot.Foreground(t.Overlay1)
-	inactiveDot := dot.Foreground(t.Surface2)
+	activeDot := dot.Foreground(t.Tokens.Muted)
+	inactiveDot := dot.Foreground(t.Tokens.Subtle)
 	l.Styles.ActivePaginationDot = activeDot
 	l.Styles.InactivePaginationDot = inactiveDot
 	l.Paginator.ActiveDot = activeDot.String()
 	l.Paginator.InactiveDot = inactiveDot.String()
 
 	l.Styles.DividerDot = lipgloss.NewStyle().
-		Foreground(t.Surface2).
+		Foreground(t.Tokens.Subtle).
 		SetString(" \u2022 ")
 }
 
@@ -258,7 +258,7 @@ func (m Model) handleBackgroundColor(msg tea.BackgroundColorMsg) Model {
 		return m
 	}
 
-	next := theme.FromBackground(msg.IsDark())
+	next := theme.FromBackground(msg.IsDark(), m.ctx.Config.Theme)
 	log.Debug("theme auto-detected", "theme", next.Name, "background", msg.String())
 	if next.Name == m.theme.Name {
 		return m
@@ -268,9 +268,9 @@ func (m Model) handleBackgroundColor(msg tea.BackgroundColorMsg) Model {
 
 func (m Model) applyTheme(t theme.Theme) Model {
 	m.theme = t
-	m.stackStyle = lipgloss.NewStyle().Foreground(t.Overlay0)
-	m.filterStyle = lipgloss.NewStyle().Inline(true).Background(t.TextboxBg)
-	m.errorStyle = lipgloss.NewStyle().Foreground(t.Error)
+	m.stackStyle = lipgloss.NewStyle().Foreground(t.Tokens.Muted)
+	m.filterStyle = lipgloss.NewStyle().Inline(true).Background(t.Tokens.InputBg)
+	m.errorStyle = lipgloss.NewStyle().Foreground(t.Tokens.Error)
 	applyFilterListTheme(&m.list, t)
 	if m.mode == viewPicker || len(m.pickerList.Items()) > 0 {
 		applyFilterListTheme(&m.pickerList, t)

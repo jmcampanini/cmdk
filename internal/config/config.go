@@ -16,6 +16,7 @@ import (
 	"github.com/jmcampanini/go-config-loader/configloader"
 
 	"github.com/jmcampanini/cmdk/internal/icon"
+	"github.com/jmcampanini/cmdk/internal/theme"
 )
 
 type StageConfig struct {
@@ -74,6 +75,7 @@ type Config struct {
 	Timeout  Timeout                 `toml:"timeout"`
 	Sources  map[string]SourceConfig `toml:"sources"`
 	Display  Display                 `toml:"display"`
+	Theme    theme.Config            `toml:"theme"`
 }
 
 const (
@@ -143,6 +145,9 @@ func (c Config) Validate() error {
 		}
 	}
 	if err := validateActions(c.Actions); err != nil {
+		return err
+	}
+	if err := c.Theme.Validate(); err != nil {
 		return err
 	}
 	if c.Display.TruncationLength < 0 {

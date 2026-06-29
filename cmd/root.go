@@ -151,7 +151,7 @@ func runRootCommand(cmd *cobra.Command, _ []string) error {
 
 		autoDetectTheme := themeFlag == ""
 		stop = tr.Begin("theme")
-		t, err := theme.Resolve(themeFlag)
+		t, err := theme.Resolve(themeFlag, cfg.Theme)
 		stop()
 		if err != nil {
 			return err
@@ -211,7 +211,7 @@ func runRootCommand(cmd *cobra.Command, _ []string) error {
 
 	autoDetectTheme := themeFlag == ""
 	stop = tr.Begin("theme")
-	t, err := theme.Resolve(themeFlag)
+	t, err := theme.Resolve(themeFlag, cfg.Theme)
 	stop()
 	if err != nil {
 		return err
