@@ -550,10 +550,16 @@ func (m Model) openErrorDetails(it item.Item) Model {
 	if m.mode == viewPicker {
 		m.errorReturnMode = viewPicker
 	}
-	m.errorDetailItem = it
+	m.errorDetailItem = safeErrorDetailItem(it)
 	m.errorDetailScroll = 0
 	m.mode = viewErrorDetails
 	return m.clampErrorDetailScroll()
+}
+
+func safeErrorDetailItem(it item.Item) item.Item {
+	it.Display = escapeTerminalControls(it.Display)
+	it.Source = escapeTerminalControls(it.Source)
+	return it
 }
 
 func (m Model) updateErrorDetails(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -996,8 +1002,7 @@ func (m Model) errorDetailsBodyHeight() int {
 }
 
 func (m Model) errorDetailsLines() []string {
-	display := escapeTerminalControls(m.errorDetailItem.Display)
-	wrapped := ansi.Wrap(display, m.errorDetailsContentWidth(), " ")
+	wrapped := ansi.Wrap(m.errorDetailItem.Display, m.errorDetailsContentWidth(), " ")
 	if wrapped == "" {
 		return []string{""}
 	}
@@ -1015,8 +1020,7 @@ func (m Model) errorDetailsView() string {
 	var b strings.Builder
 	b.WriteString(pad + m.errorStyle.Render("Error details") + "\n")
 	if m.errorDetailItem.Source != "" {
-		source := escapeTerminalControls(m.errorDetailItem.Source)
-		b.WriteString(pad + m.stackStyle.Render("Source: "+source) + "\n")
+		b.WriteString(pad + m.stackStyle.Render("Source: "+m.errorDetailItem.Source) + "\n")
 	}
 	b.WriteByte('\n')
 	for _, line := range lines[scroll:end] {
