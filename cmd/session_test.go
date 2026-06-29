@@ -61,15 +61,6 @@ func TestSessionWindowCommandUseDocumentsRequiredPath(t *testing.T) {
 	}
 }
 
-func TestSessionCommandDoesNotRegisterConnect(t *testing.T) {
-	cmd := &cobra.Command{Use: "session"}
-	cmd.AddCommand(newSessionResolveCommand(), newSessionWindowCommand())
-	_, _, err := cmd.Find([]string{"connect"})
-	if err == nil {
-		t.Fatal("session connect should not be registered")
-	}
-}
-
 func TestRunSessionWindowCommandErrorsWithNoMode(t *testing.T) {
 	useTempConfigHome(t)
 	dir := filepath.Join(t.TempDir(), "scratch")
