@@ -1045,7 +1045,7 @@ while [ "$i" -le 140 ]; do
 done
 exit 7
 `
-	if err := os.WriteFile(script, []byte(scriptBody), 0o755); err != nil {
+	if err := os.WriteFile(script, []byte(scriptBody), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chmod(script, 0o755); err != nil {

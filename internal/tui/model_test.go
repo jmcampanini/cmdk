@@ -509,8 +509,9 @@ func TestEnterOnErrorItemDuringFiltering_OpensDetails(t *testing.T) {
 	if m.mode != viewErrorDetails {
 		t.Errorf("mode = %d, want viewErrorDetails (%d)", m.mode, viewErrorDetails)
 	}
-	if !strings.Contains(ansi.Strip(m.errorDetailsView()), errorText) {
-		t.Errorf("details view should contain %q, got %q", errorText, ansi.Strip(m.errorDetailsView()))
+	content := ansi.Strip(m.errorDetailsView())
+	if !strings.Contains(content, errorText) {
+		t.Errorf("details view should contain %q, got %q", errorText, content)
 	}
 }
 
@@ -582,9 +583,10 @@ func TestErrorDetailsWrapsWithoutTruncation(t *testing.T) {
 	if len(lines) < 3 {
 		t.Fatalf("wrapped line count = %d, want at least 3: %#v", len(lines), lines)
 	}
+	contentWidth := m.errorDetailsContentWidth()
 	for _, line := range lines {
-		if width := ansi.StringWidth(line); width > m.errorDetailsContentWidth() {
-			t.Errorf("wrapped line %q width = %d, want <= %d", line, width, m.errorDetailsContentWidth())
+		if width := ansi.StringWidth(line); width > contentWidth {
+			t.Errorf("wrapped line %q width = %d, want <= %d", line, width, contentWidth)
 		}
 	}
 
@@ -1960,8 +1962,9 @@ func TestPickerStage_EnterOnErrorItem_OpensDetails(t *testing.T) {
 	if m.errorReturnMode != viewPicker {
 		t.Errorf("errorReturnMode = %d, want viewPicker (%d)", m.errorReturnMode, viewPicker)
 	}
-	if !strings.Contains(ansi.Strip(m.errorDetailsView()), "command error") {
-		t.Errorf("details view should contain picker command error, got:\n%s", ansi.Strip(m.errorDetailsView()))
+	content := ansi.Strip(m.errorDetailsView())
+	if !strings.Contains(content, "command error") {
+		t.Errorf("details view should contain picker command error, got:\n%s", content)
 	}
 
 	result, cmd = m.Update(escMsg)

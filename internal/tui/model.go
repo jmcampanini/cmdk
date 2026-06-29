@@ -226,11 +226,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if ws, ok := msg.(tea.WindowSizeMsg); ok {
 		m.winWidth = ws.Width
 		m.winHeight = ws.Height
-		listHeight := max(m.winHeight-m.overheadHeight(), 1)
-		m.list.SetSize(m.winWidth, listHeight)
-		if m.mode == viewPicker || m.errorReturnMode == viewPicker || len(m.pickerList.Items()) > 0 {
-			m.pickerList.SetSize(m.winWidth, listHeight)
-		}
+		m.resizeListsForWindow()
 		if m.mode == viewErrorDetails {
 			m = m.clampErrorDetailScroll()
 		}
@@ -261,6 +257,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.list, cmd = updateFilterableList(m.list, msg)
 	return m, cmd
+}
+
+func (m *Model) resizeListsForWindow() {
+	listHeight := max(m.winHeight-m.overheadHeight(), 1)
+	m.list.SetSize(m.winWidth, listHeight)
+	if m.shouldResizePickerList() {
+		m.pickerList.SetSize(m.winWidth, listHeight)
+	}
+}
+
+func (m Model) shouldResizePickerList() bool {
+	return m.mode == viewPicker || m.errorReturnMode == viewPicker || len(m.pickerList.Items()) > 0
 }
 
 func (m Model) handleBackgroundColor(msg tea.BackgroundColorMsg) Model {
@@ -538,10 +546,9 @@ func selectedListItem(l list.Model) (item.Item, bool) {
 }
 
 func (m Model) openErrorDetails(it item.Item) Model {
+	m.errorReturnMode = viewList
 	if m.mode == viewPicker {
 		m.errorReturnMode = viewPicker
-	} else {
-		m.errorReturnMode = viewList
 	}
 	m.errorDetailItem = it
 	m.errorDetailScroll = 0
@@ -584,11 +591,14 @@ func (m Model) updateErrorDetails(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) maxErrorDetailScroll() int {
-	bodyHeight := m.errorDetailsBodyHeight()
+	return errorDetailMaxScroll(len(m.errorDetailsLines()), m.errorDetailsBodyHeight())
+}
+
+func errorDetailMaxScroll(lineCount int, bodyHeight int) int {
 	if bodyHeight <= 0 {
 		return 0
 	}
-	return max(len(m.errorDetailsLines())-bodyHeight, 0)
+	return max(lineCount-bodyHeight, 0)
 }
 
 func (m Model) clampErrorDetailScroll() Model {
@@ -997,7 +1007,7 @@ func (m Model) errorDetailsView() string {
 	pad := strings.Repeat(" ", horizontalPadding)
 	lines := m.errorDetailsLines()
 	bodyHeight := m.errorDetailsBodyHeight()
-	maxScroll := m.maxErrorDetailScroll()
+	maxScroll := errorDetailMaxScroll(len(lines), bodyHeight)
 	scroll := min(max(m.errorDetailScroll, 0), maxScroll)
 	end := min(scroll+bodyHeight, len(lines))
 
