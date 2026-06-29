@@ -184,10 +184,14 @@ func safeExpandLaunchPath(s string) (string, error) {
 			s = filepath.Join(home, s[2:])
 		}
 	}
-	return expandEnvVarsSafe(s), nil
+	expanded, err := expandEnvVarsSafe(s)
+	if err != nil {
+		return "", err
+	}
+	return expanded, nil
 }
 
-func expandEnvVarsSafe(s string) string {
+func expandEnvVarsSafe(s string) (string, error) {
 	var b strings.Builder
 	for i := 0; i < len(s); {
 		if s[i] != '$' {
@@ -213,7 +217,11 @@ func expandEnvVarsSafe(s string) string {
 			if !validEnvName(name) {
 				b.WriteString(s[i : i+3+end])
 			} else {
-				b.WriteString(os.Getenv(name))
+				value, ok := os.LookupEnv(name)
+				if !ok {
+					return "", fmt.Errorf("launch_path expands ${%s}: environment variable is not set", name)
+				}
+				b.WriteString(value)
 			}
 			i += 3 + end
 			continue
@@ -228,10 +236,15 @@ func expandEnvVarsSafe(s string) string {
 		for j < len(s) && isEnvNamePart(rune(s[j])) {
 			j++
 		}
-		b.WriteString(os.Getenv(s[i+1 : j]))
+		name := s[i+1 : j]
+		value, ok := os.LookupEnv(name)
+		if !ok {
+			return "", fmt.Errorf("launch_path expands $%s: environment variable is not set", name)
+		}
+		b.WriteString(value)
 		i = j
 	}
-	return b.String()
+	return b.String(), nil
 }
 
 func validEnvName(name string) bool {

@@ -538,6 +538,31 @@ func TestResolveLaunchPath_ExpandsSafely(t *testing.T) {
 	}
 }
 
+func TestResolveLaunchPath_MissingEnvVarErrors(t *testing.T) {
+	name := "CMDK_TEST_MISSING_LAUNCH_PATH_VAR"
+	old, hadOld := os.LookupEnv(name)
+	if err := os.Unsetenv(name); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if hadOld {
+			_ = os.Setenv(name, old)
+			return
+		}
+		_ = os.Unsetenv(name)
+	})
+
+	for _, templateText := range []string{"$" + name + "/project", "${" + name + "}/project"} {
+		_, err := resolveLaunchPath(templateText, nil)
+		if err == nil {
+			t.Fatalf("resolveLaunchPath(%q) expected error", templateText)
+		}
+		if !strings.Contains(err.Error(), "launch_path expands") || !strings.Contains(err.Error(), name) || !strings.Contains(err.Error(), "not set") {
+			t.Fatalf("resolveLaunchPath(%q) error = %v, want missing env var", templateText, err)
+		}
+	}
+}
+
 func TestResolveLaunchPath_DoesNotExpandTemplateData(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "$LITERAL")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
