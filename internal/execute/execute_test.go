@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -836,7 +836,7 @@ func TestRun_SessionWindowCreatesManagedWindow(t *testing.T) {
 		t.Errorf("Name = %q", gotOpts.Name)
 	}
 	wantCmd := []string{"sh", "-lc", "echo " + filepath.Clean(dir)}
-	if !reflect.DeepEqual(gotOpts.Command, wantCmd) {
+	if !slices.Equal(gotOpts.Command, wantCmd) {
 		t.Errorf("Command = %#v, want %#v", gotOpts.Command, wantCmd)
 	}
 	if !gotOpts.Switch {

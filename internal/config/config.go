@@ -221,14 +221,10 @@ func validateActions(actions []Action) error {
 func EffectiveLaunchMode(matchType, launchMode string, hasLaunchPath bool) string {
 	switch launchMode {
 	case "", LaunchModeDetect:
-		switch {
-		case matchType == matchTypeDir:
+		if matchType == matchTypeDir || hasLaunchPath {
 			return LaunchModeSessionWindow
-		case hasLaunchPath:
-			return LaunchModeSessionWindow
-		default:
-			return LaunchModeShell
 		}
+		return LaunchModeShell
 	case LaunchModeSessionWindow:
 		return LaunchModeSessionWindow
 	case LaunchModeShell:

@@ -108,8 +108,8 @@ func RunWithConfig(accumulated []item.Item, selected item.Item, paneID string, c
 		return fmt.Errorf("selected item has no command to execute (display: %q)", selected.Display)
 	}
 
-	all := slices.Concat(accumulated, []item.Item{selected})
-	data := FlattenData(all)
+	data := FlattenData(accumulated)
+	maps.Copy(data, selected.Data)
 	if paneID != "" {
 		data["pane_id"] = paneID
 	}
@@ -129,7 +129,7 @@ func RunWithConfig(accumulated []item.Item, selected item.Item, paneID string, c
 
 	switch mode {
 	case launchModeSessionWindow:
-		return runSessionWindow(selected, data, launchPath, hasLaunchPath, cfg, paneID)
+		return runSessionWindow(selected, data, launchPath, hasLaunchPath, cfg)
 	case launchModeShell:
 		return runShell(selected, data, launchPath, hasLaunchPath, paneID, execFn)
 	default:
@@ -189,11 +189,7 @@ func safeExpandLaunchPath(s string) (string, error) {
 			s = filepath.Join(home, s[2:])
 		}
 	}
-	expanded, err := expandEnvVarsSafe(s)
-	if err != nil {
-		return "", err
-	}
-	return expanded, nil
+	return expandEnvVarsSafe(s)
 }
 
 func expandEnvVarsSafe(s string) (string, error) {
@@ -487,7 +483,7 @@ func validateExistingDirectory(field, path string) (string, error) {
 	return absPath, nil
 }
 
-func runSessionWindow(selected item.Item, data map[string]string, launchPath string, hasLaunchPath bool, cfg config.Config, paneID string) error {
+func runSessionWindow(selected item.Item, data map[string]string, launchPath string, hasLaunchPath bool, cfg config.Config) error {
 	if !hasLaunchPath {
 		return errors.New("session-window action requires a launch_path")
 	}
