@@ -634,6 +634,21 @@ func TestResolveLaunchPathCmd(t *testing.T) {
 	}
 }
 
+func TestResolveLaunchPathCmd_DoesNotWaitForGrandchildInheritedPipes(t *testing.T) {
+	dir := t.TempDir()
+	start := time.Now()
+	got, err := resolveLaunchPathCmd("printf '%s\\n' {{sq .target}}; (sleep 1) &", map[string]string{"target": dir}, 0, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != filepath.Clean(dir) {
+		t.Errorf("got %q, want %q", got, filepath.Clean(dir))
+	}
+	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+		t.Fatalf("resolveLaunchPathCmd took %s; likely waited for inherited stdout/stderr FDs", elapsed)
+	}
+}
+
 func TestResolveLaunchPathCmd_OversizedStdout(t *testing.T) {
 	cmd := fmt.Sprintf("i=0; while [ $i -le %d ]; do printf x; i=$((i+1)); done", launchPathCmdMaxStdoutBytes)
 	_, err := resolveLaunchPathCmd(cmd, nil, time.Second, "")

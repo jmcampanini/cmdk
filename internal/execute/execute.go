@@ -322,9 +322,19 @@ func resolveLaunchPathCmd(cmdTemplate string, data map[string]string, timeout ti
 		stderrCh <- readCommandDiagnostic(stderr, launchPathCmdMaxStderrBytes)
 	}()
 
+	// Wait must run concurrently with pipe readers. If launch_path_cmd exits after
+	// spawning a background child that inherited stdout/stderr, waiting for EOF
+	// before Wait can hang forever when no timeout is configured because WaitDelay
+	// only starts after Wait observes process exit. TODO(#87): replace this local
+	// orchestration with the shared bounded external-command runner.
+	waitCh := make(chan error, 1)
+	go func() {
+		waitCh <- cmd.Wait()
+	}()
+
 	stdoutResult := <-stdoutCh
 	stderrResult := <-stderrCh
-	waitErr := cmd.Wait()
+	waitErr := <-waitCh
 	stderrText := formatCommandDiagnostic(stderrResult, launchPathCmdMaxStderrBytes)
 
 	if ctx.Err() == context.DeadlineExceeded {
@@ -388,7 +398,7 @@ func readLaunchPathCmdStdout(r io.Reader) ([]byte, error) {
 			}
 		}
 		if err != nil {
-			if errors.Is(err, io.EOF) {
+			if errors.Is(err, io.EOF) || errors.Is(err, os.ErrClosed) {
 				return b.Bytes(), nil
 			}
 			return nil, fmt.Errorf("read launch_path_cmd stdout: %w", err)
@@ -416,7 +426,7 @@ func readCommandDiagnostic(r io.Reader, limit int) commandOutputResult {
 			}
 		}
 		if err != nil {
-			if errors.Is(err, io.EOF) {
+			if errors.Is(err, io.EOF) || errors.Is(err, os.ErrClosed) {
 				return commandOutputResult{data: b.Bytes(), truncated: truncated}
 			}
 			return commandOutputResult{data: b.Bytes(), truncated: truncated, err: err}
