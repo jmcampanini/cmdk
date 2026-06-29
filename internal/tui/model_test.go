@@ -1933,28 +1933,27 @@ func TestPickerStage_CommandErrorDetailsIncludeExecutionContext(t *testing.T) {
 	}
 }
 
-func TestRunPickerSourceWithDiagnosticsCapsFailedStdout(t *testing.T) {
-	_, failure := runPickerSourceWithDiagnostics(`i=0; while [ "$i" -lt 5000 ]; do printf '0123456789abcdef\n'; i=$((i + 1)); done; exit 7`, 0, item.Stage{})
+func TestRunPickerSourceWithDiagnosticsCapturesFailedOutput(t *testing.T) {
+	result, failure := runPickerSourceWithDiagnostics(`printf 'partial stdout\n'; printf 'bad stderr\n' >&2; exit 7`, 0, item.Stage{})
 	if failure == nil {
 		t.Fatal("runPickerSourceWithDiagnostics should fail")
 	}
-	if !failure.Stdout.Truncated {
-		t.Fatal("failed picker stdout diagnostics should be truncated")
+	if len(result.Items) != 0 {
+		t.Fatalf("failed picker should not return parsed items, got %#v", result.Items)
 	}
-	if got := len(failure.Stdout.Text); got != pickerDiagnosticOutputLimit {
-		t.Fatalf("captured stdout length = %d, want %d", got, pickerDiagnosticOutputLimit)
+	if failure.Stdout != "partial stdout\n" {
+		t.Fatalf("failure stdout = %q, want partial stdout", failure.Stdout)
 	}
-	if got := formatCapturedCommandOutput(failure.Stdout); !strings.Contains(got, "[truncated after 64 KiB]") {
-		t.Fatalf("formatted stdout should note truncation, got %q", got)
+	if failure.Stderr != "bad stderr\n" {
+		t.Fatalf("failure stderr = %q, want bad stderr", failure.Stderr)
 	}
 }
 
-func TestFormatCapturedCommandOutputTruncated(t *testing.T) {
-	got := formatCapturedCommandOutput(capturedCommandOutput{Text: "abc", Truncated: true, Limit: 3})
-	if got != "abc\n[truncated after 3 bytes]" {
-		t.Fatalf("truncated output = %q", got)
+func TestFormatCapturedCommandOutput(t *testing.T) {
+	if got := formatCapturedCommandOutput("abc"); got != "abc" {
+		t.Fatalf("output = %q, want abc", got)
 	}
-	if got := formatCapturedCommandOutput(capturedCommandOutput{}); got != "(empty)" {
+	if got := formatCapturedCommandOutput(""); got != "(empty)" {
 		t.Fatalf("empty output = %q, want (empty)", got)
 	}
 }

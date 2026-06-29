@@ -67,10 +67,7 @@ type Model struct {
 	inline            bool
 }
 
-const (
-	horizontalPadding           = 1
-	pickerDiagnosticOutputLimit = 64 * 1024
-)
+const horizontalPadding = 1
 
 func NewModel(items []list.Item, paneID string, accumulated []item.Item, registry *generator.Registry, ctx generator.Context, t theme.Theme, asyncSources []AsyncSource, baseItems []item.Item) Model {
 	beh := ctx.Config.Behavior
@@ -736,24 +733,18 @@ func (m Model) advanceStage() Model {
 	return m
 }
 
-type capturedCommandOutput struct {
-	Text      string
-	Truncated bool
-	Limit     int
-}
-
 type pickerRunResult struct {
 	Items  []item.Item
-	Stdout capturedCommandOutput
-	Stderr capturedCommandOutput
+	Stdout string
+	Stderr string
 }
 
 type pickerFailure struct {
 	Err      error
 	Rendered string
 	Timeout  time.Duration
-	Stdout   capturedCommandOutput
-	Stderr   capturedCommandOutput
+	Stdout   string
+	Stderr   string
 }
 
 func (f *pickerFailure) Error() string {
@@ -791,13 +782,14 @@ func runPickerSourceWithDiagnostics(rendered string, timeout time.Duration, stag
 		defer cancel()
 	}
 
-	stdout := newPickerStdoutCapture(stage, pickerDiagnosticOutputLimit)
-	stderr := cappedBuffer{limit: pickerDiagnosticOutputLimit}
+	// TODO(#87): Replace these unbounded stdout/stderr buffers with the shared
+	// external command-output helper once bounded handling is standardized.
+	var stdout, stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, "sh", "-c", rendered)
-	cmd.Stdout = stdout
+	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		failure := &pickerFailure{Stdout: stdout.Captured(), Stderr: stderr.Captured()}
+		failure := &pickerFailure{Stdout: stdout.String(), Stderr: stderr.String()}
 		if ctx.Err() == context.DeadlineExceeded {
 			failure.Err = fmt.Errorf("command timed out after %s", timeout)
 		} else {
@@ -806,137 +798,52 @@ func runPickerSourceWithDiagnostics(rendered string, timeout time.Duration, stag
 		return pickerRunResult{}, failure
 	}
 
+	stdoutText := stdout.String()
 	return pickerRunResult{
-		Items:  stdout.Items(),
-		Stdout: stdout.Captured(),
-		Stderr: stderr.Captured(),
+		Items:  pickerItemsFromOutput(stdoutText, stage),
+		Stdout: stdoutText,
+		Stderr: stderr.String(),
 	}, nil
 }
 
 func pickerItemsFromOutput(output string, stage item.Stage) []item.Item {
-	parser := newPickerOutputParser(stage)
-	parser.Write([]byte(output))
-	return parser.Items()
-}
+	delim := stage.EffectiveDelimiter()
+	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
+	items := make([]item.Item, 0, len(lines))
+	var warnedDisplay, warnedPass bool
 
-type pickerStdoutCapture struct {
-	capture cappedBuffer
-	parser  pickerOutputParser
-}
-
-func newPickerStdoutCapture(stage item.Stage, limit int) *pickerStdoutCapture {
-	return &pickerStdoutCapture{
-		capture: cappedBuffer{limit: limit},
-		parser:  newPickerOutputParser(stage),
-	}
-}
-
-func (c *pickerStdoutCapture) Write(p []byte) (int, error) {
-	_, _ = c.capture.Write(p)
-	c.parser.Write(p)
-	return len(p), nil
-}
-
-func (c *pickerStdoutCapture) Items() []item.Item {
-	return c.parser.Items()
-}
-
-func (c *pickerStdoutCapture) Captured() capturedCommandOutput {
-	return c.capture.Captured()
-}
-
-type pickerOutputParser struct {
-	stage         item.Stage
-	delim         string
-	line          bytes.Buffer
-	items         []item.Item
-	finished      bool
-	warnedDisplay bool
-	warnedPass    bool
-}
-
-func newPickerOutputParser(stage item.Stage) pickerOutputParser {
-	return pickerOutputParser{stage: stage, delim: stage.EffectiveDelimiter()}
-}
-
-func (p *pickerOutputParser) Write(data []byte) {
-	for len(data) > 0 {
-		idx := bytes.IndexByte(data, '\n')
-		if idx < 0 {
-			_, _ = p.line.Write(data)
-			return
+	for _, line := range lines {
+		if delim != "" {
+			line = strings.TrimRight(line, "\r")
+		} else {
+			line = strings.TrimSpace(line)
 		}
-		_, _ = p.line.Write(data[:idx])
-		p.appendLine(p.line.String())
-		p.line.Reset()
-		data = data[idx+1:]
-	}
-}
-
-func (p *pickerOutputParser) Items() []item.Item {
-	p.finish()
-	return p.items
-}
-
-func (p *pickerOutputParser) finish() {
-	if p.finished {
-		return
-	}
-	if p.line.Len() > 0 {
-		p.appendLine(p.line.String())
-		p.line.Reset()
-	}
-	p.finished = true
-}
-
-func (p *pickerOutputParser) appendLine(line string) {
-	if p.delim != "" {
-		line = strings.TrimRight(line, "\r")
-	} else {
-		line = strings.TrimSpace(line)
-	}
-	if line == "" {
-		return
-	}
-
-	it := item.NewItem()
-	it.Type = "pick"
-	if p.delim != "" {
-		nFields := len(strings.Split(line, p.delim))
-		if p.stage.Display > nFields && !p.warnedDisplay {
-			log.Warn("display index exceeds field count, using whole line", "index", p.stage.Display, "fields", nFields)
-			p.warnedDisplay = true
+		if line == "" {
+			continue
 		}
-		if p.stage.Pass > nFields && !p.warnedPass {
-			log.Warn("pass index exceeds field count, using whole line", "index", p.stage.Pass, "fields", nFields)
-			p.warnedPass = true
+
+		it := item.NewItem()
+		it.Type = "pick"
+		if delim != "" {
+			nFields := len(strings.Split(line, delim))
+			if stage.Display > nFields && !warnedDisplay {
+				log.Warn("display index exceeds field count, using whole line", "index", stage.Display, "fields", nFields)
+				warnedDisplay = true
+			}
+			if stage.Pass > nFields && !warnedPass {
+				log.Warn("pass index exceeds field count, using whole line", "index", stage.Pass, "fields", nFields)
+				warnedPass = true
+			}
+			it.Display = extractField(line, delim, stage.Display)
+			it.Value = extractField(line, delim, stage.Pass)
+		} else {
+			it.Display = line
+			it.Value = line
 		}
-		it.Display = extractField(line, p.delim, p.stage.Display)
-		it.Value = extractField(line, p.delim, p.stage.Pass)
-	} else {
-		it.Display = line
-		it.Value = line
+		items = append(items, it)
 	}
-	p.items = append(p.items, it)
-}
 
-type cappedBuffer struct {
-	buf   bytes.Buffer
-	limit int
-	n     int
-}
-
-func (b *cappedBuffer) Write(p []byte) (int, error) {
-	b.n += len(p)
-	remaining := b.limit - b.buf.Len()
-	if remaining > 0 {
-		_, _ = b.buf.Write(p[:min(len(p), remaining)])
-	}
-	return len(p), nil
-}
-
-func (b *cappedBuffer) Captured() capturedCommandOutput {
-	return capturedCommandOutput{Text: b.buf.String(), Truncated: b.n > b.limit, Limit: b.limit}
+	return items
 }
 
 func (m Model) initPicker(key string, items []item.Item) Model {
@@ -1032,26 +939,11 @@ func formatDiagnosticData(data map[string]string) string {
 	return b.String()
 }
 
-func formatCapturedCommandOutput(out capturedCommandOutput) string {
-	if out.Text == "" && !out.Truncated {
+func formatCapturedCommandOutput(out string) string {
+	if out == "" {
 		return "(empty)"
 	}
-	text := out.Text
-	if out.Truncated {
-		if text != "" && !strings.HasSuffix(text, "\n") {
-			text += "\n"
-		}
-		text += fmt.Sprintf("[truncated after %s]", formatBytes(out.Limit))
-	}
-	return text
-}
-
-func formatBytes(n int) string {
-	const kib = 1024
-	if n > 0 && n%kib == 0 {
-		return fmt.Sprintf("%d KiB", n/kib)
-	}
-	return fmt.Sprintf("%d bytes", n)
+	return out
 }
 
 // completeStages extracts the action item as selected and removes it from accumulated,
