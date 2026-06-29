@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"maps"
 	"os"
@@ -35,6 +34,7 @@ const (
 
 	launchPathCmdMaxStdoutBytes = 8 * 1024
 	launchPathCmdMaxStderrBytes = 32 * 1024
+	launchPathCmdPipeDrainDelay = 100 * time.Millisecond
 
 	launchModeSessionWindow launchMode = config.LaunchModeSessionWindow
 	launchModeShell         launchMode = config.LaunchModeShell
@@ -287,70 +287,42 @@ func resolveLaunchPathCmd(cmdTemplate string, data map[string]string, timeout ti
 		defer cancel()
 	}
 
+	stdoutCapture := &launchPathStdoutCapture{limit: launchPathCmdMaxStdoutBytes}
+	stderrCapture := &boundedDiagnosticCapture{limit: launchPathCmdMaxStderrBytes}
+
 	// TODO(#87): Replace this local bounded capture with the shared external-command
 	// output helper once cmdk standardizes stdout/stderr limits repository-wide.
 	cmd := exec.CommandContext(ctx, "sh", "-c", rendered)
 	cmd.Env = envWithCMDK(data, paneID)
+	cmd.Stdout = stdoutCapture
+	cmd.Stderr = stderrCapture
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return killCommandGroup(cmd) }
-	cmd.WaitDelay = time.Second
+	cmd.WaitDelay = launchPathCmdPipeDrainDelay
+	stdoutCapture.onError = func() { _ = killCommandGroup(cmd) }
 
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return "", fmt.Errorf("launch_path_cmd stdout pipe: %w", err)
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return "", fmt.Errorf("launch_path_cmd stderr pipe: %w", err)
-	}
-
-	if err := cmd.Start(); err != nil {
-		return "", fmt.Errorf("launch_path_cmd start: %w", err)
-	}
-
-	stdoutCh := make(chan commandOutputResult, 1)
-	go func() {
-		out, readErr := readLaunchPathCmdStdout(stdout)
-		if readErr != nil {
-			_ = killCommandGroup(cmd)
-		}
-		stdoutCh <- commandOutputResult{data: out, err: readErr}
-	}()
-
-	stderrCh := make(chan commandOutputResult, 1)
-	go func() {
-		stderrCh <- readCommandDiagnostic(stderr, launchPathCmdMaxStderrBytes)
-	}()
-
-	// Wait must run concurrently with pipe readers. If launch_path_cmd exits after
-	// spawning a background child that inherited stdout/stderr, waiting for EOF
-	// before Wait can hang forever when no timeout is configured because WaitDelay
-	// only starts after Wait observes process exit. TODO(#87): replace this local
-	// orchestration with the shared bounded external-command runner.
-	waitCh := make(chan error, 1)
-	go func() {
-		waitCh <- cmd.Wait()
-	}()
-
-	stdoutResult := <-stdoutCh
-	stderrResult := <-stderrCh
-	waitErr := <-waitCh
-	stderrText := formatCommandDiagnostic(stderrResult, launchPathCmdMaxStderrBytes)
+	// Do not use StdoutPipe/StderrPipe here: os/exec closes those readers from
+	// Wait, so racing Wait against reader goroutines can produce partial output.
+	// Supplying Writers lets os/exec own that synchronization. WaitDelay bounds
+	// the only tolerated local recovery case: the shell exited successfully after
+	// printing a valid path, but an orphaned descendant kept stdout/stderr open.
+	waitErr := cmd.Run()
+	stderrText := formatCommandDiagnostic(stderrCapture.result(), launchPathCmdMaxStderrBytes)
 
 	if ctx.Err() == context.DeadlineExceeded {
 		return "", fmt.Errorf("launch_path_cmd timed out after %s", timeout)
 	}
-	if stdoutResult.err != nil {
-		return "", stdoutResult.err
+	if stdoutErr := stdoutCapture.Err(); stdoutErr != nil {
+		return "", stdoutErr
 	}
-	if waitErr != nil {
+	if waitErr != nil && !errors.Is(waitErr, exec.ErrWaitDelay) {
 		if stderrText != "" {
 			return "", fmt.Errorf("launch_path_cmd failed: %w\nstderr: %s", waitErr, stderrText)
 		}
 		return "", fmt.Errorf("launch_path_cmd failed: %w", waitErr)
 	}
 
-	path, err := parseLaunchPathCmdOutput(stdoutResult.data)
+	path, err := parseLaunchPathCmdOutput(stdoutCapture.Bytes())
 	if err != nil {
 		return "", err
 	}
@@ -371,67 +343,80 @@ func killCommandGroup(cmd *exec.Cmd) error {
 	return nil
 }
 
+type launchPathStdoutCapture struct {
+	buf         bytes.Buffer
+	limit       int
+	seenNewline bool
+	err         error
+	onError     func()
+}
+
+func (c *launchPathStdoutCapture) Write(p []byte) (int, error) {
+	for i, b := range p {
+		if c.err != nil {
+			return i, c.err
+		}
+		if c.seenNewline {
+			return i, c.fail(errors.New("launch_path_cmd output must contain exactly one line"))
+		}
+		if c.buf.Len() >= c.limit {
+			return i, c.fail(fmt.Errorf("launch_path_cmd output exceeds %d bytes", c.limit))
+		}
+		c.buf.WriteByte(b)
+		if b == '\n' {
+			c.seenNewline = true
+		}
+	}
+	return len(p), nil
+}
+
+func (c *launchPathStdoutCapture) fail(err error) error {
+	if c.err == nil {
+		c.err = err
+		if c.onError != nil {
+			c.onError()
+		}
+	}
+	return c.err
+}
+
+func (c *launchPathStdoutCapture) Bytes() []byte {
+	return c.buf.Bytes()
+}
+
+func (c *launchPathStdoutCapture) Err() error {
+	return c.err
+}
+
+type boundedDiagnosticCapture struct {
+	buf       bytes.Buffer
+	limit     int
+	truncated bool
+}
+
+func (c *boundedDiagnosticCapture) Write(p []byte) (int, error) {
+	remaining := c.limit - c.buf.Len()
+	if remaining > 0 {
+		if len(p) <= remaining {
+			c.buf.Write(p)
+		} else {
+			c.buf.Write(p[:remaining])
+			c.truncated = true
+		}
+	} else if len(p) > 0 {
+		c.truncated = true
+	}
+	return len(p), nil
+}
+
+func (c *boundedDiagnosticCapture) result() commandOutputResult {
+	return commandOutputResult{data: c.buf.Bytes(), truncated: c.truncated}
+}
+
 type commandOutputResult struct {
 	data      []byte
 	truncated bool
 	err       error
-}
-
-func readLaunchPathCmdStdout(r io.Reader) ([]byte, error) {
-	var b bytes.Buffer
-	buf := make([]byte, 512)
-	seenNewline := false
-	for {
-		n, err := r.Read(buf)
-		if n > 0 {
-			for _, c := range buf[:n] {
-				if seenNewline {
-					return nil, errors.New("launch_path_cmd output must contain exactly one line")
-				}
-				if b.Len() >= launchPathCmdMaxStdoutBytes {
-					return nil, fmt.Errorf("launch_path_cmd output exceeds %d bytes", launchPathCmdMaxStdoutBytes)
-				}
-				b.WriteByte(c)
-				if c == '\n' {
-					seenNewline = true
-				}
-			}
-		}
-		if err != nil {
-			if errors.Is(err, io.EOF) || errors.Is(err, os.ErrClosed) {
-				return b.Bytes(), nil
-			}
-			return nil, fmt.Errorf("read launch_path_cmd stdout: %w", err)
-		}
-	}
-}
-
-func readCommandDiagnostic(r io.Reader, limit int) commandOutputResult {
-	var b bytes.Buffer
-	buf := make([]byte, 1024)
-	truncated := false
-	for {
-		n, err := r.Read(buf)
-		if n > 0 {
-			remaining := limit - b.Len()
-			if remaining > 0 {
-				if n <= remaining {
-					b.Write(buf[:n])
-				} else {
-					b.Write(buf[:remaining])
-					truncated = true
-				}
-			} else {
-				truncated = true
-			}
-		}
-		if err != nil {
-			if errors.Is(err, io.EOF) || errors.Is(err, os.ErrClosed) {
-				return commandOutputResult{data: b.Bytes(), truncated: truncated}
-			}
-			return commandOutputResult{data: b.Bytes(), truncated: truncated, err: err}
-		}
-	}
 }
 
 func formatCommandDiagnostic(result commandOutputResult, limit int) string {
