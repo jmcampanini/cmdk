@@ -40,15 +40,19 @@ func ConfigDocs() []SectionDoc {
 		},
 		{
 			Name:        "actions",
-			Description: "Actions shown in the launcher. Each action declares which item type\n  it matches and an optional stage pipeline to collect data before execution.",
+			Description: "Actions shown in the launcher. Each action declares which item type\n  it matches, how it launches, and an optional stage pipeline to collect data before execution.",
 			Fields: []FieldDoc{
 				{Name: "name", Type: "string", Description: "Display name in the launcher.", Validation: "cannot be empty"},
 				{Name: "matches", Type: "string", Description: "Item type this action appears for: \"root\" (top-level), \"dir\" (after selecting a directory), or \"session\" (after selecting a tmux session).", Validation: "cannot be empty; must be \"root\", \"dir\", or \"session\""},
-				{Name: "cmd", Type: "string", Description: "Shell command or Go template to execute after all stages complete.", Validation: "cannot be empty"},
+				{Name: "cmd", Type: "string", Description: "Shell command or Go template to run after all stages complete. In session-window mode this is the window payload, not a tmux new-window wrapper.", Validation: "cannot be empty"},
 				{Name: "icon", Type: "string", Description: "Nerdfont icon: alias like :nf-dev-github:, raw glyph, or \\uXXXX escape. Run \"cmdk icons --filter <term>\" to search aliases.", Validation: "if :nf-*: alias, must be in supported set; otherwise must be a single grapheme cluster"},
+				{Name: "launch_mode", Type: "string", Description: "Launch mode: \"detect\" (default), \"session-window\" (create a cmdk-managed tmux window), or \"shell\" (exec in this pane). Detect makes dir actions and actions with launch_path/launch_path_cmd session-window; root/session actions without path fields stay shell.", Validation: "optional; must be \"detect\", \"session-window\", or \"shell\""},
+				{Name: "launch_path", Type: "string", Description: "Path template for the action's effective launch directory. Supports safe leading ~, $VAR, and ${VAR} expansion before Go template rendering; no command substitution, globbing, or word splitting.", Validation: "mutually exclusive with launch_path_cmd; rendered path must resolve to an existing directory"},
+				{Name: "launch_path_cmd", Type: "string", Description: "Shell command template run via sh -c after stages; stdout must be exactly one absolute existing directory path. Use {{sq ...}} around template variables.", Validation: "mutually exclusive with launch_path; output must be one absolute existing directory path"},
+				{Name: "window_name", Type: "string", Description: "Tmux window name template for session-window actions. Defaults to {{.launch_basename}}.", Validation: "only valid for effective session-window actions; rendered name cannot be empty or contain control characters"},
 				{Name: "stages", Type: "array", Description: "Optional pipeline of data-collection stages to run before executing cmd. See STAGES section."},
 			},
-			Example: "[[actions]]\nname = \"Yazi\"\nmatches = \"root\"\ncmd = \"tmux split-window -h yazi\"\nicon = \":nf-cod-folder:\"\n\n[[actions]]\nname = \"New Window\"\nmatches = \"dir\"\ncmd = \"tmux new-window -c {{sq .path}}\"\n\n[[actions]]\nname = \"Rename Session\"\nmatches = \"session\"\ncmd = \"tmux rename-session -t {{sq .session_id}} {{sq .new_name}}\"\nstages = [\n  { type = \"prompt\", text = \"New name for {{.session_name}}:\", key = \"new_name\" },\n]\n\n[[actions]]\nname = \"New Branch\"\nmatches = \"dir\"\ncmd = \"git checkout -b {{.branch}}\"\nstages = [\n  { type = \"prompt\", text = \"Branch name:\", key = \"branch\" },\n]",
+			Example: "[[actions]]\nname = \"Yazi\"\nmatches = \"root\"\nlaunch_mode = \"shell\"\ncmd = \"tmux split-window -h yazi\"\nicon = \":nf-cod-folder:\"\n\n[[actions]]\nname = \"Claude\"\nmatches = \"dir\"\ncmd = \"direnv exec {{sq .launch_path}} claude\"\n\n[[actions]]\nname = \"Dotfiles pi\"\nmatches = \"root\"\nlaunch_path = \"$HOME/Code/github.com/me/dotfiles/main\"\ncmd = \"pi\"\n\n[[actions]]\nname = \"Rename Session\"\nmatches = \"session\"\ncmd = \"tmux rename-session -t {{sq .session_id}} {{sq .new_name}}\"\nstages = [\n  { type = \"prompt\", text = \"New name for {{.session_name}}:\", key = \"new_name\" },\n]",
 		},
 		{
 			Name:        "stages",
@@ -157,6 +161,8 @@ TEMPLATE VARIABLES
       {{.window_id}}      stable tmux window ID (from window items in the selection stack)
       {{.window_index}}   tmux window index (from window items in the selection stack)
       {{.window_name}}    display-safe tmux window name (from window items in the selection stack)
+      {{.launch_path}}    final validated launch directory (final cmd/window_name only)
+      {{.launch_basename}} base name of launch_path (final cmd/window_name only)
       {{.session_attached}} tmux attached client count (from session items)
       {{.session_display}}  display string for the selected session
       {{.session_kind}}     session classification; "external" in this phase
@@ -175,8 +181,9 @@ TEMPLATE VARIABLES
   built-in session switch and child-window actions target by session_id and
   shell-quote the tmux target.
 
-  Environment variables CMDK_PATH, CMDK_PANE_ID, etc. are also
-  set when executing commands.
+  Environment variables CMDK_PATH, CMDK_PANE_ID, CMDK_LAUNCH_PATH,
+  CMDK_LAUNCH_BASENAME, etc. are also set when executing commands
+  when the corresponding template variables are available.
 
 ATTACH
   cmdk attach enters a cmdk-managed tmux session from outside tmux. It refuses
@@ -223,19 +230,27 @@ SESSION WINDOWS
   action before configured session actions and windows.
 
 EXECUTION
-  Commands are passed to sh -c via syscall.Exec, replacing the
-  cmdk process in the current pane. Shell features (pipes,
-  redirects) are supported.
+  Actions run in one of two launch modes. In session-window mode, cmdk resolves
+  the effective launch path, creates/switches to a fresh window in the
+  cmdk-managed tmux session for that path, and runs the rendered cmd there via
+  sh -lc. Dir-matching actions default to session-window.
 
-  Picker source commands are also run via sh -c.
+  In shell mode, commands are passed to sh -c via syscall.Exec, replacing the
+  cmdk process in the current pane. If an effective launch path exists, cmdk
+  chdirs there first; shell mode means "do not create a session window", not
+  "ignore the directory context".
 
-  The working directory is inherited from where cmdk was
-  launched, not the config file location. Relative paths in
-  cmd (e.g. "./scripts/deploy.sh") resolve from the launch
-  directory.
+  Picker source commands and launch_path_cmd commands are also run via sh -c.
+  launch_path_cmd must print exactly one absolute existing directory path.
 
-  For dir-matching actions, use {{.path}} to reference the
-  selected directory.
+  Root/session actions without launch_path or launch_path_cmd default to shell
+  mode and inherit the working directory from where cmdk was launched. Relative
+  paths in cmd (e.g. "./scripts/deploy.sh") resolve from that directory unless
+  shell mode chdirs to an effective launch path.
+
+  For dir-matching actions, use {{.launch_path}} for the final launch directory
+  in payload commands. Use {{.path}} only when you specifically need the
+  originally selected directory before launch_path overrides/generation.
 `)
 
 	return b.String()

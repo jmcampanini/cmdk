@@ -31,11 +31,15 @@ type StageConfig struct {
 }
 
 type Action struct {
-	Name    string        `toml:"name"`
-	Matches string        `toml:"matches"`
-	Cmd     string        `toml:"cmd"`
-	Icon    string        `toml:"icon"`
-	Stages  []StageConfig `toml:"stages"`
+	Name          string        `toml:"name"`
+	Matches       string        `toml:"matches"`
+	Cmd           string        `toml:"cmd"`
+	Icon          string        `toml:"icon"`
+	LaunchMode    string        `toml:"launch_mode"`
+	LaunchPath    string        `toml:"launch_path"`
+	LaunchPathCmd string        `toml:"launch_path_cmd"`
+	WindowName    string        `toml:"window_name"`
+	Stages        []StageConfig `toml:"stages"`
 }
 
 type Behavior struct {
@@ -82,7 +86,15 @@ const (
 	matchTypeSession = "session"
 )
 
+const (
+	LaunchModeDetect        = "detect"
+	LaunchModeSessionWindow = "session-window"
+	LaunchModeShell         = "shell"
+)
+
 var validMatchTypes = []string{matchTypeRoot, matchTypeDir, matchTypeSession}
+
+var validLaunchModes = []string{"", LaunchModeDetect, LaunchModeSessionWindow, LaunchModeShell}
 
 // reservedStageKeys must not be used by stage outputs because they are runtime-provided
 // variables or reserved names that should not be introduced as template aliases.
@@ -94,6 +106,8 @@ var reservedStageKeys = []string{
 	"window_id",
 	"window_index",
 	"window_name",
+	"launch_path",
+	"launch_basename",
 }
 
 var sessionActionExtraReservedStageKeys = []string{
@@ -180,6 +194,15 @@ func validateActions(actions []Action) error {
 		if !slices.Contains(validMatchTypes, a.Matches) {
 			return fmt.Errorf("actions[%d].matches %q is not a valid match type (valid: %v)", i, a.Matches, validMatchTypes)
 		}
+		if !slices.Contains(validLaunchModes, a.LaunchMode) {
+			return fmt.Errorf("actions[%d].launch_mode %q is not valid (valid: detect, session-window, shell)", i, a.LaunchMode)
+		}
+		if a.LaunchPath != "" && a.LaunchPathCmd != "" {
+			return fmt.Errorf("actions[%d] cannot set both launch_path and launch_path_cmd", i)
+		}
+		if a.WindowName != "" && effectiveLaunchMode(a) == LaunchModeShell {
+			return fmt.Errorf("actions[%d].window_name is only valid when effective launch_mode is session-window", i)
+		}
 		if a.Icon != "" {
 			if _, err := icon.Resolve(a.Icon); err != nil {
 				return fmt.Errorf("actions[%d].icon: %w", i, err)
@@ -190,6 +213,26 @@ func validateActions(actions []Action) error {
 		}
 	}
 	return nil
+}
+
+func effectiveLaunchMode(a Action) string {
+	switch a.LaunchMode {
+	case "", LaunchModeDetect:
+		switch {
+		case a.Matches == matchTypeDir:
+			return LaunchModeSessionWindow
+		case a.LaunchPath != "" || a.LaunchPathCmd != "":
+			return LaunchModeSessionWindow
+		default:
+			return LaunchModeShell
+		}
+	case LaunchModeSessionWindow:
+		return LaunchModeSessionWindow
+	case LaunchModeShell:
+		return LaunchModeShell
+	default:
+		return ""
+	}
 }
 
 func reservedStageKeysForMatch(matchType string) []string {

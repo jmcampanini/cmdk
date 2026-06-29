@@ -159,6 +159,96 @@ func TestValidate_ActionMatchesSession(t *testing.T) {
 	}
 }
 
+func TestValidate_LaunchModeValues(t *testing.T) {
+	tests := []string{"", "detect", "session-window", "shell"}
+	for _, mode := range tests {
+		cfg := DefaultConfig()
+		cfg.Actions = []Action{{Name: "a", Cmd: "echo", Matches: "root", LaunchMode: mode}}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("LaunchMode %q unexpected error: %v", mode, err)
+		}
+	}
+}
+
+func TestValidate_InvalidLaunchMode(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{Name: "bad", Cmd: "echo", Matches: "root", LaunchMode: "background"}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for invalid launch_mode")
+	}
+	if !strings.Contains(err.Error(), "launch_mode") {
+		t.Errorf("error = %q, want launch_mode", err.Error())
+	}
+}
+
+func TestValidate_LaunchPathAndCmdMutuallyExclusive(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{Name: "bad", Cmd: "echo", Matches: "dir", LaunchPath: "~/x", LaunchPathCmd: "pwd"}}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for launch_path + launch_path_cmd")
+	}
+	if !strings.Contains(err.Error(), "launch_path") || !strings.Contains(err.Error(), "launch_path_cmd") {
+		t.Errorf("error = %q, want both field names", err.Error())
+	}
+}
+
+func TestValidate_WindowNameRejectedForEffectiveShell(t *testing.T) {
+	tests := []Action{
+		{Name: "root detect", Cmd: "echo", Matches: "root", WindowName: "x"},
+		{Name: "explicit shell", Cmd: "echo", Matches: "dir", LaunchMode: "shell", WindowName: "x"},
+	}
+	for _, action := range tests {
+		cfg := DefaultConfig()
+		cfg.Actions = []Action{action}
+		err := cfg.Validate()
+		if err == nil {
+			t.Fatalf("%s: expected error", action.Name)
+		}
+		if !strings.Contains(err.Error(), "window_name") {
+			t.Errorf("%s: error = %q, want window_name", action.Name, err.Error())
+		}
+	}
+}
+
+func TestValidate_WindowNameAllowedForSessionWindow(t *testing.T) {
+	tests := []Action{
+		{Name: "dir detect", Cmd: "echo", Matches: "dir", WindowName: "x"},
+		{Name: "root path", Cmd: "echo", Matches: "root", LaunchPath: "/tmp", WindowName: "x"},
+		{Name: "root explicit", Cmd: "echo", Matches: "root", LaunchMode: "session-window", WindowName: "x"},
+	}
+	for _, action := range tests {
+		cfg := DefaultConfig()
+		cfg.Actions = []Action{action}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("%s: unexpected error: %v", action.Name, err)
+		}
+	}
+}
+
+func TestValidate_StageReservedKey_LaunchPath(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "launch_path", Text: "Launch path"}},
+	}}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error for reserved launch_path stage key")
+	}
+}
+
+func TestValidate_StageReservedKey_LaunchBasename(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Actions = []Action{{
+		Name: "test", Cmd: "echo", Matches: "root",
+		Stages: []StageConfig{{Type: "prompt", Key: "launch_basename", Text: "Launch basename"}},
+	}}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error for reserved launch_basename stage key")
+	}
+}
+
 func TestValidate_StagePromptValid(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Actions = []Action{{

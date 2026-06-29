@@ -1,11 +1,19 @@
 package execute
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/jmcampanini/cmdk/internal/config"
 	"github.com/jmcampanini/cmdk/internal/item"
+	resolver "github.com/jmcampanini/cmdk/internal/session"
+	"github.com/jmcampanini/cmdk/internal/tmux"
 )
 
 func TestRenderCmd(t *testing.T) {
@@ -448,6 +456,368 @@ func TestRun_EmptyPaneIDNotInTemplateData(t *testing.T) {
 	err := Run(nil, selected, "", mockExec)
 	if err == nil {
 		t.Error("expected error when pane_id is empty and template references it")
+	}
+}
+
+func TestEffectiveLaunchMode(t *testing.T) {
+	tests := []struct {
+		name string
+		it   item.Item
+		want launchMode
+	}{
+		{"dir minimal", item.Item{MatchType: "dir"}, launchModeSessionWindow},
+		{"root minimal", item.Item{MatchType: "root"}, launchModeShell},
+		{"session minimal", item.Item{MatchType: "session"}, launchModeShell},
+		{"root launch path", item.Item{MatchType: "root", LaunchPath: "/tmp"}, launchModeSessionWindow},
+		{"root launch path cmd", item.Item{MatchType: "root", LaunchPathCmd: "pwd"}, launchModeSessionWindow},
+		{"explicit shell wins", item.Item{MatchType: "dir", LaunchMode: "shell"}, launchModeShell},
+		{"explicit session wins", item.Item{MatchType: "root", LaunchMode: "session-window"}, launchModeSessionWindow},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := effectiveLaunchMode(tt.it); got != tt.want {
+				t.Errorf("effectiveLaunchMode() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolveEffectiveLaunchPath(t *testing.T) {
+	dir := t.TempDir()
+	got, ok, err := resolveEffectiveLaunchPath(item.Item{MatchType: "dir"}, map[string]string{"path": dir}, launchModeSessionWindow, 0, "")
+	if err != nil {
+		t.Fatalf("dir path: %v", err)
+	}
+	if !ok || got != filepath.Clean(dir) {
+		t.Fatalf("dir path = %q, %v; want %q, true", got, ok, filepath.Clean(dir))
+	}
+
+	oldGetwd := getwd
+	getwd = func() (string, error) { return dir, nil }
+	t.Cleanup(func() { getwd = oldGetwd })
+	got, ok, err = resolveEffectiveLaunchPath(item.Item{MatchType: "root"}, map[string]string{}, launchModeSessionWindow, 0, "")
+	if err != nil {
+		t.Fatalf("cwd fallback: %v", err)
+	}
+	if !ok || got != filepath.Clean(dir) {
+		t.Fatalf("cwd fallback = %q, %v; want %q, true", got, ok, filepath.Clean(dir))
+	}
+
+	got, ok, err = resolveEffectiveLaunchPath(item.Item{MatchType: "root"}, map[string]string{}, launchModeShell, 0, "")
+	if err != nil {
+		t.Fatalf("no path shell: %v", err)
+	}
+	if ok || got != "" {
+		t.Fatalf("no path shell = %q, %v; want empty, false", got, ok)
+	}
+}
+
+func TestResolveLaunchPath_ExpandsSafely(t *testing.T) {
+	home := t.TempDir()
+	project := filepath.Join(home, "Code", "proj")
+	if err := os.MkdirAll(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("PROJECT_NAME", "proj")
+
+	got, err := resolveLaunchPath("~/Code/$PROJECT_NAME", nil)
+	if err != nil {
+		t.Fatalf("~/$VAR: %v", err)
+	}
+	if got != project {
+		t.Errorf("got %q, want %q", got, project)
+	}
+
+	got, err = resolveLaunchPath("${HOME}/Code/{{.name}}", map[string]string{"name": "proj"})
+	if err != nil {
+		t.Fatalf("${VAR}+template: %v", err)
+	}
+	if got != project {
+		t.Errorf("got %q, want %q", got, project)
+	}
+}
+
+func TestResolveLaunchPath_DoesNotExpandTemplateData(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "$LITERAL")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LITERAL", "wrong")
+
+	got, err := resolveLaunchPath("{{.path}}", map[string]string{"path": dir})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != dir {
+		t.Errorf("got %q, want literal template-derived path %q", got, dir)
+	}
+}
+
+func TestResolveLaunchPath_Errors(t *testing.T) {
+	if _, err := resolveLaunchPath("{{.empty}}", map[string]string{"empty": ""}); err == nil || !strings.Contains(err.Error(), "launch_path rendered empty") {
+		t.Fatalf("empty error = %v", err)
+	}
+	missing := filepath.Join(t.TempDir(), "missing")
+	if _, err := resolveLaunchPath(missing, nil); err == nil || !strings.Contains(err.Error(), "does not exist") {
+		t.Fatalf("missing error = %v", err)
+	}
+	file := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolveLaunchPath(file, nil); err == nil || !strings.Contains(err.Error(), "not a directory") {
+		t.Fatalf("file error = %v", err)
+	}
+}
+
+func TestResolveLaunchPathCmd(t *testing.T) {
+	dir := t.TempDir()
+	got, err := resolveLaunchPathCmd("printf '%s\\n' {{sq .target}}", map[string]string{"target": dir}, time.Second, "")
+	if err != nil {
+		t.Fatalf("success: %v", err)
+	}
+	if got != filepath.Clean(dir) {
+		t.Errorf("got %q, want %q", got, filepath.Clean(dir))
+	}
+
+	got, err = resolveLaunchPathCmd("[ -z \"$CMDK_LAUNCH_PATH\" ] || exit 9; printf '%s\\n' \"$CMDK_TARGET\"", map[string]string{"target": dir}, time.Second, "")
+	if err != nil {
+		t.Fatalf("env success: %v", err)
+	}
+	if got != filepath.Clean(dir) {
+		t.Errorf("env got %q, want %q", got, filepath.Clean(dir))
+	}
+
+	tests := []struct {
+		name string
+		cmd  string
+		want string
+	}{
+		{"empty", "printf ''", "cannot be empty"},
+		{"multiple", "printf '/tmp\\n/tmp\\n'", "exactly one line"},
+		{"relative", "printf 'relative\\n'", "absolute path"},
+		{"nonzero", "printf 'bad news' >&2; exit 7", "bad news"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := resolveLaunchPathCmd(tt.cmd, nil, time.Second, "")
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want substring %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolveLaunchPathCmd_Timeout(t *testing.T) {
+	_, err := resolveLaunchPathCmd("sleep 1; printf /tmp", nil, 10*time.Millisecond, "")
+	if err == nil || !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("error = %v, want timeout", err)
+	}
+}
+
+func TestRenderWindowName(t *testing.T) {
+	data := map[string]string{"launch_path": "/tmp/project", "launch_basename": "project"}
+	got, err := renderWindowName(item.Item{}, data)
+	if err != nil {
+		t.Fatalf("default: %v", err)
+	}
+	if got != "project" {
+		t.Errorf("default = %q, want project", got)
+	}
+	got, err = renderWindowName(item.Item{WindowName: "pi:{{.launch_basename}}"}, data)
+	if err != nil {
+		t.Fatalf("template: %v", err)
+	}
+	if got != "pi:project" {
+		t.Errorf("template = %q, want pi:project", got)
+	}
+	if _, err := renderWindowName(item.Item{WindowName: "{{.missing}}"}, data); err == nil {
+		t.Fatal("expected missing key error")
+	}
+	if _, err := renderWindowName(item.Item{WindowName: ""}, map[string]string{"launch_basename": ""}); err == nil || !strings.Contains(err.Error(), "empty") {
+		t.Fatalf("empty error = %v", err)
+	}
+	if _, err := renderWindowName(item.Item{WindowName: "bad\nname"}, data); err == nil || !strings.Contains(err.Error(), "control") {
+		t.Fatalf("control error = %v", err)
+	}
+}
+
+func TestRun_ShellLaunchPathChdirsAndSetsEnv(t *testing.T) {
+	dir := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldwd) })
+
+	selected := item.Item{Cmd: "echo {{.launch_basename}}", MatchType: "root", LaunchMode: "shell", LaunchPath: dir}
+	var cwd string
+	var argv []string
+	var envv []string
+	mockExec := func(argv0 string, gotArgv []string, gotEnvv []string) error {
+		var err error
+		cwd, err = os.Getwd()
+		if err != nil {
+			return err
+		}
+		argv = gotArgv
+		envv = gotEnvv
+		return nil
+	}
+
+	if err := RunWithConfig(nil, selected, "%9", config.DefaultConfig(), mockExec); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cwd != filepath.Clean(dir) {
+		t.Errorf("cwd = %q, want %q", cwd, filepath.Clean(dir))
+	}
+	if argv[2] != "echo "+filepath.Base(dir) {
+		t.Errorf("rendered = %q", argv[2])
+	}
+	envMap := envSliceToMap(envv)
+	if envMap["CMDK_LAUNCH_PATH"] != filepath.Clean(dir) {
+		t.Errorf("CMDK_LAUNCH_PATH = %q", envMap["CMDK_LAUNCH_PATH"])
+	}
+	if envMap["CMDK_LAUNCH_BASENAME"] != filepath.Base(dir) {
+		t.Errorf("CMDK_LAUNCH_BASENAME = %q", envMap["CMDK_LAUNCH_BASENAME"])
+	}
+	if envMap["CMDK_PANE_ID"] != "%9" {
+		t.Errorf("CMDK_PANE_ID = %q", envMap["CMDK_PANE_ID"])
+	}
+}
+
+func TestRun_ShellWithoutLaunchPathKeepsCwdAndOmitsLaunchEnv(t *testing.T) {
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	selected := item.Item{Cmd: "echo ok", MatchType: "root"}
+	var cwd string
+	var envv []string
+	mockExec := func(argv0 string, argv []string, gotEnvv []string) error {
+		var err error
+		cwd, err = os.Getwd()
+		envv = gotEnvv
+		return err
+	}
+	if err := Run(nil, selected, "", mockExec); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cwd != oldwd {
+		t.Errorf("cwd = %q, want %q", cwd, oldwd)
+	}
+	envMap := envSliceToMap(envv)
+	if _, ok := envMap["CMDK_LAUNCH_PATH"]; ok {
+		t.Error("CMDK_LAUNCH_PATH should be omitted")
+	}
+}
+
+func TestRun_SessionWindowNewShellCreatesInteractiveWindow(t *testing.T) {
+	dir := t.TempDir()
+	oldResolve := resolveSessionPlan
+	oldCreate := createResolvedSessionWindow
+	t.Cleanup(func() {
+		resolveSessionPlan = oldResolve
+		createResolvedSessionWindow = oldCreate
+	})
+
+	resolveSessionPlan = func(_ context.Context, path string, _ resolver.DisplayOptions) (resolver.Plan, error) {
+		return resolver.Plan{
+			SessionKind:            resolver.KindDirectory,
+			SessionKey:             path,
+			SessionDisplay:         path,
+			LaunchPath:             path,
+			PlannedTmuxSessionName: "planned",
+			PlannedTmuxWindowName:  filepath.Base(path),
+		}, nil
+	}
+
+	var gotOpts tmux.SessionWindowOptions
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, opts tmux.SessionWindowOptions) error {
+		gotOpts = opts
+		return nil
+	}
+
+	selected := item.Item{MatchType: "dir", LaunchMode: "session-window", NewShell: true}
+	accumulated := []item.Item{{Type: "dir", Data: map[string]string{"path": dir}}}
+	if err := RunWithConfig(accumulated, selected, "", config.DefaultConfig(), func(string, []string, []string) error {
+		t.Fatal("execFn should not be called for session-window mode")
+		return nil
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !gotOpts.NewShell {
+		t.Error("NewShell = false, want true")
+	}
+	if len(gotOpts.Command) != 0 {
+		t.Errorf("Command = %#v, want empty", gotOpts.Command)
+	}
+	if gotOpts.Name != filepath.Base(dir) {
+		t.Errorf("Name = %q, want basename", gotOpts.Name)
+	}
+	if envMap := envSliceToMap(gotOpts.Env); envMap["CMDK_LAUNCH_PATH"] != filepath.Clean(dir) {
+		t.Errorf("CMDK_LAUNCH_PATH = %q", envMap["CMDK_LAUNCH_PATH"])
+	}
+}
+
+func TestRun_SessionWindowCreatesManagedWindow(t *testing.T) {
+	dir := t.TempDir()
+	oldResolve := resolveSessionPlan
+	oldCreate := createResolvedSessionWindow
+	t.Cleanup(func() {
+		resolveSessionPlan = oldResolve
+		createResolvedSessionWindow = oldCreate
+	})
+
+	var resolvedPath string
+	resolveSessionPlan = func(_ context.Context, path string, _ resolver.DisplayOptions) (resolver.Plan, error) {
+		resolvedPath = path
+		return resolver.Plan{
+			SessionKind:            resolver.KindDirectory,
+			SessionKey:             path,
+			SessionDisplay:         path,
+			LaunchPath:             path,
+			PlannedTmuxSessionName: "planned",
+			PlannedTmuxWindowName:  filepath.Base(path),
+		}, nil
+	}
+
+	var gotPlan resolver.Plan
+	var gotOpts tmux.SessionWindowOptions
+	createResolvedSessionWindow = func(_ context.Context, plan resolver.Plan, opts tmux.SessionWindowOptions) error {
+		gotPlan = plan
+		gotOpts = opts
+		return nil
+	}
+
+	selected := item.Item{Cmd: "echo {{.launch_path}}", MatchType: "dir", WindowName: "x-{{.launch_basename}}"}
+	accumulated := []item.Item{{Type: "dir", Data: map[string]string{"path": dir}}}
+	if err := RunWithConfig(accumulated, selected, "", config.DefaultConfig(), func(string, []string, []string) error {
+		t.Fatal("execFn should not be called for session-window mode")
+		return nil
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resolvedPath != filepath.Clean(dir) || gotPlan.LaunchPath != filepath.Clean(dir) {
+		t.Fatalf("resolvedPath/gotPlan = %q/%q, want %q", resolvedPath, gotPlan.LaunchPath, filepath.Clean(dir))
+	}
+	if gotOpts.Name != "x-"+filepath.Base(dir) {
+		t.Errorf("Name = %q", gotOpts.Name)
+	}
+	wantCmd := []string{"sh", "-lc", "echo " + filepath.Clean(dir)}
+	if !reflect.DeepEqual(gotOpts.Command, wantCmd) {
+		t.Errorf("Command = %#v, want %#v", gotOpts.Command, wantCmd)
+	}
+	if !gotOpts.Switch {
+		t.Error("Switch = false, want true")
+	}
+	envMap := envSliceToMap(gotOpts.Env)
+	if envMap["CMDK_LAUNCH_PATH"] != filepath.Clean(dir) {
+		t.Errorf("CMDK_LAUNCH_PATH = %q", envMap["CMDK_LAUNCH_PATH"])
+	}
+	if envMap["CMDK_LAUNCH_BASENAME"] != filepath.Base(dir) {
+		t.Errorf("CMDK_LAUNCH_BASENAME = %q", envMap["CMDK_LAUNCH_BASENAME"])
 	}
 }
 

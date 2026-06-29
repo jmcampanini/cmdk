@@ -245,6 +245,20 @@ func TestCreateResolvedSessionWindowExistingSessionCreatesFreshNewWindow(t *test
 	}
 }
 
+func TestCreateResolvedSessionWindowPassesEnvironment(t *testing.T) {
+	plan := repoSessionWindowPlan()
+	env := []string{"CMDK_LAUNCH_PATH=" + plan.LaunchPath, "CMDK_LAUNCH_BASENAME=main"}
+	runner := newScriptedTmuxRunner(t,
+		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$2\t" + plan.SessionKey + "\n"},
+		scriptedTmuxCall{args: []string{"new-window", "-P", "-F", "#{window_id}", "-t", "$2:", "-n", "main", "-c", plan.LaunchPath, "-e", env[0], "-e", env[1]}, output: "@6\n"},
+	)
+
+	err := createWindowWithRunner(t, runner, plan, SessionWindowOptions{NewShell: true, Env: env})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCreateResolvedSessionWindowDoesNotSearchOrReuseExistingWindows(t *testing.T) {
 	plan := repoSessionWindowPlan()
 	runner := newScriptedTmuxRunner(t,

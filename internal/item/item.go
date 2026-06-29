@@ -40,16 +40,22 @@ func (s Stage) EffectiveDelimiter() string {
 }
 
 type Item struct {
-	Type         string
-	Source       string
-	Display      string
-	Value        string
-	Data         map[string]string
-	Action       ActionType
-	Cmd          string
-	Icon         string
-	Stages       []Stage
-	InlineParent *Item
+	Type          string
+	Source        string
+	Display       string
+	Value         string
+	Data          map[string]string
+	Action        ActionType
+	Cmd           string
+	Icon          string
+	MatchType     string
+	LaunchMode    string
+	LaunchPath    string
+	LaunchPathCmd string
+	WindowName    string
+	NewShell      bool
+	Stages        []Stage
+	InlineParent  *Item
 }
 
 func NewItem() Item {
