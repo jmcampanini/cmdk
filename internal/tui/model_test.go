@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"image/color"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -507,6 +508,47 @@ func TestEnterOnErrorItem_OpensDetails(t *testing.T) {
 	}
 	if len(m.list.Items()) != 2 {
 		t.Errorf("list should still have 2 items, got %d", len(m.list.Items()))
+	}
+}
+
+func TestErrorDetailsRendersStructuredDiagnostics(t *testing.T) {
+	m := newTestModel(nil, testRegistry())
+	m = setWindowSize(t, m, 80, 40)
+	m = m.openErrorDetails(item.Item{
+		Type:    "error",
+		Source:  "test-source",
+		Display: "short row text",
+		Diagnostics: &item.Diagnostics{
+			Summary: "structured summary",
+			Fields: []item.DiagnosticField{
+				{Label: "Working directory", Value: "/tmp/project"},
+				{Label: "Error", Value: "exit status 2"},
+			},
+			Sections: []item.DiagnosticSection{
+				{Title: "Rendered command", Body: "false"},
+				{Title: "stderr", Body: "boom"},
+			},
+		},
+	})
+
+	content := ansi.Strip(m.errorDetailsView())
+	for _, want := range []string{
+		"Error details",
+		"Source: test-source",
+		"structured summary",
+		"Working directory: /tmp/project",
+		"Error: exit status 2",
+		"Rendered command:",
+		"false",
+		"stderr:",
+		"boom",
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("details view should contain %q, got:\n%s", want, content)
+		}
+	}
+	if strings.Contains(content, "short row text") {
+		t.Fatalf("details view should prefer structured diagnostics over row display, got:\n%s", content)
 	}
 }
 
@@ -1804,6 +1846,115 @@ func TestPickerStage_ErrorShowsInList(t *testing.T) {
 	}
 	if !strings.Contains(it.Display, "command error") {
 		t.Errorf("error item Display = %q, want to contain 'command error'", it.Display)
+	}
+}
+
+func TestRunPickerSourceReturnsItems(t *testing.T) {
+	items, err := runPickerSource("printf 'alpha\\nbeta\\n'", 0, item.Stage{})
+	if err != nil {
+		t.Fatalf("runPickerSource error: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("items = %d, want 2", len(items))
+	}
+	if items[0].Display != "alpha" || items[1].Display != "beta" {
+		t.Fatalf("items = %#v", items)
+	}
+}
+
+func TestPickerStage_CommandErrorDetailsIncludeExecutionContext(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+
+	dir := item.Item{Type: "dir", Display: "project", Data: map[string]string{"path": "/tmp/project"}}
+	action := item.Item{
+		Type:    "action",
+		Display: "Bad Picker With Data",
+		Action:  item.ActionStaged,
+		Cmd:     "echo {{.file}}",
+		Stages: []item.Stage{
+			{
+				Type:   item.StagePicker,
+				Key:    "file",
+				Source: "printf 'partial stdout for {{.path}}\\n'; printf 'bad stderr\\n' >&2; exit 7",
+			},
+		},
+	}
+	m := NewModel([]list.Item{action}, "%1", []item.Item{dir}, testRegistry(), generator.Context{Config: testConfig()}, theme.Default(), nil, nil)
+	m = setWindowSize(t, m, 120, 40)
+
+	m = selectStagedItem(t, m)
+
+	if m.mode != viewPicker {
+		t.Fatalf("mode = %d, want viewPicker", m.mode)
+	}
+	it := m.pickerList.Items()[0].(item.Item)
+	if it.Diagnostics == nil {
+		t.Fatal("picker error item should carry structured diagnostics")
+	}
+	if it.Source != "picker" {
+		t.Fatalf("picker error Source = %q, want picker", it.Source)
+	}
+	for _, noisy := range []string{"partial stdout", "bad stderr"} {
+		if strings.Contains(it.Display, noisy) {
+			t.Fatalf("picker error row should stay concise; Display = %q", it.Display)
+		}
+	}
+
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+	if cmd != nil {
+		t.Fatal("Enter on picker error item should not quit")
+	}
+
+	content := ansi.Strip(m.errorDetailsView())
+	for _, want := range []string{
+		"Source: picker",
+		"command error: command failed: exit status 7",
+		"Stage key: file",
+		"Working directory: " + cwd,
+		"Timeout: 2s",
+		"Error: command failed: exit status 7",
+		"Data fields:",
+		"pane_id: %1",
+		"path: /tmp/project",
+		"Command template:",
+		"Rendered command:",
+		"stdout:",
+		"partial stdout for /tmp/project",
+		"stderr:",
+		"bad stderr",
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("details view should contain %q, got:\n%s", want, content)
+		}
+	}
+}
+
+func TestRunPickerSourceWithDiagnosticsCapturesFailedOutput(t *testing.T) {
+	result, failure := runPickerSourceWithDiagnostics(`printf 'partial stdout\n'; printf 'bad stderr\n' >&2; exit 7`, 0, item.Stage{})
+	if failure == nil {
+		t.Fatal("runPickerSourceWithDiagnostics should fail")
+	}
+	if len(result.Items) != 0 {
+		t.Fatalf("failed picker should not return parsed items, got %#v", result.Items)
+	}
+	if failure.Stdout != "partial stdout\n" {
+		t.Fatalf("failure stdout = %q, want partial stdout", failure.Stdout)
+	}
+	if failure.Stderr != "bad stderr\n" {
+		t.Fatalf("failure stderr = %q, want bad stderr", failure.Stderr)
+	}
+}
+
+func TestFormatCapturedCommandOutput(t *testing.T) {
+	if got := formatCapturedCommandOutput("abc"); got != "abc" {
+		t.Fatalf("output = %q, want abc", got)
+	}
+	if got := formatCapturedCommandOutput(""); got != "(empty)" {
+		t.Fatalf("empty output = %q, want (empty)", got)
 	}
 }
 
