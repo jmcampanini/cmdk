@@ -118,14 +118,36 @@ func TestAutoThemeDetection_SwitchesToLightBackground(t *testing.T) {
 	if m.theme.Name != light.Name {
 		t.Fatalf("theme = %q, want %q", m.theme.Name, light.Name)
 	}
-	if !reflect.DeepEqual(m.filterStyle.GetBackground(), light.TextboxBg) {
-		t.Errorf("filterStyle background = %v, want %v", m.filterStyle.GetBackground(), light.TextboxBg)
+	if !reflect.DeepEqual(m.filterStyle.GetBackground(), light.Tokens.InputBg) {
+		t.Errorf("filterStyle background = %v, want %v", m.filterStyle.GetBackground(), light.Tokens.InputBg)
 	}
-	if !reflect.DeepEqual(m.list.Styles.Filter.Focused.Text.GetBackground(), light.TextboxBg) {
-		t.Errorf("filter text background = %v, want %v", m.list.Styles.Filter.Focused.Text.GetBackground(), light.TextboxBg)
+	if !reflect.DeepEqual(m.list.Styles.Filter.Focused.Text.GetBackground(), light.Tokens.InputBg) {
+		t.Errorf("filter text background = %v, want %v", m.list.Styles.Filter.Focused.Text.GetBackground(), light.Tokens.InputBg)
 	}
-	if !reflect.DeepEqual(m.list.Styles.Title.GetBackground(), light.Accent) {
-		t.Errorf("title background = %v, want %v", m.list.Styles.Title.GetBackground(), light.Accent)
+	if !reflect.DeepEqual(m.list.Styles.Title.GetBackground(), light.Tokens.Accent) {
+		t.Errorf("title background = %v, want %v", m.list.Styles.Title.GetBackground(), light.Tokens.Accent)
+	}
+}
+
+func TestAutoThemeDetection_AppliesConfigThemeOverrides(t *testing.T) {
+	cfg := testConfig()
+	cfg.Theme = theme.Config{
+		theme.NameLight: {
+			InputBg: "#111111",
+			Accent:  "#222222",
+		},
+	}
+	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{Config: cfg}, theme.Default(cfg.Theme), nil, nil).
+		WithAutoThemeDetection()
+
+	result, _ := m.Update(tea.BackgroundColorMsg{Color: color.White})
+	m = result.(Model)
+
+	if !reflect.DeepEqual(m.theme.Tokens.InputBg, lipgloss.Color("#111111")) {
+		t.Errorf("theme input bg = %v, want config override", m.theme.Tokens.InputBg)
+	}
+	if !reflect.DeepEqual(m.list.Styles.Title.GetBackground(), lipgloss.Color("#222222")) {
+		t.Errorf("title background = %v, want config override", m.list.Styles.Title.GetBackground())
 	}
 }
 
@@ -193,14 +215,14 @@ func TestNewModel_UsesTextboxThemeColorForFilterInput(t *testing.T) {
 		{"header filter background", m.filterStyle.GetBackground()},
 	}
 	for _, c := range checks {
-		if !reflect.DeepEqual(c.got, dark.TextboxBg) {
-			t.Errorf("%s = %v, want %v", c.name, c.got, dark.TextboxBg)
+		if !reflect.DeepEqual(c.got, dark.Tokens.InputBg) {
+			t.Errorf("%s = %v, want %v", c.name, c.got, dark.Tokens.InputBg)
 		}
 	}
 
 	wantSeparator := lipgloss.NewStyle().
 		Inline(true).
-		Background(dark.TextboxBg).
+		Background(dark.Tokens.InputBg).
 		Render(" ")
 	if strings.Contains(m.list.FilterInput.Prompt, wantSeparator) {
 		t.Fatalf("FilterInput.Prompt should leave the separator unstyled, got %q", m.list.FilterInput.Prompt)

@@ -43,22 +43,22 @@ type itemDelegate struct {
 }
 
 func newItemDelegate(t theme.Theme) itemDelegate {
-	unknown := iconInfo{iconUnknown, t.TypeUnknown}
+	unknown := iconInfo{icon: iconUnknown, color: t.Roles.UnknownIcon}
 	return itemDelegate{
 		icons: map[string]iconInfo{
-			"window":  {iconWindow, t.TypeWindow},
-			"dir":     {iconDir, t.TypeDir},
-			"action":  {iconAction, t.TypeAction},
-			"session": {iconSession, t.TypeSession},
+			"window":  {icon: iconWindow, color: t.Roles.WindowIcon},
+			"dir":     {icon: iconDir, color: t.Roles.DirIcon},
+			"action":  {icon: iconAction, color: t.Roles.ActionIcon},
+			"session": {icon: iconSession, color: t.Roles.SessionIcon},
 			"pick":    unknown,
-			"error":   {iconError, t.Error},
-			"loading": {iconLoading, t.TypeUnknown},
+			"error":   {icon: iconError, color: t.Roles.ErrorIcon},
+			"loading": {icon: iconLoading, color: t.Roles.LoadingIcon},
 		},
 		unknown:     unknown,
-		textFg:      t.Text,
-		selBg:       t.Surface1,
-		bellColor:   t.Bell,
-		filterMatch: lipgloss.NewStyle().Background(t.MatchHighlight),
+		textFg:      t.Tokens.Text,
+		selBg:       t.Tokens.SelectedBg,
+		bellColor:   t.Roles.BellIcon,
+		filterMatch: lipgloss.NewStyle().Background(t.Tokens.MatchBg),
 	}
 }
 

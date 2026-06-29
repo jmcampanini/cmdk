@@ -44,8 +44,12 @@ func init() {
 
 func newRootCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:           "cmdk",
-		Short:         "Keyboard-driven tmux launcher",
+		Use:   "cmdk",
+		Short: "Keyboard-driven tmux launcher",
+		Long: `Keyboard-driven tmux launcher.
+
+Log file:
+  $HOME/.local/state/cmdk/cmdk.log`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE:          runRootCommand,
@@ -62,7 +66,6 @@ func newRootCommand() *cobra.Command {
 		newDocsCommand(),
 		newExitCodesCommand(),
 		newIconsCommand(),
-		newLogsCommand(),
 		newSessionCommand(),
 		newShortenCommand(),
 	)
@@ -149,15 +152,9 @@ func runRootCommand(cmd *cobra.Command, _ []string) error {
 		listItems := item.GroupAndOrder(items, cfg.Behavior.BellToTop)
 		stop()
 
-		autoDetectTheme := themeFlag == ""
-		stop = tr.Begin("theme")
-		t, err := theme.Resolve(themeFlag)
-		stop()
+		t, _, err := resolveTheme(tr, cfg)
 		if err != nil {
 			return err
-		}
-		if autoDetectTheme {
-			log.Debug("theme auto fallback", "theme", t.Name)
 		}
 
 		stop = tr.Begin("model")
@@ -209,15 +206,9 @@ func runRootCommand(cmd *cobra.Command, _ []string) error {
 	listItems := item.GroupAndOrder(initialAll, cfg.Behavior.BellToTop)
 	stop()
 
-	autoDetectTheme := themeFlag == ""
-	stop = tr.Begin("theme")
-	t, err := theme.Resolve(themeFlag)
-	stop()
+	t, autoDetectTheme, err := resolveTheme(tr, cfg)
 	if err != nil {
 		return err
-	}
-	if autoDetectTheme {
-		log.Debug("theme auto fallback", "theme", t.Name)
 	}
 
 	tuiAsync := make([]tui.AsyncSource, len(asyncSources))
@@ -273,6 +264,20 @@ func resolveConfigPath() (string, error) {
 		return configPath, nil
 	}
 	return config.DefaultPath(), nil
+}
+
+func resolveTheme(tr trace.Tracer, cfg config.Config) (theme.Theme, bool, error) {
+	autoDetectTheme := themeFlag == ""
+	stop := tr.Begin("theme")
+	t, err := theme.Resolve(themeFlag, cfg.Theme)
+	stop()
+	if err != nil {
+		return theme.Theme{}, false, err
+	}
+	if autoDetectTheme {
+		log.Debug("theme auto fallback", "theme", t.Name)
+	}
+	return t, autoDetectTheme, nil
 }
 
 func traceSource(tr trace.Tracer, spanName string, src generator.Source) generator.Source {

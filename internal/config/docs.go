@@ -19,6 +19,12 @@ type SectionDoc struct {
 	Example     string
 }
 
+const themeColorValidation = "optional; must be #RRGGBB hex when set"
+
+func themeColorField(name string, description string) FieldDoc {
+	return FieldDoc{Name: name, Type: "string", Description: description, Validation: themeColorValidation}
+}
+
 func ConfigDocs() []SectionDoc {
 	reservedStageKeyValidation := "cannot be empty; must be unique within action; " +
 		"cannot be reserved (" + strings.Join(reservedStageKeys, ", ") +
@@ -77,6 +83,35 @@ func ConfigDocs() []SectionDoc {
 				{Name: "inline_actions", Type: "bool", Description: "Expand directory actions inline in the root list instead of requiring drill-down. Each directory gets one entry per action, displayed as \"path » action\". Default: false."},
 			},
 			Example: "[behavior]\nauto_select_single = false\nbell_to_top = true\nwrap_list = false\nstart_in_filter = true\ninline_actions = false",
+		},
+		{
+			Name:        "theme",
+			Description: "Per-mode color overrides. cmdk starts from the active built-in theme\n  (light = Catppuccin Latte, dark = Catppuccin Frappe) and applies\n  [theme.light] or [theme.dark] overrides. Empty --theme auto-detects\n  light/dark from the terminal background when supported. cmdk does not\n  paint a full-screen background; the terminal/tmux popup background remains visible.\n\n  To apply an arbitrary palette:\n  1. Pick the table for the palette appearance: [theme.dark] for dark\n     palettes or [theme.light] for light palettes. Pass --theme=dark or\n     --theme=light when auto-detection is unreliable.\n  2. Fill the semantic tokens from the source palette: accent = primary\n     accent; accent_text = a base/background color that contrasts with accent;\n     cursor = cursor or secondary accent; text = main foreground; muted =\n     comments/overlay text; subtle = divider or dim surface; selected_bg =\n     selection surface; input_bg = input/background surface; match_bg =\n     low-contrast highlight, often a surface tinted toward accent; info = blue;\n     success = green; secondary = teal/cyan; warning = yellow/orange; error = red.\n  3. Leave roles unset unless a specific icon needs to differ. Roles derive\n     from semantic tokens: window <- accent, dir <- info, action <- success,\n     session <- secondary, unknown/loading <- muted, bell <- warning, error <- error.\n  4. Use #RRGGBB hex values only and validate with\n     cmdk config --validate /path/to/config.toml.",
+			Fields: []FieldDoc{
+				themeColorField("accent", "Primary accent for the cmdk badge. Window icons derive from this unless roles.window_icon is set."),
+				themeColorField("accent_text", "Text color used on top of accent backgrounds, such as the cmdk badge."),
+				themeColorField("cursor", "Filter input cursor color."),
+				themeColorField("text", "Primary item and active-filter text color."),
+				themeColorField("muted", "Muted/status text color. Unknown, loading, and picker icons derive from this unless role overrides are set."),
+				themeColorField("subtle", "Subtle divider, count, and inactive pagination color."),
+				themeColorField("selected_bg", "Selected row background color."),
+				themeColorField("input_bg", "Filter input background color."),
+				themeColorField("match_bg", "Background color for fuzzy-match highlights."),
+				themeColorField("info", "Informational color. Directory icons derive from this unless roles.dir_icon is set."),
+				themeColorField("success", "Success/action color. Action icons derive from this unless roles.action_icon is set."),
+				themeColorField("secondary", "Secondary accent. Session icons derive from this unless roles.session_icon is set."),
+				themeColorField("warning", "Warning color. Bell icons derive from this unless roles.bell_icon is set."),
+				themeColorField("error", "Error text color. Error icons derive from this unless roles.error_icon is set."),
+				themeColorField("roles.window_icon", "Optional explicit color for tmux window icons."),
+				themeColorField("roles.dir_icon", "Optional explicit color for directory icons."),
+				themeColorField("roles.action_icon", "Optional explicit color for action icons."),
+				themeColorField("roles.session_icon", "Optional explicit color for tmux session icons."),
+				themeColorField("roles.unknown_icon", "Optional explicit color for unknown item and picker icons."),
+				themeColorField("roles.loading_icon", "Optional explicit color for loading placeholder icons."),
+				themeColorField("roles.bell_icon", "Optional explicit color for tmux bell icons."),
+				themeColorField("roles.error_icon", "Optional explicit color for error item icons."),
+			},
+			Example: "[theme.dark]\n# Catppuccin Frappe-style semantic mapping. For another dark theme,\n# replace these with that palette's equivalent slots.\naccent = \"#ca9ee6\"      # mauve / primary accent\naccent_text = \"#303446\" # base/background that contrasts with accent\ncursor = \"#babbf1\"      # lavender / cursor\ntext = \"#c6d0f5\"        # main foreground\nmuted = \"#838ba7\"       # comments / overlay text\nsubtle = \"#626880\"      # divider / dim surface\nselected_bg = \"#51576d\" # selected row surface\ninput_bg = \"#414559\"    # input/background surface\nmatch_bg = \"#5b4b8a\"    # low-contrast accent-tinted highlight\ninfo = \"#8caaee\"        # blue\nsuccess = \"#a6d189\"     # green\nsecondary = \"#81c8be\"   # teal/cyan\nwarning = \"#e5c890\"     # yellow/orange\nerror = \"#e78284\"       # red\n\n# Optional: override roles only when an icon should break derivation.\n[theme.dark.roles]\n# session_icon = \"#81c8be\"",
 		},
 		{
 			Name:        "timeout",
