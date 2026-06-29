@@ -19,6 +19,12 @@ type SectionDoc struct {
 	Example     string
 }
 
+const themeColorValidation = "optional; must be #RRGGBB hex when set"
+
+func themeColorField(name string, description string) FieldDoc {
+	return FieldDoc{Name: name, Type: "string", Description: description, Validation: themeColorValidation}
+}
+
 func ConfigDocs() []SectionDoc {
 	reservedStageKeyValidation := "cannot be empty; must be unique within action; " +
 		"cannot be reserved (" + strings.Join(reservedStageKeys, ", ") +
@@ -82,28 +88,28 @@ func ConfigDocs() []SectionDoc {
 			Name:        "theme",
 			Description: "Per-mode color overrides. cmdk starts from the active built-in theme\n  (light = Catppuccin Latte, dark = Catppuccin Frappe) and applies\n  [theme.light] or [theme.dark] overrides. Empty --theme auto-detects\n  light/dark from the terminal background when supported. cmdk does not\n  paint a full-screen background; the terminal/tmux popup background remains visible.",
 			Fields: []FieldDoc{
-				{Name: "accent", Type: "string", Description: "Primary accent for the cmdk badge. Window icons derive from this unless roles.window_icon is set.", Validation: "optional; must be #RRGGBB hex when set"},
-				{Name: "accent_text", Type: "string", Description: "Text color used on top of accent backgrounds, such as the cmdk badge.", Validation: "optional; must be #RRGGBB hex when set"},
-				{Name: "cursor", Type: "string", Description: "Filter input cursor color.", Validation: "optional; must be #RRGGBB hex when set"},
-				{Name: "text", Type: "string", Description: "Primary item and active-filter text color.", Validation: "optional; must be #RRGGBB hex when set"},
-				{Name: "muted", Type: "string", Description: "Muted/status text color. Unknown, loading, and picker icons derive from this unless role overrides are set.", Validation: "optional; must be #RRGGBB hex when set"},
-				{Name: "subtle", Type: "string", Description: "Subtle divider, count, and inactive pagination color.", Validation: "optional; must be #RRGGBB hex when set"},
-				{Name: "selected_bg", Type: "string", Description: "Selected row background color.", Validation: "optional; must be #RRGGBB hex when set"},
-				{Name: "input_bg", Type: "string", Description: "Filter input background color.", Validation: "optional; must be #RRGGBB hex when set"},
-				{Name: "match_bg", Type: "string", Description: "Background color for fuzzy-match highlights.", Validation: "optional; must be #RRGGBB hex when set"},
-				{Name: "info", Type: "string", Description: "Informational color. Directory icons derive from this unless roles.dir_icon is set.", Validation: "optional; must be #RRGGBB hex when set"},
-				{Name: "success", Type: "string", Description: "Success/action color. Action icons derive from this unless roles.action_icon is set.", Validation: "optional; must be #RRGGBB hex when set"},
-				{Name: "secondary", Type: "string", Description: "Secondary accent. Session icons derive from this unless roles.session_icon is set.", Validation: "optional; must be #RRGGBB hex when set"},
-				{Name: "warning", Type: "string", Description: "Warning color. Bell icons derive from this unless roles.bell_icon is set.", Validation: "optional; must be #RRGGBB hex when set"},
-				{Name: "error", Type: "string", Description: "Error text color. Error icons derive from this unless roles.error_icon is set.", Validation: "optional; must be #RRGGBB hex when set"},
-				{Name: "roles.window_icon", Type: "string", Description: "Optional explicit color for tmux window icons.", Validation: "optional; must be #RRGGBB hex when set"},
-				{Name: "roles.dir_icon", Type: "string", Description: "Optional explicit color for directory icons.", Validation: "optional; must be #RRGGBB hex when set"},
-				{Name: "roles.action_icon", Type: "string", Description: "Optional explicit color for action icons.", Validation: "optional; must be #RRGGBB hex when set"},
-				{Name: "roles.session_icon", Type: "string", Description: "Optional explicit color for tmux session icons.", Validation: "optional; must be #RRGGBB hex when set"},
-				{Name: "roles.unknown_icon", Type: "string", Description: "Optional explicit color for unknown item and picker icons.", Validation: "optional; must be #RRGGBB hex when set"},
-				{Name: "roles.loading_icon", Type: "string", Description: "Optional explicit color for loading placeholder icons.", Validation: "optional; must be #RRGGBB hex when set"},
-				{Name: "roles.bell_icon", Type: "string", Description: "Optional explicit color for tmux bell icons.", Validation: "optional; must be #RRGGBB hex when set"},
-				{Name: "roles.error_icon", Type: "string", Description: "Optional explicit color for error item icons.", Validation: "optional; must be #RRGGBB hex when set"},
+				themeColorField("accent", "Primary accent for the cmdk badge. Window icons derive from this unless roles.window_icon is set."),
+				themeColorField("accent_text", "Text color used on top of accent backgrounds, such as the cmdk badge."),
+				themeColorField("cursor", "Filter input cursor color."),
+				themeColorField("text", "Primary item and active-filter text color."),
+				themeColorField("muted", "Muted/status text color. Unknown, loading, and picker icons derive from this unless role overrides are set."),
+				themeColorField("subtle", "Subtle divider, count, and inactive pagination color."),
+				themeColorField("selected_bg", "Selected row background color."),
+				themeColorField("input_bg", "Filter input background color."),
+				themeColorField("match_bg", "Background color for fuzzy-match highlights."),
+				themeColorField("info", "Informational color. Directory icons derive from this unless roles.dir_icon is set."),
+				themeColorField("success", "Success/action color. Action icons derive from this unless roles.action_icon is set."),
+				themeColorField("secondary", "Secondary accent. Session icons derive from this unless roles.session_icon is set."),
+				themeColorField("warning", "Warning color. Bell icons derive from this unless roles.bell_icon is set."),
+				themeColorField("error", "Error text color. Error icons derive from this unless roles.error_icon is set."),
+				themeColorField("roles.window_icon", "Optional explicit color for tmux window icons."),
+				themeColorField("roles.dir_icon", "Optional explicit color for directory icons."),
+				themeColorField("roles.action_icon", "Optional explicit color for action icons."),
+				themeColorField("roles.session_icon", "Optional explicit color for tmux session icons."),
+				themeColorField("roles.unknown_icon", "Optional explicit color for unknown item and picker icons."),
+				themeColorField("roles.loading_icon", "Optional explicit color for loading placeholder icons."),
+				themeColorField("roles.bell_icon", "Optional explicit color for tmux bell icons."),
+				themeColorField("roles.error_icon", "Optional explicit color for error item icons."),
 			},
 			Example: "[theme.dark]\naccent = \"#ca9ee6\"\nmatch_bg = \"#5b4b8a\"\n\n[theme.dark.roles]\nsession_icon = \"#81c8be\"\n\n[theme.light]\naccent = \"#8839ef\"",
 		},

@@ -71,10 +71,6 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 		accumulated:      accumulated,
 		registry:         registry,
 		ctx:              ctx,
-		stackStyle:       lipgloss.NewStyle().Foreground(t.Tokens.Muted),
-		filterStyle:      lipgloss.NewStyle().Inline(true).Background(t.Tokens.InputBg),
-		errorStyle:       lipgloss.NewStyle().Foreground(t.Tokens.Error),
-		theme:            t,
 		autoSelectSingle: beh.AutoSelectSingle,
 		baseItems:        baseItems,
 		asyncSources:     asyncSources,
@@ -84,6 +80,7 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 		startInFilter:    beh.StartInFilter,
 		inline:           beh.InlineActions,
 	}
+	m.setThemeStyles(t)
 	if beh.InlineActions && baseItems != nil {
 		m.list.SetItems(m.buildRootItems())
 	}
@@ -267,15 +264,19 @@ func (m Model) handleBackgroundColor(msg tea.BackgroundColorMsg) Model {
 }
 
 func (m Model) applyTheme(t theme.Theme) Model {
-	m.theme = t
-	m.stackStyle = lipgloss.NewStyle().Foreground(t.Tokens.Muted)
-	m.filterStyle = lipgloss.NewStyle().Inline(true).Background(t.Tokens.InputBg)
-	m.errorStyle = lipgloss.NewStyle().Foreground(t.Tokens.Error)
+	m.setThemeStyles(t)
 	applyFilterListTheme(&m.list, t)
 	if m.mode == viewPicker || len(m.pickerList.Items()) > 0 {
 		applyFilterListTheme(&m.pickerList, t)
 	}
 	return m
+}
+
+func (m *Model) setThemeStyles(t theme.Theme) {
+	m.theme = t
+	m.stackStyle = lipgloss.NewStyle().Foreground(t.Tokens.Muted)
+	m.filterStyle = lipgloss.NewStyle().Inline(true).Background(t.Tokens.InputBg)
+	m.errorStyle = lipgloss.NewStyle().Foreground(t.Tokens.Error)
 }
 
 func applyFilterListTheme(l *list.Model, t theme.Theme) {

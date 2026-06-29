@@ -43,16 +43,16 @@ type itemDelegate struct {
 }
 
 func newItemDelegate(t theme.Theme) itemDelegate {
-	unknown := iconInfo{iconUnknown, t.Roles.UnknownIcon}
+	unknown := iconInfo{icon: iconUnknown, color: t.Roles.UnknownIcon}
 	return itemDelegate{
 		icons: map[string]iconInfo{
-			"window":  {iconWindow, t.Roles.WindowIcon},
-			"dir":     {iconDir, t.Roles.DirIcon},
-			"action":  {iconAction, t.Roles.ActionIcon},
-			"session": {iconSession, t.Roles.SessionIcon},
+			"window":  {icon: iconWindow, color: t.Roles.WindowIcon},
+			"dir":     {icon: iconDir, color: t.Roles.DirIcon},
+			"action":  {icon: iconAction, color: t.Roles.ActionIcon},
+			"session": {icon: iconSession, color: t.Roles.SessionIcon},
 			"pick":    unknown,
-			"error":   {iconError, t.Roles.ErrorIcon},
-			"loading": {iconLoading, t.Roles.LoadingIcon},
+			"error":   {icon: iconError, color: t.Roles.ErrorIcon},
+			"loading": {icon: iconLoading, color: t.Roles.LoadingIcon},
 		},
 		unknown:     unknown,
 		textFg:      t.Tokens.Text,

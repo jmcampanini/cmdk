@@ -110,8 +110,8 @@ func TestValidate_NegativeMinScore(t *testing.T) {
 
 func TestValidate_ThemeOverrides(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Theme = map[string]theme.ModeConfig{
-		"dark": {
+	cfg.Theme = theme.Config{
+		theme.NameDark: {
 			Accent: "#ca9ee6",
 			Roles:  theme.RoleConfig{SessionIcon: "#81c8be"},
 		},
@@ -123,7 +123,7 @@ func TestValidate_ThemeOverrides(t *testing.T) {
 
 func TestValidate_InvalidThemeMode(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Theme = map[string]theme.ModeConfig{"frappe": {Accent: "#ca9ee6"}}
+	cfg.Theme = theme.Config{"frappe": {Accent: "#ca9ee6"}}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected error for invalid theme mode")
 	}
@@ -131,7 +131,7 @@ func TestValidate_InvalidThemeMode(t *testing.T) {
 
 func TestValidate_InvalidThemeColor(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Theme = map[string]theme.ModeConfig{"dark": {Accent: "ca9ee6"}}
+	cfg.Theme = theme.Config{theme.NameDark: {Accent: "ca9ee6"}}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected error for invalid theme color")
 	}
@@ -635,11 +635,11 @@ session_icon = "#81c8be"
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.Theme["dark"].Accent != "#ca9ee6" {
-		t.Errorf("theme.dark.accent = %q, want #ca9ee6", cfg.Theme["dark"].Accent)
+	if cfg.Theme[theme.NameDark].Accent != "#ca9ee6" {
+		t.Errorf("theme.dark.accent = %q, want #ca9ee6", cfg.Theme[theme.NameDark].Accent)
 	}
-	if cfg.Theme["dark"].Roles.SessionIcon != "#81c8be" {
-		t.Errorf("theme.dark.roles.session_icon = %q, want #81c8be", cfg.Theme["dark"].Roles.SessionIcon)
+	if cfg.Theme[theme.NameDark].Roles.SessionIcon != "#81c8be" {
+		t.Errorf("theme.dark.roles.session_icon = %q, want #81c8be", cfg.Theme[theme.NameDark].Roles.SessionIcon)
 	}
 }
 
