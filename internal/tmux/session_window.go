@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 	"unicode"
 
@@ -47,13 +48,14 @@ func CreateResolvedSessionWindow(ctx context.Context, plan resolver.Plan, opts S
 	return sessionWindowManager{runner: execTmuxRunner{}}.createResolvedWindow(ctx, plan, opts)
 }
 
+// AttachResolvedSession attaches the current terminal to the cmdk-managed tmux
+// session described by plan, creating that managed session when it is missing.
+func AttachResolvedSession(ctx context.Context, plan resolver.Plan) error {
+	return sessionWindowManager{runner: execTmuxRunner{}}.attachResolvedSession(ctx, plan)
+}
+
 func (m sessionWindowManager) createResolvedWindow(ctx context.Context, plan resolver.Plan, opts SessionWindowOptions) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if m.runner == nil {
-		m.runner = execTmuxRunner{}
-	}
+	ctx = m.ensureDefaults(ctx)
 
 	if err := validateSessionPlan(plan); err != nil {
 		return err
@@ -71,18 +73,12 @@ func (m sessionWindowManager) createResolvedWindow(ctx context.Context, plan res
 	shellCommand := shellCommandFromArgv(opts.Command)
 	var windowID string
 	if sessionID == "" {
-		sessionID, windowID, err = m.createSession(ctx, plan, windowName, shellCommand)
-		if err != nil {
-			return err
-		}
-		if err := m.setSessionMetadata(ctx, sessionID, plan); err != nil {
-			return err
-		}
+		sessionID, windowID, err = m.createManagedSession(ctx, plan, windowName, shellCommand)
 	} else {
 		windowID, err = m.createWindow(ctx, sessionID, plan.LaunchPath, windowName, shellCommand)
-		if err != nil {
-			return err
-		}
+	}
+	if err != nil {
+		return err
 	}
 
 	if opts.Switch {
@@ -91,8 +87,43 @@ func (m sessionWindowManager) createResolvedWindow(ctx context.Context, plan res
 	return nil
 }
 
+func (m sessionWindowManager) attachResolvedSession(ctx context.Context, plan resolver.Plan) error {
+	ctx = m.ensureDefaults(ctx)
+
+	if err := validateSessionPlan(plan); err != nil {
+		return err
+	}
+
+	sessionID, err := m.findAttachTargetSession(ctx, plan.SessionKey)
+	if err != nil {
+		return err
+	}
+	if sessionID == "" {
+		sessionID, _, err = m.createManagedSession(ctx, plan, plan.PlannedTmuxWindowName, "")
+		if err != nil {
+			return err
+		}
+	}
+
+	return m.attachSession(ctx, sessionID)
+}
+
+func (m *sessionWindowManager) ensureDefaults(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if m.runner == nil {
+		m.runner = execTmuxRunner{}
+	}
+	return ctx
+}
+
 func (m sessionWindowManager) output(ctx context.Context, args ...string) ([]byte, error) {
 	return m.runner.Output(ctx, args...)
+}
+
+func (m sessionWindowManager) run(ctx context.Context, args ...string) error {
+	return m.runner.Run(ctx, args...)
 }
 
 func sessionWindowName(plan resolver.Plan, opts SessionWindowOptions) string {
@@ -140,6 +171,24 @@ func containsControl(s string) bool {
 	return strings.ContainsFunc(s, unicode.IsControl)
 }
 
+func isTmuxListSessionsUnavailable(err error) bool {
+	// tmux list-sessions exits 1 both when no server is running and when the
+	// socket path is absent; attach recovers by trying to create the session.
+	var exitErr *exec.ExitError
+	return errors.As(err, &exitErr) && exitErr.ExitCode() == 1
+}
+
+func (m sessionWindowManager) findAttachTargetSession(ctx context.Context, sessionKey string) (string, error) {
+	sessionID, err := m.findManagedSession(ctx, sessionKey)
+	if err == nil {
+		return sessionID, nil
+	}
+	if isTmuxListSessionsUnavailable(err) {
+		return "", nil
+	}
+	return "", err
+}
+
 func (m sessionWindowManager) findManagedSession(ctx context.Context, sessionKey string) (string, error) {
 	out, err := m.output(ctx, "list-sessions", "-F", cmdkSessionKeyListFormat)
 	if err != nil {
@@ -183,6 +232,17 @@ func parseManagedSessionRows(output string) ([]managedSessionRow, error) {
 		rows = append(rows, managedSessionRow{sessionID: fields[0], sessionKey: fields[1]})
 	}
 	return rows, nil
+}
+
+func (m sessionWindowManager) createManagedSession(ctx context.Context, plan resolver.Plan, windowName, shellCommand string) (string, string, error) {
+	sessionID, windowID, err := m.createSession(ctx, plan, windowName, shellCommand)
+	if err != nil {
+		return "", "", err
+	}
+	if err := m.setSessionMetadata(ctx, sessionID, plan); err != nil {
+		return "", "", err
+	}
+	return sessionID, windowID, nil
 }
 
 func (m sessionWindowManager) createSession(ctx context.Context, plan resolver.Plan, windowName, shellCommand string) (string, string, error) {
@@ -287,4 +347,8 @@ func shellQuoteArg(arg string) string {
 func (m sessionWindowManager) switchClient(ctx context.Context, sessionID, windowID string) error {
 	_, err := m.output(ctx, "switch-client", "-t", sessionID+":"+windowID)
 	return err
+}
+
+func (m sessionWindowManager) attachSession(ctx context.Context, sessionID string) error {
+	return m.run(ctx, "attach-session", "-t", sessionID)
 }

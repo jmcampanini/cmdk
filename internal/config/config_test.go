@@ -42,6 +42,25 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Behavior.InlineActions {
 		t.Error("Behavior.InlineActions = true, want false")
 	}
+	if cfg.Startup.Path != "" {
+		t.Errorf("Startup.Path = %q, want empty", cfg.Startup.Path)
+	}
+}
+
+func TestValidate_StartupPathAllowsNormalPath(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Startup.Path = "~/Code/project"
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidate_StartupPathRejectsControlCharacters(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Startup.Path = "/tmp/bad\npath"
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected error for startup path with control character")
+	}
 }
 
 func TestValidate_Valid(t *testing.T) {

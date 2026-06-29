@@ -57,6 +57,7 @@ func newRootCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&timingsFlag, "timings", false, "measure and print startup phase durations")
 	cmd.Flags().BoolVar(&timingsJSON, "timings-json", false, "output timings as JSON (implies --timings)")
 	cmd.AddCommand(
+		newAttachCommand(),
 		newConfigCommand(),
 		newDocsCommand(),
 		newExitCodesCommand(),
