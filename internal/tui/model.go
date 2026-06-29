@@ -28,36 +28,40 @@ const (
 	viewList viewMode = iota
 	viewPrompt
 	viewPicker
+	viewErrorDetails
 )
 
 type Model struct {
-	list             list.Model
-	paneID           string
-	accumulated      []item.Item
-	selected         *item.Item
-	registry         *generator.Registry
-	ctx              generator.Context
-	stackStyle       lipgloss.Style
-	filterStyle      lipgloss.Style
-	winWidth         int
-	winHeight        int
-	mode             viewMode
-	stageInput       textinput.Model
-	stageLabel       string
-	stageError       string
-	errorStyle       lipgloss.Style
-	pickerList       list.Model
-	pickerKey        string
-	theme            theme.Theme
-	autoSelectSingle bool
-	baseItems        []item.Item
-	asyncSources     []AsyncSource
-	asyncResults     [][]item.Item
-	bellToTop        bool
-	wrapList         bool
-	startInFilter    bool
-	autoDetectTheme  bool
-	inline           bool
+	list              list.Model
+	paneID            string
+	accumulated       []item.Item
+	selected          *item.Item
+	registry          *generator.Registry
+	ctx               generator.Context
+	stackStyle        lipgloss.Style
+	filterStyle       lipgloss.Style
+	winWidth          int
+	winHeight         int
+	mode              viewMode
+	stageInput        textinput.Model
+	stageLabel        string
+	stageError        string
+	errorStyle        lipgloss.Style
+	pickerList        list.Model
+	pickerKey         string
+	errorReturnMode   viewMode
+	errorDetailItem   item.Item
+	errorDetailScroll int
+	theme             theme.Theme
+	autoSelectSingle  bool
+	baseItems         []item.Item
+	asyncSources      []AsyncSource
+	asyncResults      [][]item.Item
+	bellToTop         bool
+	wrapList          bool
+	startInFilter     bool
+	autoDetectTheme   bool
+	inline            bool
 }
 
 const horizontalPadding = 1
@@ -222,9 +226,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if ws, ok := msg.(tea.WindowSizeMsg); ok {
 		m.winWidth = ws.Width
 		m.winHeight = ws.Height
-		m.list.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
-		if m.mode == viewPicker {
-			m.pickerList.SetSize(m.winWidth, max(m.winHeight-m.overheadHeight(), 1))
+		listHeight := max(m.winHeight-m.overheadHeight(), 1)
+		m.list.SetSize(m.winWidth, listHeight)
+		if m.mode == viewPicker || m.errorReturnMode == viewPicker || len(m.pickerList.Items()) > 0 {
+			m.pickerList.SetSize(m.winWidth, listHeight)
+		}
+		if m.mode == viewErrorDetails {
+			m = m.clampErrorDetailScroll()
 		}
 		return m, nil
 	}
@@ -242,6 +250,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updatePrompt(msg)
 	case viewPicker:
 		return m.updatePicker(msg)
+	case viewErrorDetails:
+		return m.updateErrorDetails(msg)
 	}
 
 	if key, ok := msg.(tea.KeyPressMsg); ok {
@@ -292,7 +302,10 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if key == "enter" {
 		wasFiltering := refreshActiveFilter(&m.list)
 		sel, ok := selectedListItem(m.list)
-		if ok && sel.Type != "error" && sel.Type != "loading" {
+		if ok && sel.Type == "error" {
+			return m.openErrorDetails(sel), nil
+		}
+		if ok && sel.Type != "loading" {
 			// Reconstruct the accumulated stack as if the user drilled down,
 			// so template variables (e.g. {{.path}}) resolve correctly.
 			if sel.InlineParent != nil {
@@ -386,7 +399,10 @@ func (m Model) updatePicker(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if key == "enter" {
 		wasFiltering := refreshActiveFilter(&m.pickerList)
 		sel, ok := selectedListItem(m.pickerList)
-		if ok && sel.Type != "error" {
+		if ok && sel.Type == "error" {
+			return m.openErrorDetails(sel), nil
+		}
+		if ok {
 			return m.pushStageResult(m.pickerKey, sel.Display, sel.Value)
 		}
 		if wasFiltering {
@@ -519,6 +535,65 @@ func refreshActiveFilter(l *list.Model) bool {
 func selectedListItem(l list.Model) (item.Item, bool) {
 	sel, ok := l.SelectedItem().(item.Item)
 	return sel, ok
+}
+
+func (m Model) openErrorDetails(it item.Item) Model {
+	if m.mode == viewPicker {
+		m.errorReturnMode = viewPicker
+	} else {
+		m.errorReturnMode = viewList
+	}
+	m.errorDetailItem = it
+	m.errorDetailScroll = 0
+	m.mode = viewErrorDetails
+	return m.clampErrorDetailScroll()
+}
+
+func (m Model) updateErrorDetails(msg tea.Msg) (tea.Model, tea.Cmd) {
+	key, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		return m, nil
+	}
+
+	pageSize := max(m.errorDetailsBodyHeight(), 1)
+	switch key.String() {
+	case "esc":
+		if m.errorReturnMode == viewPicker {
+			m.mode = viewPicker
+		} else {
+			m.mode = viewList
+		}
+		return m, nil
+	case "ctrl+c":
+		return m, tea.Quit
+	case "down", "j":
+		m.errorDetailScroll++
+	case "up", "k":
+		m.errorDetailScroll--
+	case "pgdown", "space", " ":
+		m.errorDetailScroll += pageSize
+	case "pgup":
+		m.errorDetailScroll -= pageSize
+	case "home":
+		m.errorDetailScroll = 0
+	case "end":
+		m.errorDetailScroll = m.maxErrorDetailScroll()
+	}
+
+	return m.clampErrorDetailScroll(), nil
+}
+
+func (m Model) maxErrorDetailScroll() int {
+	bodyHeight := m.errorDetailsBodyHeight()
+	if bodyHeight <= 0 {
+		return 0
+	}
+	return max(len(m.errorDetailsLines())-bodyHeight, 0)
+}
+
+func (m Model) clampErrorDetailScroll() Model {
+	m.errorDetailScroll = min(max(m.errorDetailScroll, 0), m.maxErrorDetailScroll())
+	return m
 }
 
 // findActionIndex returns the index of the last ActionStaged item in the accumulated stack.
@@ -864,7 +939,91 @@ func (m Model) promptView() string {
 	return view
 }
 
+func (m Model) errorDetailsWindowWidth() int {
+	width := m.winWidth
+	if width <= 0 {
+		if m.errorReturnMode == viewPicker {
+			width = m.pickerList.Width()
+		} else {
+			width = m.list.Width()
+		}
+	}
+	if width <= 0 {
+		width = 80
+	}
+	return width
+}
+
+func (m Model) errorDetailsWindowHeight() int {
+	height := m.winHeight
+	if height <= 0 {
+		if m.errorReturnMode == viewPicker {
+			height = m.pickerList.Height() + m.overheadHeight()
+		} else {
+			height = m.list.Height() + m.overheadHeight()
+		}
+	}
+	if height <= 0 {
+		height = 24
+	}
+	return height
+}
+
+func (m Model) errorDetailsContentWidth() int {
+	return max(m.errorDetailsWindowWidth()-2*horizontalPadding, 1)
+}
+
+func (m Model) errorDetailsFrameHeight() int {
+	height := 4 // header, blank before body, blank before footer, footer
+	if m.errorDetailItem.Source != "" {
+		height++
+	}
+	return height
+}
+
+func (m Model) errorDetailsBodyHeight() int {
+	return max(m.errorDetailsWindowHeight()-m.errorDetailsFrameHeight(), 0)
+}
+
+func (m Model) errorDetailsLines() []string {
+	wrapped := ansi.Wrap(m.errorDetailItem.Display, m.errorDetailsContentWidth(), " ")
+	if wrapped == "" {
+		return []string{""}
+	}
+	return strings.Split(wrapped, "\n")
+}
+
+func (m Model) errorDetailsView() string {
+	pad := strings.Repeat(" ", horizontalPadding)
+	lines := m.errorDetailsLines()
+	bodyHeight := m.errorDetailsBodyHeight()
+	maxScroll := m.maxErrorDetailScroll()
+	scroll := min(max(m.errorDetailScroll, 0), maxScroll)
+	end := min(scroll+bodyHeight, len(lines))
+
+	var b strings.Builder
+	b.WriteString(pad + m.errorStyle.Render("Error details") + "\n")
+	if m.errorDetailItem.Source != "" {
+		b.WriteString(pad + m.stackStyle.Render("Source: "+m.errorDetailItem.Source) + "\n")
+	}
+	b.WriteByte('\n')
+	for _, line := range lines[scroll:end] {
+		b.WriteString(pad)
+		if line != "" {
+			b.WriteString(m.errorStyle.Render(line))
+		}
+		b.WriteByte('\n')
+	}
+	b.WriteByte('\n')
+	b.WriteString(pad + m.stackStyle.Render("Esc back • ↑/↓ scroll • PgUp/PgDn page"))
+	return b.String()
+}
+
 func (m Model) View() tea.View {
+	if m.mode == viewErrorDetails {
+		return tea.NewView(m.errorDetailsView())
+	}
+
 	header := m.headerView()
 	stack := m.stackView()
 
