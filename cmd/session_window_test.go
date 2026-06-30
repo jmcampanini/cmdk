@@ -60,7 +60,7 @@ func TestRunSessionWindowCommandNewShellCallsTmuxWindowFunction(t *testing.T) {
 	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
 
 	called := false
-	createResolvedSessionWindow = func(ctx context.Context, plan resolver.Plan, opts tmux.SessionWindowOptions) error {
+	createResolvedSessionWindow = func(ctx context.Context, plan resolver.Plan, launchPath string, opts tmux.SessionWindowOptions) error {
 		called = true
 		if _, ok := ctx.Deadline(); ok {
 			return errors.New("window context unexpectedly inherited resolve timeout")
@@ -103,7 +103,7 @@ func TestRunSessionWindowCommandCommandModePassesArgvUnchanged(t *testing.T) {
 	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
 
 	wantCommand := []string{"echo", "hello $HOME", "|", "tee", "x"}
-	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, opts tmux.SessionWindowOptions) error {
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, launchPath string, opts tmux.SessionWindowOptions) error {
 		if opts.NewShell {
 			t.Error("NewShell = true, want false")
 		}
@@ -193,7 +193,7 @@ func TestRunSessionWindowCommandNameOverride(t *testing.T) {
 	oldCreate := createResolvedSessionWindow
 	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
 
-	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, opts tmux.SessionWindowOptions) error {
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, launchPath string, opts tmux.SessionWindowOptions) error {
 		if opts.Name != "tests" {
 			t.Errorf("Name = %q, want tests", opts.Name)
 		}
@@ -238,7 +238,7 @@ func TestSessionWindowCommandAllowsArgsAfterDashDash(t *testing.T) {
 	oldCreate := createResolvedSessionWindow
 	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
 
-	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, opts tmux.SessionWindowOptions) error {
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, launchPath string, opts tmux.SessionWindowOptions) error {
 		want := []string{"--flag", "value"}
 		if !slices.Equal(opts.Command, want) {
 			t.Errorf("Command = %q, want %q", opts.Command, want)

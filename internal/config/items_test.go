@@ -264,6 +264,41 @@ func TestMatchingActions_StageConversion_AllowEmpty(t *testing.T) {
 	}
 }
 
+func TestMatchingActions_LaunchFieldsPassedThrough(t *testing.T) {
+	cfg := Config{
+		Actions: []Action{{
+			Name:          "Pi",
+			Cmd:           "pi",
+			Matches:       "dir",
+			LaunchMode:    "session-window",
+			LaunchPath:    "~/project",
+			LaunchPathCmd: "",
+			WindowName:    "pi:{{.launch_basename}}",
+		}},
+	}
+	fn := MatchingActions(cfg, "dir")
+	items, err := fn(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	it := items[0]
+	if it.MatchType != "dir" {
+		t.Errorf("MatchType = %q, want dir", it.MatchType)
+	}
+	if it.LaunchMode != "session-window" {
+		t.Errorf("LaunchMode = %q, want session-window", it.LaunchMode)
+	}
+	if it.LaunchPath != "~/project" {
+		t.Errorf("LaunchPath = %q, want ~/project", it.LaunchPath)
+	}
+	if it.LaunchPathCmd != "" {
+		t.Errorf("LaunchPathCmd = %q, want empty", it.LaunchPathCmd)
+	}
+	if it.WindowName != "pi:{{.launch_basename}}" {
+		t.Errorf("WindowName = %q", it.WindowName)
+	}
+}
+
 func TestMatchingActions_NoStagesGivesActionExecute(t *testing.T) {
 	cfg := Config{
 		Actions: []Action{

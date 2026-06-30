@@ -56,17 +56,23 @@ type Diagnostics struct {
 }
 
 type Item struct {
-	Type         string
-	Source       string
-	Display      string
-	Value        string
-	Data         map[string]string
-	Action       ActionType
-	Cmd          string
-	Icon         string
-	Stages       []Stage
-	Diagnostics  *Diagnostics
-	InlineParent *Item
+	Type          string
+	Source        string
+	Display       string
+	Value         string
+	Data          map[string]string
+	Action        ActionType
+	Cmd           string
+	Icon          string
+	MatchType     string
+	LaunchMode    string
+	LaunchPath    string
+	LaunchPathCmd string
+	WindowName    string
+	NewShell      bool
+	Stages        []Stage
+	Diagnostics   *Diagnostics
+	InlineParent  *Item
 }
 
 func NewItem() Item {

@@ -3,6 +3,7 @@ package generator
 import (
 	"maps"
 
+	"github.com/jmcampanini/cmdk/internal/config"
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
@@ -24,21 +25,25 @@ func NewActionsGenerator() GeneratorFunc {
 
 		if matchType == "dir" {
 			items = append(items, item.Item{
-				Type:    "action",
-				Source:  "builtin",
-				Display: "New window",
-				Action:  item.ActionExecute,
-				Cmd:     "tmux new-window -c {{sq .path}}",
-				Data:    maps.Clone(data),
-				Icon:    "\ueb7f",
+				Type:       "action",
+				Source:     "builtin",
+				Display:    "New window",
+				Action:     item.ActionExecute,
+				Data:       maps.Clone(data),
+				Icon:       "\ueb7f",
+				MatchType:  matchType,
+				LaunchMode: config.LaunchModeSessionWindow,
+				NewShell:   true,
 			}, item.Item{
-				Type:    "action",
-				Source:  "builtin",
-				Display: "New session window",
-				Action:  item.ActionExecute,
-				Cmd:     "cmdk session window {{sq .path}} --new",
-				Data:    maps.Clone(data),
-				Icon:    "\ueb7f",
+				Type:       "action",
+				Source:     "builtin",
+				Display:    "New tmux window",
+				Action:     item.ActionExecute,
+				Cmd:        "tmux new-window -c {{sq .launch_path}}",
+				Data:       maps.Clone(data),
+				Icon:       "\ueb7f",
+				MatchType:  matchType,
+				LaunchMode: config.LaunchModeShell,
 			})
 		}
 

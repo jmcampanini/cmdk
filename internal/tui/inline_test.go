@@ -53,7 +53,7 @@ func TestExpandInline_ExpandsDirItems(t *testing.T) {
 
 	result := expandInline(items, reg, ctx)
 
-	// "New window" + "New session window" built-ins + "Browse" from config
+	// "New window" + "New tmux window" built-ins + "Browse" from config
 	if len(result) != 3 {
 		t.Fatalf("got %d items, want 3", len(result))
 	}
@@ -82,11 +82,11 @@ func TestExpandInline_ExpandsDirItems(t *testing.T) {
 	}
 
 	sessionWindow := result[1]
-	if sessionWindow.Display != "~/projects » New session window" {
-		t.Errorf("Display = %q, want ~/projects » New session window", sessionWindow.Display)
+	if sessionWindow.Display != "~/projects » New tmux window" {
+		t.Errorf("Display = %q, want ~/projects » New tmux window", sessionWindow.Display)
 	}
-	if sessionWindow.Value != "New session window" {
-		t.Errorf("Value = %q, want New session window", sessionWindow.Value)
+	if sessionWindow.Value != "New tmux window" {
+		t.Errorf("Value = %q, want New tmux window", sessionWindow.Value)
 	}
 
 	browse := result[2]
@@ -95,6 +95,40 @@ func TestExpandInline_ExpandsDirItems(t *testing.T) {
 	}
 	if browse.Icon != "\ueaf7" {
 		t.Errorf("Icon = %q, want \\ueaf7", browse.Icon)
+	}
+}
+
+func TestExpandInline_PreservesLaunchMetadata(t *testing.T) {
+	cfg := config.Config{
+		Actions: []config.Action{{
+			Name:       "Pi",
+			Cmd:        "pi",
+			Matches:    "dir",
+			LaunchMode: "shell",
+			LaunchPath: "{{.path}}",
+		}},
+	}
+	reg := testInlineRegistry()
+	ctx := generator.Context{Config: cfg}
+	items := []item.Item{{Type: "dir", Display: "~/projects", Action: item.ActionNextList, Data: map[string]string{"path": "/home/user/projects"}}}
+
+	result := expandInline(items, reg, ctx)
+
+	pi := result[2]
+	if pi.Value != "Pi" {
+		t.Fatalf("result[2].Value = %q, want Pi", pi.Value)
+	}
+	if pi.MatchType != "dir" {
+		t.Errorf("MatchType = %q, want dir", pi.MatchType)
+	}
+	if pi.LaunchMode != "shell" {
+		t.Errorf("LaunchMode = %q, want shell", pi.LaunchMode)
+	}
+	if pi.LaunchPath != "{{.path}}" {
+		t.Errorf("LaunchPath = %q", pi.LaunchPath)
+	}
+	if pi.InlineParent == nil || pi.InlineParent.Data["path"] != "/home/user/projects" {
+		t.Errorf("InlineParent path not preserved: %#v", pi.InlineParent)
 	}
 }
 
@@ -208,9 +242,9 @@ func TestExpandInline_MultipleParents(t *testing.T) {
 	}
 	wantDisplays := []string{
 		"~/a » New window",
-		"~/a » New session window",
+		"~/a » New tmux window",
 		"~/b » New window",
-		"~/b » New session window",
+		"~/b » New tmux window",
 	}
 	for i, want := range wantDisplays {
 		if result[i].Display != want {
@@ -247,8 +281,8 @@ func TestExpandInline_MixedItems(t *testing.T) {
 	if result[1].Display != "~/proj » New window" {
 		t.Errorf("result[1].Display = %q, want ~/proj » New window", result[1].Display)
 	}
-	if result[2].Display != "~/proj » New session window" {
-		t.Errorf("result[2].Display = %q, want ~/proj » New session window", result[2].Display)
+	if result[2].Display != "~/proj » New tmux window" {
+		t.Errorf("result[2].Display = %q, want ~/proj » New tmux window", result[2].Display)
 	}
 	if result[3].Display != "main:1" {
 		t.Errorf("result[3].Display = %q, want main:1", result[3].Display)

@@ -80,18 +80,15 @@ func TestIntegration_TwoLevelChain(t *testing.T) {
 	if actionItems[0].Display != "New window" {
 		t.Errorf("action Display = %q, want %q", actionItems[0].Display, "New window")
 	}
-	if actionItems[1].Display != "New session window" {
-		t.Errorf("action Display = %q, want %q", actionItems[1].Display, "New session window")
+	if actionItems[1].Display != "New tmux window" {
+		t.Errorf("action Display = %q, want %q", actionItems[1].Display, "New tmux window")
 	}
 
-	allAccumulated := slices.Concat(accumulated, []item.Item{actionItems[0]})
-	data := execute.FlattenData(allAccumulated)
-	rendered, err := execute.RenderCmd(actionItems[0].Cmd, data)
-	if err != nil {
-		t.Fatalf("render: %v", err)
+	if !actionItems[0].NewShell {
+		t.Error("New window should be an internal new-shell action")
 	}
-	if rendered != "tmux new-window -c '/home/user/projects'" {
-		t.Errorf("rendered = %q", rendered)
+	if actionItems[0].Cmd != "" {
+		t.Errorf("New window Cmd = %q, want empty", actionItems[0].Cmd)
 	}
 }
 
@@ -368,8 +365,8 @@ func TestIntegration_DirActionsWithConfig(t *testing.T) {
 	if actionItems[0].Display != "New window" {
 		t.Errorf("actionItems[0].Display = %q, want New window", actionItems[0].Display)
 	}
-	if actionItems[1].Display != "New session window" {
-		t.Errorf("actionItems[1].Display = %q, want New session window", actionItems[1].Display)
+	if actionItems[1].Display != "New tmux window" {
+		t.Errorf("actionItems[1].Display = %q, want New tmux window", actionItems[1].Display)
 	}
 	if actionItems[2].Display != "Yazi" {
 		t.Errorf("actionItems[2].Display = %q, want Yazi", actionItems[2].Display)
@@ -440,8 +437,8 @@ func TestIntegration_DirActionsEmptyConfig(t *testing.T) {
 	if actionItems[0].Display != "New window" {
 		t.Errorf("Display = %q, want New window", actionItems[0].Display)
 	}
-	if actionItems[1].Display != "New session window" {
-		t.Errorf("Display = %q, want New session window", actionItems[1].Display)
+	if actionItems[1].Display != "New tmux window" {
+		t.Errorf("Display = %q, want New tmux window", actionItems[1].Display)
 	}
 }
 

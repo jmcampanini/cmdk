@@ -34,12 +34,8 @@ func TestSessionResolveCommandUseDocumentsRequiredPath(t *testing.T) {
 
 func TestWriteSessionPlan(t *testing.T) {
 	plan := resolver.Plan{
-		SessionKind:            resolver.KindRepo,
-		SessionKey:             "/Users/me/Code/github.com/me/dotfiles",
-		SessionDisplay:         "~/Code/github.com/me/dotfiles",
-		LaunchPath:             "/Users/me/Code/github.com/me/dotfiles/main",
-		PlannedTmuxSessionName: "Users/me/Code/github_com/me/dotfiles",
-		PlannedTmuxWindowName:  "main",
+		SessionKind: resolver.KindRepo,
+		SessionKey:  "/Users/me/Code/github.com/me/dotfiles",
 	}
 	var buf bytes.Buffer
 	if err := writeSessionPlan(&buf, plan); err != nil {
@@ -49,11 +45,7 @@ func TestWriteSessionPlan(t *testing.T) {
 	for _, want := range []string{
 		"session_kind:",
 		"session_key:",
-		"session_display:",
-		"launch_path:",
-		"planned_tmux_session_name:",
-		"planned_tmux_window_name:",
-		"Users/me/Code/github_com/me/dotfiles",
+		"/Users/me/Code/github.com/me/dotfiles",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("human output missing %q\n%s", want, got)
@@ -62,8 +54,10 @@ func TestWriteSessionPlan(t *testing.T) {
 	if strings.Contains(got, "session_id") {
 		t.Errorf("human output should not use session_id for cmdk identity\n%s", got)
 	}
-	if strings.Contains(got, "display_label") {
-		t.Errorf("human output should not contain display_label\n%s", got)
+	for _, unexpected := range []string{"session_display", "launch_path", "planned_tmux_session_name", "planned_tmux_window_name", "display_label"} {
+		if strings.Contains(got, unexpected) {
+			t.Errorf("human output should not contain %s\n%s", unexpected, got)
+		}
 	}
 }
 
@@ -100,15 +94,14 @@ func TestRunSessionResolveCommandJSON(t *testing.T) {
 	if strings.Contains(buf.String(), "session_id") {
 		t.Errorf("JSON should not contain session_id: %s", buf.String())
 	}
-	if !strings.Contains(buf.String(), "session_display") {
-		t.Errorf("JSON should contain session_display: %s", buf.String())
-	}
-	if strings.Contains(buf.String(), "display_label") {
-		t.Errorf("JSON should not contain display_label: %s", buf.String())
+	for _, unexpected := range []string{"session_display", "launch_path", "planned_tmux_session_name", "planned_tmux_window_name", "display_label"} {
+		if strings.Contains(buf.String(), unexpected) {
+			t.Errorf("JSON should not contain %s: %s", unexpected, buf.String())
+		}
 	}
 }
 
-func TestRunSessionResolveCommandShortensSymlinkedHome(t *testing.T) {
+func TestRunSessionResolveCommandUsesCanonicalSessionKey(t *testing.T) {
 	useTempConfigHome(t)
 
 	root := t.TempDir()
@@ -121,7 +114,6 @@ func TestRunSessionResolveCommandShortensSymlinkedHome(t *testing.T) {
 	if err := os.Symlink(realHome, linkHome); err != nil {
 		t.Skipf("symlink not available: %v", err)
 	}
-	t.Setenv("HOME", linkHome)
 
 	var buf bytes.Buffer
 	cmd := &cobra.Command{}
@@ -134,8 +126,9 @@ func TestRunSessionResolveCommandShortensSymlinkedHome(t *testing.T) {
 	if err := json.Unmarshal(buf.Bytes(), &plan); err != nil {
 		t.Fatalf("invalid JSON %q: %v", buf.String(), err)
 	}
-	if plan.SessionDisplay != "~/project" {
-		t.Errorf("SessionDisplay = %q, want ~/project", plan.SessionDisplay)
+	want := filepath.Clean(dir)
+	if plan.SessionKey != want {
+		t.Errorf("SessionKey = %q, want %q", plan.SessionKey, want)
 	}
 }
 
