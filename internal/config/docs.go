@@ -237,9 +237,8 @@ ATTACH
   Leading ~/ is expanded before resolving the path.
 
   If the cmdk-managed session for that path already exists, cmdk attaches to it.
-  Otherwise cmdk creates the managed session, sets @cmdk_session_kind,
-  @cmdk_session_key, and @cmdk_session_display, then attaches to the new
-  session.
+  Otherwise cmdk creates the managed session, sets @cmdk_session_kind and
+  @cmdk_session_key, then attaches to the new session.
 
 SESSION WINDOWS
   cmdk session window <path> --new resolves an existing directory, finds or
@@ -262,8 +261,8 @@ SESSION WINDOWS
   a new tmux window; cmdk does not search for or reuse existing window names.
 
   Cmdk recognizes managed sessions by the @cmdk_session_key tmux option. When
-  cmdk creates a session it sets only @cmdk_session_kind, @cmdk_session_key, and
-  @cmdk_session_display. Existing managed sessions are found by exact key match.
+  cmdk creates a session it sets only @cmdk_session_kind and @cmdk_session_key.
+  Managed sessions are found by exact key match.
 
   session window requires a current tmux client for switch-client. It does not
   attach from outside tmux and does not fall back to attach-session.

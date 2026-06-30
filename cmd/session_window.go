@@ -35,9 +35,8 @@ Exactly one mode is required:
   --new                    create an interactive shell window
   -- <command> [args...]   create a command window
 
-The new window's cwd is the resolved launch_path. The default window name is the
-resolved planned_tmux_window_name; --name overrides it for either mode and must
-not be empty.
+The new window's cwd is the validated path. The default window name is the base
+name of that path; --name overrides it for either mode and must not be empty.
 
 Command args after -- are treated as argv-style input and are shell-quoted before
 being passed to tmux as its shell-command string. Shell metacharacters are
@@ -82,13 +81,21 @@ func runSessionWindowCommand(cmd *cobra.Command, args []string, options sessionW
 		return errors.New("session window requires --new or command args after --")
 	}
 
-	plan, err := resolveSessionPlanForCommand(cmd, path)
+	launchPath, err := validateLaunchDirectory(path)
 	if err != nil {
 		return err
 	}
+	plan, err := resolveSessionPlanForCommand(cmd, launchPath)
+	if err != nil {
+		return err
+	}
+	windowName := options.name
+	if !options.nameSet {
+		windowName = defaultWindowNameForLaunchPath(launchPath)
+	}
 
-	return createResolvedSessionWindow(sessionMutationContext(cmd), plan, tmux.SessionWindowOptions{
-		Name:     options.name,
+	return createResolvedSessionWindow(sessionMutationContext(cmd), plan, launchPath, tmux.SessionWindowOptions{
+		Name:     windowName,
 		NewShell: options.newShell,
 		Command:  commandArgs,
 		Switch:   true,

@@ -21,7 +21,6 @@ import (
 
 	"github.com/jmcampanini/cmdk/internal/config"
 	"github.com/jmcampanini/cmdk/internal/item"
-	"github.com/jmcampanini/cmdk/internal/pathfmt"
 	resolver "github.com/jmcampanini/cmdk/internal/session"
 	"github.com/jmcampanini/cmdk/internal/tmux"
 )
@@ -497,14 +496,9 @@ func runSessionWindow(selected item.Item, data map[string]string, launchPath str
 		return errors.New("session-window action requires a launch_path")
 	}
 
-	display, err := sessionDisplayOptions(cfg)
-	if err != nil {
-		return err
-	}
-
 	resolveCtx, cancel := sessionResolveContext(cfg)
 	defer cancel()
-	plan, err := resolveSessionPlan(resolveCtx, launchPath, display)
+	plan, err := resolveSessionPlan(resolveCtx, launchPath)
 	if err != nil {
 		return err
 	}
@@ -519,7 +513,7 @@ func runSessionWindow(selected item.Item, data map[string]string, launchPath str
 		return err
 	}
 
-	return createResolvedSessionWindow(context.Background(), plan, tmux.SessionWindowOptions{
+	return createResolvedSessionWindow(context.Background(), plan, launchPath, tmux.SessionWindowOptions{
 		Name:     windowName,
 		NewShell: selected.NewShell,
 		Command:  command,
@@ -597,28 +591,4 @@ func sessionResolveContext(cfg config.Config) (context.Context, context.CancelFu
 		timeout = config.DefaultConfig().Timeout.Fetch
 	}
 	return context.WithTimeout(context.Background(), timeout)
-}
-
-func sessionDisplayOptions(cfg config.Config) (resolver.DisplayOptions, error) {
-	home, err := os.UserHomeDir()
-	if err != nil && cfg.Display.ShortenHome != "" {
-		return resolver.DisplayOptions{}, fmt.Errorf("cannot shorten home prefix: %w", err)
-	}
-	if cfg.Display.ShortenHome != "" && home != "" {
-		resolvedHome, err := filepath.EvalSymlinks(home)
-		if err != nil {
-			return resolver.DisplayOptions{}, fmt.Errorf("cannot resolve home prefix: %w", err)
-		}
-		home = filepath.Clean(resolvedHome)
-	}
-
-	return resolver.DisplayOptions{
-		Home:        home,
-		ShortenHome: cfg.Display.ShortenHome,
-		Rules:       pathfmt.CompileRules(cfg.Display.Rules),
-		Truncation: pathfmt.Truncation{
-			Length: cfg.Display.TruncationLength,
-			Symbol: cfg.Display.TruncationSymbol,
-		},
-	}, nil
 }

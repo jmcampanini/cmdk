@@ -808,19 +808,14 @@ func TestRun_SessionWindowNewShellCreatesInteractiveWindow(t *testing.T) {
 		createResolvedSessionWindow = oldCreate
 	})
 
-	resolveSessionPlan = func(_ context.Context, path string, _ resolver.DisplayOptions) (resolver.Plan, error) {
-		return resolver.Plan{
-			SessionKind:            resolver.KindDirectory,
-			SessionKey:             path,
-			SessionDisplay:         path,
-			LaunchPath:             path,
-			PlannedTmuxSessionName: "planned",
-			PlannedTmuxWindowName:  filepath.Base(path),
-		}, nil
+	resolveSessionPlan = func(_ context.Context, path string) (resolver.Plan, error) {
+		return resolver.Plan{SessionKind: resolver.KindDirectory, SessionKey: path}, nil
 	}
 
+	var gotLaunchPath string
 	var gotOpts tmux.SessionWindowOptions
-	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, opts tmux.SessionWindowOptions) error {
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, launchPath string, opts tmux.SessionWindowOptions) error {
+		gotLaunchPath = launchPath
 		gotOpts = opts
 		return nil
 	}
@@ -832,6 +827,9 @@ func TestRun_SessionWindowNewShellCreatesInteractiveWindow(t *testing.T) {
 		return nil
 	}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotLaunchPath != filepath.Clean(dir) {
+		t.Errorf("launchPath = %q, want %q", gotLaunchPath, filepath.Clean(dir))
 	}
 	if !gotOpts.NewShell {
 		t.Error("NewShell = false, want true")
@@ -854,22 +852,17 @@ func TestRun_SessionWindowCreatesManagedWindow(t *testing.T) {
 	})
 
 	var resolvedPath string
-	resolveSessionPlan = func(_ context.Context, path string, _ resolver.DisplayOptions) (resolver.Plan, error) {
+	resolveSessionPlan = func(_ context.Context, path string) (resolver.Plan, error) {
 		resolvedPath = path
-		return resolver.Plan{
-			SessionKind:            resolver.KindDirectory,
-			SessionKey:             path,
-			SessionDisplay:         path,
-			LaunchPath:             path,
-			PlannedTmuxSessionName: "planned",
-			PlannedTmuxWindowName:  filepath.Base(path),
-		}, nil
+		return resolver.Plan{SessionKind: resolver.KindDirectory, SessionKey: path}, nil
 	}
 
 	var gotPlan resolver.Plan
+	var gotLaunchPath string
 	var gotOpts tmux.SessionWindowOptions
-	createResolvedSessionWindow = func(_ context.Context, plan resolver.Plan, opts tmux.SessionWindowOptions) error {
+	createResolvedSessionWindow = func(_ context.Context, plan resolver.Plan, launchPath string, opts tmux.SessionWindowOptions) error {
 		gotPlan = plan
+		gotLaunchPath = launchPath
 		gotOpts = opts
 		return nil
 	}
@@ -882,8 +875,8 @@ func TestRun_SessionWindowCreatesManagedWindow(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if resolvedPath != filepath.Clean(dir) || gotPlan.LaunchPath != filepath.Clean(dir) {
-		t.Fatalf("resolvedPath/gotPlan = %q/%q, want %q", resolvedPath, gotPlan.LaunchPath, filepath.Clean(dir))
+	if resolvedPath != filepath.Clean(dir) || gotLaunchPath != filepath.Clean(dir) || gotPlan.SessionKey != filepath.Clean(dir) {
+		t.Fatalf("resolvedPath/launchPath/sessionKey = %q/%q/%q, want %q", resolvedPath, gotLaunchPath, gotPlan.SessionKey, filepath.Clean(dir))
 	}
 	if gotOpts.Name != "x-"+filepath.Base(dir) {
 		t.Errorf("Name = %q", gotOpts.Name)

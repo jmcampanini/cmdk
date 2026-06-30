@@ -574,14 +574,13 @@ func runDetachedSessionWindowNew(t *testing.T, path string) string {
 }
 
 type managedSessionE2E struct {
-	ID      string
-	Kind    string
-	Display string
+	ID   string
+	Kind string
 }
 
 func findManagedSessionE2E(t *testing.T, key string) managedSessionE2E {
 	t.Helper()
-	out, err := tmuxCmd("list-sessions", "-F", "#{session_id}\t#{@cmdk_session_kind}\t#{@cmdk_session_key}\t#{@cmdk_session_display}").Output()
+	out, err := tmuxCmd("list-sessions", "-F", "#{session_id}\t#{@cmdk_session_kind}\t#{@cmdk_session_key}").Output()
 	if err != nil {
 		t.Fatalf("list-sessions failed: %v", err)
 	}
@@ -591,11 +590,11 @@ func findManagedSessionE2E(t *testing.T, key string) managedSessionE2E {
 			continue
 		}
 		fields := strings.Split(line, "\t")
-		if len(fields) != 4 {
+		if len(fields) != 3 {
 			t.Fatalf("malformed list-sessions row %q", line)
 		}
 		if fields[2] == key {
-			return managedSessionE2E{ID: fields[0], Kind: fields[1], Display: fields[3]}
+			return managedSessionE2E{ID: fields[0], Kind: fields[1]}
 		}
 	}
 	t.Fatalf("no managed session found for key %q\n%s", key, out)
@@ -641,9 +640,6 @@ func TestE2E_SessionWindowCreatesNonGitDirectorySession(t *testing.T) {
 	session := findManagedSessionE2E(t, dirReal)
 	if session.Kind != "directory" {
 		t.Errorf("session kind = %q, want directory", session.Kind)
-	}
-	if session.Display != dirReal {
-		t.Errorf("session display = %q, want %q", session.Display, dirReal)
 	}
 	windows := windowNamesE2E(t, session.ID)
 	if windows["scratch"] != dirReal {

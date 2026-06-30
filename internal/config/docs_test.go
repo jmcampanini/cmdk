@@ -107,7 +107,6 @@ func TestRenderHelp_ContainsSessionWindowDocs(t *testing.T) {
 		"cmdk session window <path> --new",
 		"cmdk session window <path> [--name <name>] -- <command> [args...]",
 		"@cmdk_session_key",
-		"@cmdk_session_display",
 		"switch-client",
 		"Switch to session",
 	} {

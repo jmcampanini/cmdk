@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"unicode"
 
@@ -12,9 +13,8 @@ import (
 )
 
 const (
-	cmdkSessionKindOption    = "@cmdk_session_kind"
-	cmdkSessionKeyOption     = "@cmdk_session_key"
-	cmdkSessionDisplayOption = "@cmdk_session_display"
+	cmdkSessionKindOption = "@cmdk_session_kind"
+	cmdkSessionKeyOption  = "@cmdk_session_key"
 
 	sessionWindowModeErrorMessage = "session window requires exactly one mode: --new or command args after --"
 )
@@ -24,7 +24,8 @@ var (
 		"#{session_id}",
 		tmuxEscapedFormat(cmdkSessionKeyOption),
 	)
-	newSessionIDsFormat = tmuxFormatFields("#{session_id}", "#{window_id}")
+	newSessionIDsFormat     = tmuxFormatFields("#{session_id}", "#{window_id}")
+	tmuxSessionNameReplacer = strings.NewReplacer(".", "_", ":", "_")
 )
 
 // SessionWindowOptions controls creation of a new tmux window inside the
@@ -44,23 +45,26 @@ type sessionWindowManager struct {
 // cmdk-managed session described by plan. If the session does not exist yet,
 // the first window created by tmux new-session is the requested window. The
 // window is targeted by its returned stable window ID, never by display name.
-func CreateResolvedSessionWindow(ctx context.Context, plan resolver.Plan, opts SessionWindowOptions) error {
-	return sessionWindowManager{runner: execTmuxRunner{}}.createResolvedWindow(ctx, plan, opts)
+func CreateResolvedSessionWindow(ctx context.Context, plan resolver.Plan, launchPath string, opts SessionWindowOptions) error {
+	return sessionWindowManager{runner: execTmuxRunner{}}.createResolvedWindow(ctx, plan, launchPath, opts)
 }
 
 // AttachResolvedSession attaches the current terminal to the cmdk-managed tmux
 // session described by plan, creating that managed session when it is missing.
-func AttachResolvedSession(ctx context.Context, plan resolver.Plan) error {
-	return sessionWindowManager{runner: execTmuxRunner{}}.attachResolvedSession(ctx, plan)
+func AttachResolvedSession(ctx context.Context, plan resolver.Plan, launchPath, windowName string) error {
+	return sessionWindowManager{runner: execTmuxRunner{}}.attachResolvedSession(ctx, plan, launchPath, windowName)
 }
 
-func (m sessionWindowManager) createResolvedWindow(ctx context.Context, plan resolver.Plan, opts SessionWindowOptions) error {
+func (m sessionWindowManager) createResolvedWindow(ctx context.Context, plan resolver.Plan, launchPath string, opts SessionWindowOptions) error {
 	ctx = m.ensureDefaults(ctx)
 
 	if err := validateSessionPlan(plan); err != nil {
 		return err
 	}
-	windowName := sessionWindowName(plan, opts)
+	if err := validateLaunchPath(launchPath); err != nil {
+		return err
+	}
+	windowName := opts.Name
 	if err := validateSessionWindowOptions(windowName, opts); err != nil {
 		return err
 	}
@@ -73,9 +77,9 @@ func (m sessionWindowManager) createResolvedWindow(ctx context.Context, plan res
 	shellCommand := shellCommandFromArgv(opts.Command)
 	var windowID string
 	if sessionID == "" {
-		sessionID, windowID, err = m.createManagedSession(ctx, plan, windowName, shellCommand)
+		sessionID, windowID, err = m.createManagedSession(ctx, plan, launchPath, windowName, shellCommand)
 	} else {
-		windowID, err = m.createWindow(ctx, sessionID, plan.LaunchPath, windowName, shellCommand)
+		windowID, err = m.createWindow(ctx, sessionID, launchPath, windowName, shellCommand)
 	}
 	if err != nil {
 		return err
@@ -87,11 +91,20 @@ func (m sessionWindowManager) createResolvedWindow(ctx context.Context, plan res
 	return nil
 }
 
-func (m sessionWindowManager) attachResolvedSession(ctx context.Context, plan resolver.Plan) error {
+func (m sessionWindowManager) attachResolvedSession(ctx context.Context, plan resolver.Plan, launchPath, windowName string) error {
 	ctx = m.ensureDefaults(ctx)
 
 	if err := validateSessionPlan(plan); err != nil {
 		return err
+	}
+	if err := validateLaunchPath(launchPath); err != nil {
+		return err
+	}
+	if windowName == "" {
+		return errors.New("window name cannot be empty")
+	}
+	if containsControl(windowName) {
+		return errors.New("window name contains control characters")
 	}
 
 	sessionID, err := m.findAttachTargetSession(ctx, plan.SessionKey)
@@ -99,7 +112,7 @@ func (m sessionWindowManager) attachResolvedSession(ctx context.Context, plan re
 		return err
 	}
 	if sessionID == "" {
-		sessionID, _, err = m.createManagedSession(ctx, plan, plan.PlannedTmuxWindowName, "")
+		sessionID, _, err = m.createManagedSession(ctx, plan, launchPath, windowName, "")
 		if err != nil {
 			return err
 		}
@@ -126,13 +139,6 @@ func (m sessionWindowManager) run(ctx context.Context, args ...string) error {
 	return m.runner.Run(ctx, args...)
 }
 
-func sessionWindowName(plan resolver.Plan, opts SessionWindowOptions) string {
-	if opts.Name != "" {
-		return opts.Name
-	}
-	return plan.PlannedTmuxWindowName
-}
-
 func validateSessionPlan(plan resolver.Plan) error {
 	fields := []struct {
 		name  string
@@ -140,10 +146,6 @@ func validateSessionPlan(plan resolver.Plan) error {
 	}{
 		{name: "session_kind", value: plan.SessionKind},
 		{name: "session_key", value: plan.SessionKey},
-		{name: "session_display", value: plan.SessionDisplay},
-		{name: "launch_path", value: plan.LaunchPath},
-		{name: "planned_tmux_session_name", value: plan.PlannedTmuxSessionName},
-		{name: "planned_tmux_window_name", value: plan.PlannedTmuxWindowName},
 	}
 	for _, field := range fields {
 		if containsControl(field.value) {
@@ -154,6 +156,9 @@ func validateSessionPlan(plan resolver.Plan) error {
 }
 
 func validateSessionWindowOptions(windowName string, opts SessionWindowOptions) error {
+	if windowName == "" {
+		return errors.New("window name cannot be empty")
+	}
 	haveCommand := len(opts.Command) > 0
 	if opts.NewShell && haveCommand {
 		return errors.New(sessionWindowModeErrorMessage)
@@ -163,6 +168,16 @@ func validateSessionWindowOptions(windowName string, opts SessionWindowOptions) 
 	}
 	if containsControl(windowName) {
 		return errors.New("window name contains control characters")
+	}
+	return nil
+}
+
+func validateLaunchPath(launchPath string) error {
+	if launchPath == "" {
+		return errors.New("launch path cannot be empty")
+	}
+	if containsControl(launchPath) {
+		return errors.New("launch path contains control characters")
 	}
 	return nil
 }
@@ -234,8 +249,8 @@ func parseManagedSessionRows(output string) ([]managedSessionRow, error) {
 	return rows, nil
 }
 
-func (m sessionWindowManager) createManagedSession(ctx context.Context, plan resolver.Plan, windowName, shellCommand string) (string, string, error) {
-	sessionID, windowID, err := m.createSession(ctx, plan, windowName, shellCommand)
+func (m sessionWindowManager) createManagedSession(ctx context.Context, plan resolver.Plan, launchPath, windowName, shellCommand string) (string, string, error) {
+	sessionID, windowID, err := m.createSession(ctx, plan, launchPath, windowName, shellCommand)
 	if err != nil {
 		return "", "", err
 	}
@@ -245,12 +260,12 @@ func (m sessionWindowManager) createManagedSession(ctx context.Context, plan res
 	return sessionID, windowID, nil
 }
 
-func (m sessionWindowManager) createSession(ctx context.Context, plan resolver.Plan, windowName, shellCommand string) (string, string, error) {
+func (m sessionWindowManager) createSession(ctx context.Context, plan resolver.Plan, launchPath, windowName, shellCommand string) (string, string, error) {
 	args := []string{
 		"new-session", "-d", "-P", "-F", newSessionIDsFormat,
-		"-s", plan.PlannedTmuxSessionName,
+		"-s", tmuxSafeSessionName(plan.SessionKey),
 		"-n", windowName,
-		"-c", plan.LaunchPath,
+		"-c", launchPath,
 	}
 	if shellCommand != "" {
 		args = append(args, shellCommand)
@@ -289,7 +304,6 @@ func (m sessionWindowManager) setSessionMetadata(ctx context.Context, sessionID 
 	}{
 		{option: cmdkSessionKindOption, value: plan.SessionKind},
 		{option: cmdkSessionKeyOption, value: plan.SessionKey},
-		{option: cmdkSessionDisplayOption, value: plan.SessionDisplay},
 	}
 	for _, entry := range metadata {
 		if _, err := m.output(ctx, "set-option", "-t", sessionID, entry.option, entry.value); err != nil {
@@ -342,6 +356,16 @@ func shellCommandFromArgv(argv []string) string {
 
 func shellQuoteArg(arg string) string {
 	return "'" + strings.ReplaceAll(arg, "'", "'\\''") + "'"
+}
+
+func tmuxSafeSessionName(sessionKey string) string {
+	name := filepath.ToSlash(filepath.Clean(sessionKey))
+	name = strings.TrimLeft(name, "/")
+	name = tmuxSessionNameReplacer.Replace(name)
+	if name == "" || name == "." {
+		return "_"
+	}
+	return name
 }
 
 func (m sessionWindowManager) switchClient(ctx context.Context, sessionID, windowID string) error {

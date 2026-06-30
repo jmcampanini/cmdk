@@ -20,24 +20,22 @@ The goal is that an agent can implement the feature with minimal ambiguity.
 - Do not make every root action sessioned by default.
 - Do not implement unsafe shell expansion for path fields: no command substitution, backticks, globbing, or word splitting.
 
-## Current baseline
+## Baseline concepts
 
-Relevant current behavior:
-
-- Config actions have `name`, `matches`, `cmd`, `icon`, and optional `stages`.
+- Config actions have `name`, `matches`, `cmd`, `icon`, optional launch fields, and optional `stages`.
 - `matches` is one of `root`, `dir`, or `session`.
-- Config action commands are rendered as Go templates and executed via `sh -c`.
+- Config action commands are rendered as Go templates.
 - Dir actions receive `{{.path}}` from the selected zoxide/directory item.
-- Current execution cwd is inherited from where `cmdk` was launched.
-- Existing dir built-ins are:
-  - `New window` -> `tmux new-window -c {{sq .path}}`
-  - `New session window` -> `cmdk session window {{sq .path}} --new`
-- Existing session primitive:
-  - `cmdk session window <path> --new` creates an interactive shell window in the managed session for that path.
-  - `cmdk session window <path> --name <name> -- <command> [args...]` creates a command window in that managed session.
-- Existing session resolver behavior:
-  - repo/worktree paths share a managed repo/container session.
-  - non-repo directories get one managed session per canonical directory.
+- Session-window actions launch in cmdk-managed tmux sessions; shell actions replace the cmdk process with `sh -c`.
+- Dir built-ins are:
+  - `New window` -> an interactive shell window in the managed session for the selected directory.
+  - `New tmux window` -> a plain tmux window in the current tmux session for the selected directory.
+- `cmdk session window <path> --new` creates an interactive shell window in the managed session for that path.
+- `cmdk session window <path> --name <name> -- <command> [args...]` creates a command window in that managed session.
+- Session resolver contract:
+  - repo/worktree paths share a managed repo/container session key.
+  - non-repo directories use canonical directory identity.
+  - the resolver returns session identity only; it does not choose launch cwd or window names.
 
 ## New action fields
 
@@ -197,7 +195,7 @@ Execution details:
 - It runs with the same inherited cwd behavior as current picker source commands.
   - For dir actions, use `{{.path}}` explicitly or `cd {{sq .path}} && ...` if the command needs to run in the selected directory.
 - It should use `[timeout].picker` as its timeout.
-  - Existing picker source commands already use this timeout category.
+  - Picker source commands use this timeout category.
   - `0` should mean no timeout, consistent with picker sources.
 - It should receive `CMDK_*` environment variables for data available before launch path resolution. `CMDK_LAUNCH_PATH` and `CMDK_LAUNCH_BASENAME` are not available until after it returns.
 
@@ -216,6 +214,25 @@ Nonzero exit behavior:
 - return an action execution error.
 - include stderr in the error when available, following picker source style.
 - timeout should be reported clearly.
+
+## Session resolver contract
+
+`session.Resolve(ctx, path)` returns only session identity:
+
+```go
+type Plan struct {
+    SessionKind string `json:"session_kind"`
+    SessionKey  string `json:"session_key"`
+}
+```
+
+The resolver validates and classifies the input path so related repo/worktree
+paths share one session key. It must not return or derive `launch_path`, display
+strings, tmux session names, or window names. Callers own launch cwd and window
+naming. Tmux-specific naming from a session key belongs in the tmux package.
+
+Managed tmux sessions store only `@cmdk_session_kind` and `@cmdk_session_key`.
+Managed sessions are found by exact key match.
 
 ## Template variables
 
@@ -251,13 +268,13 @@ CMDK_* environment availability:
 For effective `launch_mode = "session-window"`:
 
 1. Resolve effective launch path.
-2. Resolve the managed session plan using the existing session resolver.
+2. Resolve the managed session identity using the session resolver.
 3. Render final `cmd` using accumulated data plus `launch_path`/`launch_basename`.
 4. Render `window_name`, or use `{{.launch_basename}}` when unset.
-5. Create a fresh tmux command window in the managed session for the launch path.
+5. Create a fresh tmux command window in the managed session with cwd set to the effective launch path.
 6. Switch the current tmux client to the new window.
 
-The final command should preserve existing shell-snippet semantics by running through a shell in the new tmux window, conceptually:
+The final command uses shell-snippet semantics by running through a shell in the new tmux window, conceptually:
 
 ```sh
 sh -lc '<rendered cmd>'
@@ -265,19 +282,20 @@ sh -lc '<rendered cmd>'
 
 Do not pass action/stage CMDK_* data to tmux using `-e`. cmdk should not set action-specific CMDK_* variables in managed tmux session or window environment. Session-window payload commands rely on template rendering for action data, for example `{{.launch_path}}`, `{{.launch_basename}}`, and stage outputs. The built-in interactive `NewShell` action does not receive action-specific CMDK_* environment variables.
 
-Implementation can use existing `tmux.CreateResolvedSessionWindow` with:
+Session-window creation receives the resolved session identity and the explicit
+validated launch path separately, for example:
 
 ```go
-tmux.SessionWindowOptions{
+tmux.CreateResolvedSessionWindow(ctx, plan, launchPath, tmux.SessionWindowOptions{
     Name:    renderedWindowName,
     Command: []string{"sh", "-lc", renderedCmd},
     Switch:  true,
-}
+})
 ```
 
 Configured actions should still require non-empty `cmd`.
 
-The built-in interactive shell action can remain an internal exception using the existing `cmdk session window <path> --new` behavior or an internal `NewShell` path.
+The built-in interactive shell action uses an internal `NewShell` path with no configured `cmd`.
 
 ### `shell`
 
@@ -286,7 +304,7 @@ For effective `launch_mode = "shell"`:
 1. Resolve effective launch path if one exists.
 2. If an effective launch path exists, `chdir` to it before executing the final shell command.
 3. Render final `cmd` using accumulated data plus `launch_path`/`launch_basename` when path exists.
-4. Execute via `sh -c` using the existing exec replacement behavior.
+4. Execute via `sh -c` using exec replacement behavior.
 
 `launch_mode = "shell"` means "do not create a session window". It does **not** mean "ignore directory context".
 
@@ -371,7 +389,7 @@ Add validation for:
 - both `launch_path` and `launch_path_cmd` set,
 - `window_name` set when effective launch mode is `shell`,
 - stage key `launch_path` or `launch_basename`,
-- existing action validations still apply:
+- action validations apply:
   - `name` cannot be empty,
   - `cmd` cannot be empty,
   - `matches` must be `root`, `dir`, or `session`,
@@ -433,7 +451,7 @@ Error messages should name the field when possible, e.g.:
 - `launch_path_cmd output must be an absolute path`
 - `window_name contains control characters`
 
-If new exit behavior or categories are introduced, update `cmd/exit_codes.go` per project policy. If execution still exits `1` through the existing command error path, document that no exit-code update is needed.
+If new exit behavior or categories are introduced, update `cmd/exit_codes.go` per project policy. If execution exits `1` through the command error path, document that no exit-code update is needed.
 
 ## Surprise prevention rules
 
@@ -457,12 +475,7 @@ Recommended UX:
 1. `New window` -> create an interactive shell window in the managed session for the selected directory.
 2. `New tmux window` or `New plain tmux window` -> create a normal tmux window in the current session for the selected directory.
 
-This replaces the old presentation where `New window` meant plain tmux and `New session window` meant managed session.
-
-Implementation options:
-
-- Keep the sessioned built-in as a shell command calling `cmdk session window {{sq .path}} --new`, and mark it internally as shell/direct to avoid double wrapping.
-- Or extend internal item execution to support a session-window action with `NewShell = true` and no config `cmd`.
+Implementation uses internal item execution for the session-window built-in with `NewShell = true` and no config `cmd`.
 
 Configured actions should still require `cmd`.
 
@@ -650,6 +663,16 @@ printf '%s\n' "$cwd"
   - plain tmux window should remain available as fallback.
 - Ensure inline actions preserve launch fields when cloned/expanded.
 
+### Session identity and tmux creation
+
+- Refactor `internal/session.Plan` to contain only `SessionKind` and `SessionKey`.
+- Keep display formatting at display boundaries.
+- Move tmux-safe session-name derivation to `internal/tmux`.
+- Store only `@cmdk_session_kind` and `@cmdk_session_key` on managed tmux sessions.
+- Make tmux session-window creation take an explicit validated `launchPath` argument.
+- Derive default tmux window names from the explicit launch path at call sites.
+- Update `cmdk session resolve` output to expose only resolver-owned fields.
+
 ### Execution
 
 - Refactor `internal/execute.Run` so it:
@@ -661,7 +684,7 @@ printf '%s\n' "$cwd"
 - Add helper for safe expansion of `launch_path`.
 - Add helper for running/parsing `launch_path_cmd`.
 - For shell mode with path, call `os.Chdir(launchPath)` before `syscall.Exec`.
-- For session-window mode, call existing session resolver and tmux session-window creation directly rather than shelling out to `cmdk`, except built-ins may keep using the existing CLI as an internal shortcut if desired.
+- For session-window mode, call the session resolver for identity and tmux session-window creation with the explicit launch path directly rather than shelling out to `cmdk`, except built-ins may keep using the CLI as an internal shortcut if desired.
 
 ### Documentation
 
@@ -723,7 +746,7 @@ Add/update tests that `Action.ToItem()` carries:
 - `LaunchPath`,
 - `LaunchPathCmd`,
 - `WindowName`,
-- existing stages and icons unchanged.
+- stages and icons unchanged.
 
 #### Execute helper tests
 
@@ -774,9 +797,9 @@ Add tests for session-window execution with a fake tmux/session creation functio
 - passes `[]string{"sh", "-lc", rendered}` as command payload,
 - passes rendered/default window name,
 - does not pass action/stage CMDK_* environment variables to tmux,
-- uses existing resolver display options.
+- passes the explicit launch path to tmux creation separately from the session identity.
 
-Implementation may require dependency injection around session-window creation similar to existing command tests.
+Use dependency injection around session-window creation where tests need to avoid tmux operations.
 
 #### Generator/built-in tests
 
@@ -788,7 +811,7 @@ Update `internal/generator/actions_test.go` expectations:
 - config dir actions remain after built-ins.
 - launch fields on config actions are preserved.
 
-Update e2e tests that currently assert both `New window` and `New session window` names.
+Update e2e tests that assert built-in dir action names.
 
 #### TUI/inline tests
 
@@ -800,7 +823,7 @@ Update `internal/config/docs_test.go` for new fields, validation rules, template
 
 ### E2E tests to add/update
 
-Existing e2e tests already exercise tmux and session-window creation. Add/update tests for:
+E2E tests exercise tmux and session-window creation. Add/update tests for:
 
 1. Dir config action default session-window:
    - config action with `matches = "dir"`, no `launch_mode`, command writes marker from `pwd`,
@@ -828,7 +851,7 @@ Existing e2e tests already exercise tmux and session-window creation. Add/update
    - action path command prints relative path or missing path,
    - command exits nonzero with useful error.
 
-E2E tests are part of `make test` today; if any require external tools like zoxide/git/tmux, follow existing test skip patterns.
+E2E tests are part of `make test`; if any require external tools like zoxide/git/tmux, use project skip patterns.
 
 ## Acceptance criteria
 

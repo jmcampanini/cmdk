@@ -10,8 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"github.com/jmcampanini/cmdk/internal/pathfmt"
 )
 
 const (
@@ -19,28 +17,14 @@ const (
 	KindDirectory = "directory"
 )
 
-var (
-	primaryBranchDirs       = [...]string{"main", "develop", "master"}
-	tmuxSessionNameReplacer = strings.NewReplacer(".", "_", ":", "_")
-)
-
-type DisplayOptions struct {
-	Home        string
-	ShortenHome string
-	Rules       []pathfmt.Rule
-	Truncation  pathfmt.Truncation
-}
+var primaryBranchDirs = [...]string{"main", "develop", "master"}
 
 type Plan struct {
-	SessionKind            string `json:"session_kind"`
-	SessionKey             string `json:"session_key"`
-	SessionDisplay         string `json:"session_display"`
-	LaunchPath             string `json:"launch_path"`
-	PlannedTmuxSessionName string `json:"planned_tmux_session_name"`
-	PlannedTmuxWindowName  string `json:"planned_tmux_window_name"`
+	SessionKind string `json:"session_kind"`
+	SessionKey  string `json:"session_key"`
 }
 
-func Resolve(ctx context.Context, inputPath string, display DisplayOptions) (Plan, error) {
+func Resolve(ctx context.Context, inputPath string) (Plan, error) {
 	if inputPath == "" {
 		return Plan{}, errors.New("path is required")
 	}
@@ -65,18 +49,18 @@ func Resolve(ctx context.Context, inputPath string, display DisplayOptions) (Pla
 		if err != nil {
 			return Plan{}, err
 		}
-		return newRepoPlan(sessionKey, worktree, display), nil
+		return newRepoPlan(sessionKey), nil
 	}
 
-	anchor, ok, err := groveAnchorFromContainer(ctx, absPath)
+	_, ok, err = groveAnchorFromContainer(ctx, absPath)
 	if err != nil {
 		return Plan{}, err
 	}
 	if ok {
-		return newRepoPlan(absPath, anchor, display), nil
+		return newRepoPlan(absPath), nil
 	}
 
-	return newDirectoryPlan(absPath, display), nil
+	return newDirectoryPlan(absPath), nil
 }
 
 func resolveExistingDirectory(inputPath string) (string, error) {
@@ -110,49 +94,12 @@ func sessionKeyForWorktree(ctx context.Context, worktree string) (string, error)
 	return worktree, nil
 }
 
-func newRepoPlan(sessionKey, launchPath string, display DisplayOptions) Plan {
-	return newPlanFromCanonicalPaths(
-		KindRepo,
-		canonicalPath(sessionKey),
-		canonicalPath(launchPath),
-		display,
-	)
+func newRepoPlan(sessionKey string) Plan {
+	return Plan{SessionKind: KindRepo, SessionKey: canonicalPath(sessionKey)}
 }
 
-func newDirectoryPlan(path string, display DisplayOptions) Plan {
-	canonicalDirectoryPath := canonicalPath(path)
-	return newPlanFromCanonicalPaths(KindDirectory, canonicalDirectoryPath, canonicalDirectoryPath, display)
-}
-
-func newPlanFromCanonicalPaths(kind, sessionKey, launchPath string, display DisplayOptions) Plan {
-	return Plan{
-		SessionKind:            kind,
-		SessionKey:             sessionKey,
-		SessionDisplay:         sessionDisplay(sessionKey, display),
-		LaunchPath:             launchPath,
-		PlannedTmuxSessionName: TmuxSafeSessionName(sessionKey),
-		PlannedTmuxWindowName:  filepath.Base(filepath.Clean(launchPath)),
-	}
-}
-
-func sessionDisplay(path string, display DisplayOptions) string {
-	return pathfmt.DisplayPath(path, display.Home, display.ShortenHome, display.Rules, display.Truncation)
-}
-
-// TmuxSafeSessionName returns the tmux session name cmdk uses when creating a
-// session for sessionKey. It cleans the path, normalizes separators to slashes,
-// trims leading slashes, replaces '.' and ':' with '_', and falls back to "_"
-// for empty or root-like names. The returned name is a tmux-safe creation and
-// display handle; it is not a uniqueness or identity guarantee. Cmdk session
-// identity comes from @cmdk_session_key metadata.
-func TmuxSafeSessionName(sessionKey string) string {
-	name := filepath.ToSlash(filepath.Clean(sessionKey))
-	name = strings.TrimLeft(name, "/")
-	name = tmuxSessionNameReplacer.Replace(name)
-	if name == "" || name == "." {
-		return "_"
-	}
-	return name
+func newDirectoryPlan(path string) Plan {
+	return Plan{SessionKind: KindDirectory, SessionKey: canonicalPath(path)}
 }
 
 func groveAnchorFromContainer(ctx context.Context, dir string) (string, bool, error) {
