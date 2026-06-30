@@ -108,7 +108,6 @@ var reservedStageKeys = []string{
 	"window_id",
 	"window_index",
 	"window_name",
-	"window_activity",
 	"launch_path",
 	"launch_basename",
 }

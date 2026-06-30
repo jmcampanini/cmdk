@@ -122,8 +122,8 @@ func TestParseWindows_WindowNameWithSpaces(t *testing.T) {
 	if got.Data["window_name"] != "my cool app" {
 		t.Errorf("window_name = %q, want %q", got.Data["window_name"], "my cool app")
 	}
-	if got.Data["window_activity"] != "123" {
-		t.Errorf("window_activity = %q, want 123", got.Data["window_activity"])
+	if _, ok := got.Data["window_activity"]; ok {
+		t.Errorf("window_activity should not be exposed in item data, got %q", got.Data["window_activity"])
 	}
 }
 
@@ -316,8 +316,8 @@ func TestParseWindowsForSession(t *testing.T) {
 	if items[0].Data["bell"] != "1" {
 		t.Errorf("items[0] bell = %q, want 1", items[0].Data["bell"])
 	}
-	if items[0].Data["window_activity"] != "200" {
-		t.Errorf("items[0] window_activity = %q, want 200", items[0].Data["window_activity"])
+	if _, ok := items[0].Data["window_activity"]; ok {
+		t.Errorf("window_activity should not be exposed in item data, got %q", items[0].Data["window_activity"])
 	}
 	if _, ok := items[1].Data["bell"]; ok {
 		t.Errorf("items[1] should not have bell key, got %q", items[1].Data["bell"])

@@ -569,17 +569,6 @@ func TestValidate_StageReservedKey_WindowName(t *testing.T) {
 	}
 }
 
-func TestValidate_StageReservedKey_WindowActivity(t *testing.T) {
-	cfg := DefaultConfig()
-	cfg.Actions = []Action{{
-		Name: "test", Cmd: "echo", Matches: "root",
-		Stages: []StageConfig{{Type: "prompt", Key: "window_activity", Text: "Enter"}},
-	}}
-	if err := cfg.Validate(); err == nil {
-		t.Error("expected error for reserved key 'window_activity'")
-	}
-}
-
 func TestValidate_StageDuplicateKeys_CaseInsensitive(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Actions = []Action{{

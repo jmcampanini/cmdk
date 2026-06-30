@@ -196,7 +196,6 @@ TEMPLATE VARIABLES
       {{.window_id}}      stable tmux window ID (from window items in the selection stack)
       {{.window_index}}   tmux window index (from window items in the selection stack)
       {{.window_name}}    display-safe tmux window name (from window items in the selection stack)
-      {{.window_activity}} tmux window last activity Unix timestamp (from window items)
       {{.launch_path}}    final validated launch directory (final cmd/window_name only)
       {{.launch_basename}} base name of launch_path (final cmd/window_name only)
       {{.session_attached}} tmux attached client count (from session items)

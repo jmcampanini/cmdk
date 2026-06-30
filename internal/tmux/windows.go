@@ -53,7 +53,6 @@ type windowLine struct {
 	windowID       string
 	rawWindowName  string
 	bellFlag       string
-	activity       string
 }
 
 func parseWindowLine(line string) (windowLine, bool) {
@@ -94,7 +93,6 @@ func parseWindowLine(line string) (windowLine, bool) {
 		windowID:       windowID,
 		rawWindowName:  fields[windowLineWindowNameField],
 		bellFlag:       bellFlag,
-		activity:       activity,
 	}, true
 }
 
@@ -113,7 +111,6 @@ func newWindowItem(parsed windowLine, bell bool) item.Item {
 	it.Data["window_index"] = parsed.windowIndex
 	it.Data["window_id"] = parsed.windowID
 	it.Data["window_name"] = windowName
-	it.Data["window_activity"] = parsed.activity
 	if bell {
 		it.Data["bell"] = "1"
 	}
@@ -239,7 +236,6 @@ type sessionWindowLine struct {
 	windowID      string
 	rawWindowName string
 	bellFlag      string
-	activity      string
 }
 
 func ParseWindowsForSession(output string, session item.Item) ([]item.Item, error) {
@@ -276,14 +272,7 @@ func parseSessionWindowEntries(output string, session item.Item) ([]sessionWindo
 			sortIndex:    parsed.sortIndex,
 			sortActivity: parsed.sortActivity,
 			bell:         bell,
-			item: newSessionWindowItem(
-				session,
-				parsed.windowIndex,
-				parsed.windowID,
-				parsed.rawWindowName,
-				parsed.activity,
-				bell,
-			),
+			item:         newSessionWindowItem(session, parsed.windowIndex, parsed.windowID, parsed.rawWindowName, bell),
 		})
 	}
 
@@ -346,11 +335,10 @@ func parseSessionWindowLine(line string) (sessionWindowLine, bool) {
 		windowID:      windowID,
 		rawWindowName: fields[sessionWindowLineNameField],
 		bellFlag:      bellFlag,
-		activity:      activity,
 	}, true
 }
 
-func newSessionWindowItem(session item.Item, windowIndex, windowID, rawWindowName, activity string, bell bool) item.Item {
+func newSessionWindowItem(session item.Item, windowIndex, windowID, rawWindowName string, bell bool) item.Item {
 	windowName := displaySafeTmuxWindowName(rawWindowName)
 
 	it := item.NewItem()
@@ -363,7 +351,6 @@ func newSessionWindowItem(session item.Item, windowIndex, windowID, rawWindowNam
 	it.Data["window_index"] = windowIndex
 	it.Data["window_id"] = windowID
 	it.Data["window_name"] = windowName
-	it.Data["window_activity"] = activity
 	if bell {
 		it.Data["bell"] = "1"
 	}
