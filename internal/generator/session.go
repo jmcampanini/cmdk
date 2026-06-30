@@ -18,10 +18,9 @@ const (
 )
 
 // NewSessionGenerator builds the child list shown after selecting a tmux
-// session: built-in Switch to session first, then user-defined session actions,
-// then windows in that session. Switch to session and configured actions are
-// type "action" while windows are type "window", so GroupAndOrder preserves the
-// required actions-before-windows display order.
+// session: built-in Switch to session, user-defined session actions, and windows
+// in that session. The TUI applies GroupAndOrder to the generated items, so the
+// shared type order controls whether windows or actions display first.
 func NewSessionGenerator(fetchWindows SessionWindowsFunc) GeneratorFunc {
 	actions := NewActionsGenerator()
 

@@ -196,6 +196,7 @@ TEMPLATE VARIABLES
       {{.window_id}}      stable tmux window ID (from window items in the selection stack)
       {{.window_index}}   tmux window index (from window items in the selection stack)
       {{.window_name}}    display-safe tmux window name (from window items in the selection stack)
+      {{.window_activity}} tmux window last activity Unix timestamp (from window items)
       {{.launch_path}}    final validated launch directory (final cmd/window_name only)
       {{.launch_basename}} base name of launch_path (final cmd/window_name only)
       {{.session_attached}} tmux attached client count (from session items)
@@ -267,8 +268,9 @@ SESSION WINDOWS
   session window requires a current tmux client for switch-client. It does not
   attach from outside tmux and does not fall back to attach-session.
 
-  In the TUI, selecting a tmux session shows the built-in "Switch to session"
-  action before configured session actions and windows.
+  In the TUI, tmux windows sort above sessions, directories, and actions. When
+  selecting a tmux session, windows in that session sort above the built-in
+  "Switch to session" action and configured session actions.
 
 EXECUTION
   Actions run in one of two launch modes. In session-window mode, cmdk resolves

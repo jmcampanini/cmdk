@@ -307,9 +307,9 @@ func TestSourceResult_GroupAndOrderApplied(t *testing.T) {
 			windowIdx = i
 		}
 	}
-	if actionIdx >= dirIdx || dirIdx >= windowIdx {
-		t.Errorf("expected order action < dir < window, got action=%d dir=%d window=%d in %v",
-			actionIdx, dirIdx, windowIdx, displays)
+	if windowIdx >= dirIdx || dirIdx >= actionIdx {
+		t.Errorf("expected order window < dir < action, got window=%d dir=%d action=%d in %v",
+			windowIdx, dirIdx, actionIdx, displays)
 	}
 }
 
@@ -346,9 +346,9 @@ func TestSourceResult_ErrorSortedBeforeNormalItems(t *testing.T) {
 			windowIdx = i
 		}
 	}
-	if errIdx >= actionIdx || actionIdx >= windowIdx {
-		t.Errorf("expected order error < action < window, got err=%d action=%d window=%d in %v",
-			errIdx, actionIdx, windowIdx, displays)
+	if errIdx >= windowIdx || windowIdx >= actionIdx {
+		t.Errorf("expected order error < window < action, got err=%d window=%d action=%d in %v",
+			errIdx, windowIdx, actionIdx, displays)
 	}
 }
 

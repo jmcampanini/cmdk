@@ -172,11 +172,11 @@ func TestRootGenerator_ErrorItemSortedFirst(t *testing.T) {
 	if got0.Type != "error" {
 		t.Errorf("ordered[0].Type = %q, want error", got0.Type)
 	}
-	if got1.Type != "action" {
-		t.Errorf("ordered[1].Type = %q, want action", got1.Type)
+	if got1.Type != "window" {
+		t.Errorf("ordered[1].Type = %q, want window", got1.Type)
 	}
-	if got2.Type != "window" {
-		t.Errorf("ordered[2].Type = %q, want window", got2.Type)
+	if got2.Type != "action" {
+		t.Errorf("ordered[2].Type = %q, want action", got2.Type)
 	}
 }
 
