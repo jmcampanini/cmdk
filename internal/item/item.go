@@ -39,17 +39,40 @@ func (s Stage) EffectiveDelimiter() string {
 	return ""
 }
 
+type DiagnosticField struct {
+	Label string
+	Value string
+}
+
+type DiagnosticSection struct {
+	Title string
+	Body  string
+}
+
+type Diagnostics struct {
+	Summary  string
+	Fields   []DiagnosticField
+	Sections []DiagnosticSection
+}
+
 type Item struct {
-	Type         string
-	Source       string
-	Display      string
-	Value        string
-	Data         map[string]string
-	Action       ActionType
-	Cmd          string
-	Icon         string
-	Stages       []Stage
-	InlineParent *Item
+	Type          string
+	Source        string
+	Display       string
+	Value         string
+	Data          map[string]string
+	Action        ActionType
+	Cmd           string
+	Icon          string
+	MatchType     string
+	LaunchMode    string
+	LaunchPath    string
+	LaunchPathCmd string
+	WindowName    string
+	NewShell      bool
+	Stages        []Stage
+	Diagnostics   *Diagnostics
+	InlineParent  *Item
 }
 
 func NewItem() Item {

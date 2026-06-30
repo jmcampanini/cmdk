@@ -13,15 +13,15 @@ import (
 	resolver "github.com/jmcampanini/cmdk/internal/session"
 )
 
-func useAttachTestHooks(t *testing.T, check func(context.Context, resolver.Plan) error) func() bool {
+func useAttachTestHooks(t *testing.T, check func(context.Context, resolver.Plan, string, string) error) func() bool {
 	t.Helper()
 	oldAttach := attachResolvedSession
 	oldInside := isInsideTmux
 	called := false
-	attachResolvedSession = func(ctx context.Context, plan resolver.Plan) error {
+	attachResolvedSession = func(ctx context.Context, plan resolver.Plan, launchPath, windowName string) error {
 		called = true
 		if check != nil {
-			return check(ctx, plan)
+			return check(ctx, plan, launchPath, windowName)
 		}
 		return nil
 	}
@@ -106,13 +106,19 @@ func TestRunAttachCommandUsesConfiguredStartupPath(t *testing.T) {
 	}
 	writeStartupConfig(t, xdg, dir)
 
-	called := useAttachTestHooks(t, func(ctx context.Context, plan resolver.Plan) error {
+	called := useAttachTestHooks(t, func(ctx context.Context, plan resolver.Plan, launchPath, windowName string) error {
 		if _, ok := ctx.Deadline(); ok {
 			t.Fatal("attach context unexpectedly inherited resolve timeout")
 		}
 		want := realAttachPath(t, dir)
 		if plan.SessionKey != want {
 			t.Errorf("SessionKey = %q, want %q", plan.SessionKey, want)
+		}
+		if launchPath != filepath.Clean(dir) {
+			t.Errorf("launchPath = %q, want %q", launchPath, filepath.Clean(dir))
+		}
+		if windowName != filepath.Base(dir) {
+			t.Errorf("windowName = %q, want %q", windowName, filepath.Base(dir))
 		}
 		return nil
 	})
@@ -136,10 +142,16 @@ func TestRunAttachCommandPathArgOverridesConfiguredStartupPath(t *testing.T) {
 	}
 	writeStartupConfig(t, xdg, configured)
 
-	called := useAttachTestHooks(t, func(_ context.Context, plan resolver.Plan) error {
+	called := useAttachTestHooks(t, func(_ context.Context, plan resolver.Plan, launchPath, windowName string) error {
 		want := realAttachPath(t, explicit)
 		if plan.SessionKey != want {
 			t.Errorf("SessionKey = %q, want explicit path %q", plan.SessionKey, want)
+		}
+		if launchPath != filepath.Clean(explicit) {
+			t.Errorf("launchPath = %q, want explicit path %q", launchPath, filepath.Clean(explicit))
+		}
+		if windowName != filepath.Base(explicit) {
+			t.Errorf("windowName = %q, want %q", windowName, filepath.Base(explicit))
 		}
 		return nil
 	})
@@ -162,10 +174,16 @@ func TestRunAttachCommandExpandsHomeInConfiguredStartupPath(t *testing.T) {
 	t.Setenv("HOME", home)
 	writeStartupConfig(t, xdg, "~/project")
 
-	called := useAttachTestHooks(t, func(_ context.Context, plan resolver.Plan) error {
+	called := useAttachTestHooks(t, func(_ context.Context, plan resolver.Plan, launchPath, windowName string) error {
 		want := realAttachPath(t, dir)
 		if plan.SessionKey != want {
 			t.Errorf("SessionKey = %q, want expanded home path %q", plan.SessionKey, want)
+		}
+		if launchPath != filepath.Clean(dir) {
+			t.Errorf("launchPath = %q, want expanded home path %q", launchPath, filepath.Clean(dir))
+		}
+		if windowName != filepath.Base(dir) {
+			t.Errorf("windowName = %q, want %q", windowName, filepath.Base(dir))
 		}
 		return nil
 	})

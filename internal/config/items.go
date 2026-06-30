@@ -28,13 +28,18 @@ func (a Action) ToItem() item.Item {
 	}
 
 	return item.Item{
-		Type:    "action",
-		Source:  "config",
-		Display: a.Name,
-		Action:  action,
-		Cmd:     a.Cmd,
-		Icon:    a.Icon,
-		Stages:  stages,
+		Type:          "action",
+		Source:        "config",
+		Display:       a.Name,
+		Action:        action,
+		Cmd:           a.Cmd,
+		Icon:          a.Icon,
+		MatchType:     a.Matches,
+		LaunchMode:    a.LaunchMode,
+		LaunchPath:    a.LaunchPath,
+		LaunchPathCmd: a.LaunchPathCmd,
+		WindowName:    a.WindowName,
+		Stages:        stages,
 	}
 }
 

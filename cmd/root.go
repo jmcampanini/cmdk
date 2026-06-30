@@ -246,7 +246,7 @@ func runRootCommand(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 	log.Info("executing", "item", sel.Display, "cmd", sel.Cmd, "data", sel.Data)
-	return execute.Run(m.Accumulated(), *sel, paneID, syscall.Exec)
+	return execute.RunWithConfig(m.Accumulated(), *sel, paneID, cfg, syscall.Exec)
 }
 
 func resolveConfigPath() (string, error) {

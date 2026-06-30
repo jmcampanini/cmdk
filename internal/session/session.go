@@ -10,8 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"github.com/jmcampanini/cmdk/internal/pathfmt"
 )
 
 const (
@@ -19,28 +17,14 @@ const (
 	KindDirectory = "directory"
 )
 
-var (
-	primaryBranchDirs       = [...]string{"main", "develop", "master"}
-	tmuxSessionNameReplacer = strings.NewReplacer(".", "_", ":", "_")
-)
-
-type DisplayOptions struct {
-	Home        string
-	ShortenHome string
-	Rules       []pathfmt.Rule
-	Truncation  pathfmt.Truncation
-}
+var primaryBranchDirs = [...]string{"main", "develop", "master"}
 
 type Plan struct {
-	SessionKind            string `json:"session_kind"`
-	SessionKey             string `json:"session_key"`
-	SessionDisplay         string `json:"session_display"`
-	LaunchPath             string `json:"launch_path"`
-	PlannedTmuxSessionName string `json:"planned_tmux_session_name"`
-	PlannedTmuxWindowName  string `json:"planned_tmux_window_name"`
+	SessionKind string `json:"session_kind"`
+	SessionKey  string `json:"session_key"`
 }
 
-func Resolve(ctx context.Context, inputPath string, display DisplayOptions) (Plan, error) {
+func Resolve(ctx context.Context, inputPath string) (Plan, error) {
 	if inputPath == "" {
 		return Plan{}, errors.New("path is required")
 	}
@@ -65,18 +49,18 @@ func Resolve(ctx context.Context, inputPath string, display DisplayOptions) (Pla
 		if err != nil {
 			return Plan{}, err
 		}
-		return newRepoPlan(sessionKey, worktree, display), nil
+		return newRepoPlan(sessionKey), nil
 	}
 
-	anchor, ok, err := groveAnchorFromContainer(ctx, absPath)
+	hasAnchor, err := hasGroveAnchor(ctx, absPath)
 	if err != nil {
 		return Plan{}, err
 	}
-	if ok {
-		return newRepoPlan(absPath, anchor, display), nil
+	if hasAnchor {
+		return newRepoPlan(absPath), nil
 	}
 
-	return newDirectoryPlan(absPath, display), nil
+	return newDirectoryPlan(absPath), nil
 }
 
 func resolveExistingDirectory(inputPath string) (string, error) {
@@ -110,52 +94,15 @@ func sessionKeyForWorktree(ctx context.Context, worktree string) (string, error)
 	return worktree, nil
 }
 
-func newRepoPlan(sessionKey, launchPath string, display DisplayOptions) Plan {
-	return newPlanFromCanonicalPaths(
-		KindRepo,
-		canonicalPath(sessionKey),
-		canonicalPath(launchPath),
-		display,
-	)
+func newRepoPlan(sessionKey string) Plan {
+	return Plan{SessionKind: KindRepo, SessionKey: canonicalPath(sessionKey)}
 }
 
-func newDirectoryPlan(path string, display DisplayOptions) Plan {
-	canonicalDirectoryPath := canonicalPath(path)
-	return newPlanFromCanonicalPaths(KindDirectory, canonicalDirectoryPath, canonicalDirectoryPath, display)
+func newDirectoryPlan(path string) Plan {
+	return Plan{SessionKind: KindDirectory, SessionKey: canonicalPath(path)}
 }
 
-func newPlanFromCanonicalPaths(kind, sessionKey, launchPath string, display DisplayOptions) Plan {
-	return Plan{
-		SessionKind:            kind,
-		SessionKey:             sessionKey,
-		SessionDisplay:         sessionDisplay(sessionKey, display),
-		LaunchPath:             launchPath,
-		PlannedTmuxSessionName: TmuxSafeSessionName(sessionKey),
-		PlannedTmuxWindowName:  filepath.Base(filepath.Clean(launchPath)),
-	}
-}
-
-func sessionDisplay(path string, display DisplayOptions) string {
-	return pathfmt.DisplayPath(path, display.Home, display.ShortenHome, display.Rules, display.Truncation)
-}
-
-// TmuxSafeSessionName returns the tmux session name cmdk uses when creating a
-// session for sessionKey. It cleans the path, normalizes separators to slashes,
-// trims leading slashes, replaces '.' and ':' with '_', and falls back to "_"
-// for empty or root-like names. The returned name is a tmux-safe creation and
-// display handle; it is not a uniqueness or identity guarantee. Cmdk session
-// identity comes from @cmdk_session_key metadata.
-func TmuxSafeSessionName(sessionKey string) string {
-	name := filepath.ToSlash(filepath.Clean(sessionKey))
-	name = strings.TrimLeft(name, "/")
-	name = tmuxSessionNameReplacer.Replace(name)
-	if name == "" || name == "." {
-		return "_"
-	}
-	return name
-}
-
-func groveAnchorFromContainer(ctx context.Context, dir string) (string, bool, error) {
+func hasGroveAnchor(ctx context.Context, dir string) (bool, error) {
 	var firstStatErr error
 	for _, name := range primaryBranchDirs {
 		child := filepath.Join(dir, name)
@@ -164,13 +111,13 @@ func groveAnchorFromContainer(ctx context.Context, dir string) (string, bool, er
 			if rememberWorktreeStatError(err, &firstStatErr) {
 				continue
 			}
-			return "", false, err
+			return false, err
 		}
 		if valid {
-			return child, true, nil
+			return true, nil
 		}
 	}
-	return "", false, firstStatErr
+	return false, firstStatErr
 }
 
 func groveContainerForWorktree(ctx context.Context, worktree string) (string, bool, error) {
@@ -303,6 +250,7 @@ func gitOutput(ctx context.Context, dir string, args ...string) ([]byte, error) 
 	cmd.Env = withoutGitEnv(os.Environ())
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
+	// TODO(#87): use a shared bounded stdout/stderr runner for git probes.
 	out, err := cmd.Output()
 	if err == nil {
 		return out, nil
@@ -355,10 +303,11 @@ func hasGitMarkerInAncestors(path string) (bool, error) {
 }
 
 func gitCommandError(dir string, args []string, err error, stderr string) error {
+	argString := strings.Join(args, " ")
 	if stderr == "" {
-		return fmt.Errorf("git -C %s %s: %w", dir, strings.Join(args, " "), err)
+		return fmt.Errorf("git -C %s %s: %w", dir, argString, err)
 	}
-	return fmt.Errorf("git -C %s %s: %w: %s", dir, strings.Join(args, " "), err, strings.TrimSpace(stderr))
+	return fmt.Errorf("git -C %s %s: %w: %s", dir, argString, err, strings.TrimSpace(stderr))
 }
 
 func withoutGitEnv(env []string) []string {

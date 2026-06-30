@@ -65,11 +65,15 @@ func runAttachCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	plan, err := resolveSessionPlanWithConfig(cmd, path, cfg)
+	launchPath, err := validateLaunchDirectory(path)
 	if err != nil {
 		return err
 	}
-	return attachResolvedSession(sessionMutationContext(cmd), plan)
+	plan, err := resolveSessionPlanWithConfig(cmd, launchPath, cfg)
+	if err != nil {
+		return err
+	}
+	return attachResolvedSession(sessionMutationContext(cmd), plan, launchPath, defaultWindowNameForLaunchPath(launchPath))
 }
 
 func attachPath(args []string, cfg config.Config, cfgPath string) (string, error) {

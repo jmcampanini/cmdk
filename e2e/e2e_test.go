@@ -494,7 +494,7 @@ auto_select_single = false
 	sendKeys(t, sess, "Enter")
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "New window") && strings.Contains(s, "New session window")
+		return strings.Contains(s, "New window") && strings.Contains(s, "New tmux window")
 	}, defaultTimeout)
 }
 
@@ -514,7 +514,7 @@ auto_select_single = false
 	sendKeys(t, sess, "Enter")
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "New window") && strings.Contains(s, "New session window")
+		return strings.Contains(s, "New window") && strings.Contains(s, "New tmux window")
 	}, defaultTimeout)
 
 	// First Escape exits filter mode (drill-down re-enters filter).
@@ -574,14 +574,13 @@ func runDetachedSessionWindowNew(t *testing.T, path string) string {
 }
 
 type managedSessionE2E struct {
-	ID      string
-	Kind    string
-	Display string
+	ID   string
+	Kind string
 }
 
 func findManagedSessionE2E(t *testing.T, key string) managedSessionE2E {
 	t.Helper()
-	out, err := tmuxCmd("list-sessions", "-F", "#{session_id}\t#{@cmdk_session_kind}\t#{@cmdk_session_key}\t#{@cmdk_session_display}").Output()
+	out, err := tmuxCmd("list-sessions", "-F", "#{session_id}\t#{@cmdk_session_kind}\t#{@cmdk_session_key}").Output()
 	if err != nil {
 		t.Fatalf("list-sessions failed: %v", err)
 	}
@@ -591,11 +590,11 @@ func findManagedSessionE2E(t *testing.T, key string) managedSessionE2E {
 			continue
 		}
 		fields := strings.Split(line, "\t")
-		if len(fields) != 4 {
+		if len(fields) != 3 {
 			t.Fatalf("malformed list-sessions row %q", line)
 		}
 		if fields[2] == key {
-			return managedSessionE2E{ID: fields[0], Kind: fields[1], Display: fields[3]}
+			return managedSessionE2E{ID: fields[0], Kind: fields[1]}
 		}
 	}
 	t.Fatalf("no managed session found for key %q\n%s", key, out)
@@ -641,9 +640,6 @@ func TestE2E_SessionWindowCreatesNonGitDirectorySession(t *testing.T) {
 	session := findManagedSessionE2E(t, dirReal)
 	if session.Kind != "directory" {
 		t.Errorf("session kind = %q, want directory", session.Kind)
-	}
-	if session.Display != dirReal {
-		t.Errorf("session display = %q, want %q", session.Display, dirReal)
 	}
 	windows := windowNamesE2E(t, session.ID)
 	if windows["scratch"] != dirReal {
@@ -760,6 +756,46 @@ matches = "root"
 	}
 }
 
+func TestE2E_RootLaunchPathActionCreatesManagedSession(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "scratch")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dirClean := filepath.Clean(dir)
+	dirReal := realPathE2E(t, dir)
+	marker := filepath.Join(t.TempDir(), "root-launch-path")
+	xdg := writeConfig(t, fmt.Sprintf(`
+[[actions]]
+name = "xq-launch-path"
+matches = "root"
+launch_path = "%s"
+cmd = "printf '%%s\\n%%s\\n' \"$PWD\" {{sq .launch_path}} > '%s'; sleep 30"
+`, dir, marker))
+
+	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	filterAndExecute(t, sess, "xq-launch-path")
+
+	lines := strings.Split(strings.TrimSpace(waitForFile(t, marker, defaultTimeout)), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("marker lines = %#v, want 2", lines)
+	}
+	wantLines := []string{dirReal, dirClean}
+	for i, got := range lines {
+		if got != wantLines[i] {
+			t.Fatalf("marker line %d = %q, want %q (all lines: %#v)", i, got, wantLines[i], lines)
+		}
+	}
+
+	session := findManagedSessionE2E(t, dirReal)
+	windows := windowNamesE2E(t, session.ID)
+	if windows["scratch"] != dirReal {
+		t.Errorf("scratch window cwd = %q, want %q (all windows: %v)", windows["scratch"], dirReal, windows)
+	}
+}
+
 func TestE2E_NoConfigFile(t *testing.T) {
 	xdg := t.TempDir()
 	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
@@ -856,7 +892,7 @@ matches = "dir"
 
 	waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, "New window") &&
-			strings.Contains(s, "New session window") &&
+			strings.Contains(s, "New tmux window") &&
 			strings.Contains(s, "xq-yazi-action")
 	}, defaultTimeout)
 }
@@ -884,18 +920,18 @@ matches = "dir"
 
 	content := waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, "New window") &&
-			strings.Contains(s, "New session window") &&
+			strings.Contains(s, "New tmux window") &&
 			strings.Contains(s, "xq-alpha-dirc") &&
 			strings.Contains(s, "xq-beta-dirc")
 	}, defaultTimeout)
 
 	newWindowIdx := strings.Index(content, "New window")
-	newSessionWindowIdx := strings.Index(content, "New session window")
+	newSessionWindowIdx := strings.Index(content, "New tmux window")
 	alphaIdx := strings.Index(content, "xq-alpha-dirc")
 	betaIdx := strings.Index(content, "xq-beta-dirc")
 
 	if newWindowIdx > newSessionWindowIdx || newSessionWindowIdx > alphaIdx || alphaIdx > betaIdx {
-		t.Errorf("items not in expected order: New window@%d New session window@%d alpha@%d beta@%d\nCapture:\n%s",
+		t.Errorf("items not in expected order: New window@%d New tmux window@%d alpha@%d beta@%d\nCapture:\n%s",
 			newWindowIdx, newSessionWindowIdx, alphaIdx, betaIdx, content)
 	}
 }
@@ -915,7 +951,7 @@ auto_select_single = false
 	sendKeys(t, sess, "Enter")
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "New window") && strings.Contains(s, "New session window")
+		return strings.Contains(s, "New window") && strings.Contains(s, "New tmux window")
 	}, defaultTimeout)
 }
 

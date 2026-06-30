@@ -13,26 +13,9 @@ func TestActionsGenerator_ProducesBuiltInDirActions(t *testing.T) {
 		t.Fatalf("got %d items, want 2", len(items))
 	}
 
-	plain := items[0]
-	if plain.Display != "New window" {
-		t.Errorf("Display = %q, want %q", plain.Display, "New window")
-	}
-	if plain.Type != "action" {
-		t.Errorf("Type = %q, want %q", plain.Type, "action")
-	}
-	if plain.Source != "builtin" {
-		t.Errorf("Source = %q, want %q", plain.Source, "builtin")
-	}
-	if plain.Action != item.ActionExecute {
-		t.Errorf("Action = %q, want %q", plain.Action, item.ActionExecute)
-	}
-	if plain.Cmd != "tmux new-window -c {{sq .path}}" {
-		t.Errorf("Cmd = %q, want plain tmux new-window template", plain.Cmd)
-	}
-
-	sessioned := items[1]
-	if sessioned.Display != "New session window" {
-		t.Errorf("Display = %q, want %q", sessioned.Display, "New session window")
+	sessioned := items[0]
+	if sessioned.Display != "New window" {
+		t.Errorf("Display = %q, want %q", sessioned.Display, "New window")
 	}
 	if sessioned.Type != "action" {
 		t.Errorf("Type = %q, want %q", sessioned.Type, "action")
@@ -43,8 +26,34 @@ func TestActionsGenerator_ProducesBuiltInDirActions(t *testing.T) {
 	if sessioned.Action != item.ActionExecute {
 		t.Errorf("Action = %q, want %q", sessioned.Action, item.ActionExecute)
 	}
-	if sessioned.Cmd != "cmdk session window {{sq .path}} --new" {
-		t.Errorf("Cmd = %q, want session window template", sessioned.Cmd)
+	if sessioned.Cmd != "" {
+		t.Errorf("Cmd = %q, want empty for internal new-shell action", sessioned.Cmd)
+	}
+	if !sessioned.NewShell {
+		t.Error("NewShell = false, want true")
+	}
+	if sessioned.MatchType != "dir" || sessioned.LaunchMode != config.LaunchModeSessionWindow {
+		t.Errorf("sessioned launch metadata = match %q mode %q, want dir/session-window", sessioned.MatchType, sessioned.LaunchMode)
+	}
+
+	plain := items[1]
+	if plain.Display != "New tmux window" {
+		t.Errorf("Display = %q, want %q", plain.Display, "New tmux window")
+	}
+	if plain.Type != "action" {
+		t.Errorf("Type = %q, want %q", plain.Type, "action")
+	}
+	if plain.Source != "builtin" {
+		t.Errorf("Source = %q, want %q", plain.Source, "builtin")
+	}
+	if plain.Action != item.ActionExecute {
+		t.Errorf("Action = %q, want %q", plain.Action, item.ActionExecute)
+	}
+	if plain.Cmd != "tmux new-window -c {{sq .launch_path}}" {
+		t.Errorf("Cmd = %q, want plain tmux new-window template", plain.Cmd)
+	}
+	if plain.MatchType != "dir" || plain.LaunchMode != config.LaunchModeShell {
+		t.Errorf("plain launch metadata = match %q mode %q, want dir/shell", plain.MatchType, plain.LaunchMode)
 	}
 }
 
@@ -89,8 +98,8 @@ func TestActionsGenerator_UsesLastItem(t *testing.T) {
 	if items[0].Display != "New window" {
 		t.Errorf("Display = %q, want %q", items[0].Display, "New window")
 	}
-	if items[1].Display != "New session window" {
-		t.Errorf("Display = %q, want %q", items[1].Display, "New session window")
+	if items[1].Display != "New tmux window" {
+		t.Errorf("Display = %q, want %q", items[1].Display, "New tmux window")
 	}
 }
 
@@ -116,7 +125,7 @@ func TestActionsGenerator_WithConfigActions(t *testing.T) {
 	if len(items) != 4 {
 		t.Fatalf("got %d items, want 4", len(items))
 	}
-	wantDisplays := []string{"New window", "New session window", "Yazi", "New pane"}
+	wantDisplays := []string{"New window", "New tmux window", "Yazi", "New pane"}
 	for i, want := range wantDisplays {
 		if items[i].Display != want {
 			t.Errorf("items[%d].Display = %q, want %q", i, items[i].Display, want)
@@ -143,8 +152,8 @@ func TestActionsGenerator_BuiltInsAlwaysFirst(t *testing.T) {
 	if items[0].Display != "New window" {
 		t.Errorf("first item should be 'New window', got %q", items[0].Display)
 	}
-	if items[1].Display != "New session window" {
-		t.Errorf("second item should be 'New session window', got %q", items[1].Display)
+	if items[1].Display != "New tmux window" {
+		t.Errorf("second item should be 'New tmux window', got %q", items[1].Display)
 	}
 	if items[0].Source != "builtin" || items[1].Source != "builtin" {
 		t.Errorf("built-ins Source = %q/%q, want builtin", items[0].Source, items[1].Source)

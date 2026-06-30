@@ -107,7 +107,6 @@ func TestRenderHelp_ContainsSessionWindowDocs(t *testing.T) {
 		"cmdk session window <path> --new",
 		"cmdk session window <path> [--name <name>] -- <command> [args...]",
 		"@cmdk_session_key",
-		"@cmdk_session_display",
 		"switch-client",
 		"Switch to session",
 	} {
@@ -129,6 +128,8 @@ func TestRenderHelp_ContainsTemplateVars(t *testing.T) {
 		"{{.window_id}}",
 		"{{.window_index}}",
 		"{{.window_name}}",
+		"{{.launch_path}}",
+		"{{.launch_basename}}",
 		"{{.session_kind}}",
 		"{{.session_name}}",
 		"{{.session_windows}}",
