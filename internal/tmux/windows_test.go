@@ -127,6 +127,17 @@ func TestParseWindows_WindowNameWithSpaces(t *testing.T) {
 	}
 }
 
+func TestParseWindows_BlankActivityDefaultsToZero(t *testing.T) {
+	items := mustParseWindows(t, "main\t$1\t1\t@1\tzsh\t0\t\n")
+
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
+	}
+	if items[0].Display != "tmux:win: 1 zsh ‹ main" {
+		t.Errorf("Display = %q, want %q", items[0].Display, "tmux:win: 1 zsh ‹ main")
+	}
+}
+
 func TestParseWindows_EscapedSessionAndDisplaySafeWindowNames(t *testing.T) {
 	output := "work\\nnotes\t$9\t1\t@7\tmy" + tmuxEscapedTab + "cool" + tmuxEscapedNewline + "app\t0\n"
 	items := mustParseWindows(t, output)
@@ -321,6 +332,21 @@ func TestParseWindowsForSession(t *testing.T) {
 	}
 	if _, ok := items[1].Data["bell"]; ok {
 		t.Errorf("items[1] should not have bell key, got %q", items[1].Data["bell"])
+	}
+}
+
+func TestParseWindowsForSession_BlankActivityDefaultsToZero(t *testing.T) {
+	session := item.NewItem()
+	session.Data["session_id"] = "$1"
+	session.Data["session_name"] = "work"
+
+	items := mustParseWindowsForSession(t, "1\t@1\tzsh\t0\t\n", session)
+
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
+	}
+	if items[0].Display != "tmux:win: 1 zsh ‹ work" {
+		t.Errorf("Display = %q, want %q", items[0].Display, "tmux:win: 1 zsh ‹ work")
 	}
 }
 

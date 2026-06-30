@@ -47,6 +47,9 @@ var (
 func splitWindowFields(line string, fieldCount int) ([]string, bool) {
 	fields, ok := splitTmuxFields(line, fieldCount)
 	if ok {
+		if fields[fieldCount-1] == "" {
+			fields[fieldCount-1] = defaultWindowActivity
+		}
 		return fields, true
 	}
 
