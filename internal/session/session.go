@@ -52,11 +52,11 @@ func Resolve(ctx context.Context, inputPath string) (Plan, error) {
 		return newRepoPlan(sessionKey), nil
 	}
 
-	_, ok, err = groveAnchorFromContainer(ctx, absPath)
+	hasAnchor, err := hasGroveAnchor(ctx, absPath)
 	if err != nil {
 		return Plan{}, err
 	}
-	if ok {
+	if hasAnchor {
 		return newRepoPlan(absPath), nil
 	}
 
@@ -102,7 +102,7 @@ func newDirectoryPlan(path string) Plan {
 	return Plan{SessionKind: KindDirectory, SessionKey: canonicalPath(path)}
 }
 
-func groveAnchorFromContainer(ctx context.Context, dir string) (string, bool, error) {
+func hasGroveAnchor(ctx context.Context, dir string) (bool, error) {
 	var firstStatErr error
 	for _, name := range primaryBranchDirs {
 		child := filepath.Join(dir, name)
@@ -111,13 +111,13 @@ func groveAnchorFromContainer(ctx context.Context, dir string) (string, bool, er
 			if rememberWorktreeStatError(err, &firstStatErr) {
 				continue
 			}
-			return "", false, err
+			return false, err
 		}
 		if valid {
-			return child, true, nil
+			return true, nil
 		}
 	}
-	return "", false, firstStatErr
+	return false, firstStatErr
 }
 
 func groveContainerForWorktree(ctx context.Context, worktree string) (string, bool, error) {
@@ -303,10 +303,11 @@ func hasGitMarkerInAncestors(path string) (bool, error) {
 }
 
 func gitCommandError(dir string, args []string, err error, stderr string) error {
+	argString := strings.Join(args, " ")
 	if stderr == "" {
-		return fmt.Errorf("git -C %s %s: %w", dir, strings.Join(args, " "), err)
+		return fmt.Errorf("git -C %s %s: %w", dir, argString, err)
 	}
-	return fmt.Errorf("git -C %s %s: %w: %s", dir, strings.Join(args, " "), err, strings.TrimSpace(stderr))
+	return fmt.Errorf("git -C %s %s: %w: %s", dir, argString, err, strings.TrimSpace(stderr))
 }
 
 func withoutGitEnv(env []string) []string {

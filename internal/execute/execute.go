@@ -179,18 +179,18 @@ func resolveLaunchPath(templateText string, data map[string]string) (string, err
 }
 
 func safeExpandLaunchPath(s string) (string, error) {
-	if s == "~" || strings.HasPrefix(s, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("launch_path expands ~: %w", err)
-		}
-		if s == "~" {
-			s = home
-		} else {
-			s = filepath.Join(home, s[2:])
-		}
+	if s != "~" && !strings.HasPrefix(s, "~/") {
+		return expandEnvVarsSafe(s)
 	}
-	return expandEnvVarsSafe(s)
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("launch_path expands ~: %w", err)
+	}
+	if s == "~" {
+		return expandEnvVarsSafe(home)
+	}
+	return expandEnvVarsSafe(filepath.Join(home, s[2:]))
 }
 
 func expandEnvVarsSafe(s string) (string, error) {
@@ -408,18 +408,22 @@ type boundedDiagnosticCapture struct {
 }
 
 func (c *boundedDiagnosticCapture) Write(p []byte) (int, error) {
+	written := len(p)
+	if written == 0 {
+		return 0, nil
+	}
+
 	remaining := c.limit - c.buf.Len()
-	if remaining > 0 {
-		if len(p) <= remaining {
-			c.buf.Write(p)
-		} else {
-			c.buf.Write(p[:remaining])
-			c.truncated = true
-		}
-	} else if len(p) > 0 {
+	if remaining <= 0 {
+		c.truncated = true
+		return written, nil
+	}
+	if written > remaining {
+		p = p[:remaining]
 		c.truncated = true
 	}
-	return len(p), nil
+	c.buf.Write(p)
+	return written, nil
 }
 
 func (c *boundedDiagnosticCapture) result() commandOutputResult {

@@ -100,11 +100,8 @@ func (m sessionWindowManager) attachResolvedSession(ctx context.Context, plan re
 	if err := validateLaunchPath(launchPath); err != nil {
 		return err
 	}
-	if windowName == "" {
-		return errors.New("window name cannot be empty")
-	}
-	if containsControl(windowName) {
-		return errors.New("window name contains control characters")
+	if err := validateWindowName(windowName); err != nil {
+		return err
 	}
 
 	sessionID, err := m.findAttachTargetSession(ctx, plan.SessionKey)
@@ -165,6 +162,13 @@ func validateSessionWindowOptions(windowName string, opts SessionWindowOptions) 
 	}
 	if !opts.NewShell && !haveCommand {
 		return errors.New(sessionWindowModeErrorMessage)
+	}
+	return validateWindowName(windowName)
+}
+
+func validateWindowName(windowName string) error {
+	if windowName == "" {
+		return errors.New("window name cannot be empty")
 	}
 	if containsControl(windowName) {
 		return errors.New("window name contains control characters")
