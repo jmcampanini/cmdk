@@ -11,7 +11,10 @@ import (
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
-const tmuxWindowSwitchCommand = "tmux switch-client -t {{sq .session_id}}:{{sq .window_id}}"
+const (
+	tmuxWindowSwitchCommand = "tmux switch-client -t {{sq .session_id}}:{{sq .window_id}}"
+	defaultWindowActivity   = "0"
+)
 
 var tmuxListWindowsFormat = tmuxFormatFields(
 	tmuxEscapedSessionNameFormat,
@@ -32,7 +35,6 @@ const (
 	windowLineBellFlagField
 	windowLineActivityField
 	windowLineFieldCount
-	legacyWindowLineFieldCount = windowLineActivityField
 )
 
 var (
@@ -40,63 +42,92 @@ var (
 	validTmuxWindowID  = regexp.MustCompile(`^@\d+$`)
 )
 
-func validTmuxFlag(s string) bool {
-	return s == "0" || s == "1"
+// splitWindowFields accepts current window rows and legacy rows that omit the
+// trailing activity field.
+func splitWindowFields(line string, fieldCount int) ([]string, bool) {
+	fields, ok := splitTmuxFields(line, fieldCount)
+	if ok {
+		return fields, true
+	}
+
+	legacyFields, ok := splitTmuxFields(line, fieldCount-1)
+	if !ok {
+		return nil, false
+	}
+	return append(legacyFields, defaultWindowActivity), true
+}
+
+func parseTmuxBoolFlag(s string) (bool, bool) {
+	switch s {
+	case "0":
+		return false, true
+	case "1":
+		return true, true
+	default:
+		return false, false
+	}
+}
+
+type windowSortKey struct {
+	index    int
+	activity int64
+	bell     bool
+}
+
+func parseWindowSortKey(windowIndex, activity, bellFlag string) (windowSortKey, bool) {
+	index, err := strconv.Atoi(windowIndex)
+	if err != nil {
+		return windowSortKey{}, false
+	}
+	windowActivity, err := strconv.ParseInt(activity, 10, 64)
+	if err != nil {
+		return windowSortKey{}, false
+	}
+	bell, ok := parseTmuxBoolFlag(bellFlag)
+	if !ok {
+		return windowSortKey{}, false
+	}
+	return windowSortKey{index: index, activity: windowActivity, bell: bell}, true
 }
 
 type windowLine struct {
-	sortIndex      int
-	sortActivity   int64
+	sort           windowSortKey
 	rawSessionName string
 	sessionID      string
 	windowIndex    string
 	windowID       string
 	rawWindowName  string
-	bellFlag       string
 }
 
 func parseWindowLine(line string) (windowLine, bool) {
-	fields, ok := splitTmuxFields(line, windowLineFieldCount)
+	fields, ok := splitWindowFields(line, windowLineFieldCount)
 	if !ok {
-		legacyFields, legacyOK := splitTmuxFields(line, legacyWindowLineFieldCount)
-		if !legacyOK {
-			return windowLine{}, false
-		}
-		fields = make([]string, windowLineFieldCount)
-		copy(fields, legacyFields)
-		fields[windowLineActivityField] = "0"
+		return windowLine{}, false
 	}
 
 	sessionID := fields[windowLineSessionIDField]
 	windowID := fields[windowLineWindowIDField]
 	windowIndex := fields[windowLineWindowIndexField]
-	bellFlag := fields[windowLineBellFlagField]
-	activity := fields[windowLineActivityField]
-	sortIndex, err := strconv.Atoi(windowIndex)
-	if err != nil {
-		return windowLine{}, false
-	}
-	sortActivity, err := strconv.ParseInt(activity, 10, 64)
-	if err != nil {
-		return windowLine{}, false
-	}
-	if !validTmuxSessionID.MatchString(sessionID) || !validTmuxWindowID.MatchString(windowID) || !validTmuxFlag(bellFlag) {
+	sortKey, ok := parseWindowSortKey(
+		windowIndex,
+		fields[windowLineActivityField],
+		fields[windowLineBellFlagField],
+	)
+	if !ok || !validTmuxSessionID.MatchString(sessionID) || !validTmuxWindowID.MatchString(windowID) {
 		return windowLine{}, false
 	}
 
 	return windowLine{
-		sortIndex:      sortIndex,
-		sortActivity:   sortActivity,
+		sort:           sortKey,
 		rawSessionName: fields[windowLineSessionField],
 		sessionID:      sessionID,
 		windowIndex:    windowIndex,
 		windowID:       windowID,
 		rawWindowName:  fields[windowLineWindowNameField],
-		bellFlag:       bellFlag,
 	}, true
 }
 
-func newWindowItem(parsed windowLine, bell bool) item.Item {
+func newWindowItem(parsed windowLine) item.Item {
 	sessionName := displaySafeTmuxSessionName(parsed.rawSessionName)
 	windowName := displaySafeTmuxWindowName(parsed.rawWindowName)
 
@@ -111,7 +142,7 @@ func newWindowItem(parsed windowLine, bell bool) item.Item {
 	it.Data["window_index"] = parsed.windowIndex
 	it.Data["window_id"] = parsed.windowID
 	it.Data["window_name"] = windowName
-	if bell {
+	if parsed.sort.bell {
 		it.Data["bell"] = "1"
 	}
 	return it
@@ -119,9 +150,7 @@ func newWindowItem(parsed windowLine, bell bool) item.Item {
 
 type windowEntry struct {
 	sortSessionName string
-	sortIndex       int
-	sortActivity    int64
-	bell            bool
+	sort            windowSortKey
 	item            item.Item
 }
 
@@ -137,13 +166,10 @@ func parseWindowEntries(output string) ([]windowEntry, int) {
 			continue
 		}
 
-		bell := parsed.bellFlag == "1"
 		entries = append(entries, windowEntry{
 			sortSessionName: parsed.rawSessionName,
-			sortIndex:       parsed.sortIndex,
-			sortActivity:    parsed.sortActivity,
-			bell:            bell,
-			item:            newWindowItem(parsed, bell),
+			sort:            parsed.sort,
+			item:            newWindowItem(parsed),
 		})
 	}
 
@@ -155,16 +181,16 @@ func sortWindowEntries(entries []windowEntry) {
 	// window index provide stable, deterministic order when activity ties.
 	sort.Slice(entries, func(i, j int) bool {
 		left, right := entries[i], entries[j]
-		if left.bell != right.bell {
-			return left.bell
+		if left.sort.bell != right.sort.bell {
+			return left.sort.bell
 		}
-		if left.sortActivity != right.sortActivity {
-			return left.sortActivity > right.sortActivity
+		if left.sort.activity != right.sort.activity {
+			return left.sort.activity > right.sort.activity
 		}
 		if left.sortSessionName != right.sortSessionName {
 			return left.sortSessionName < right.sortSessionName
 		}
-		return left.sortIndex < right.sortIndex
+		return left.sort.index < right.sort.index
 	})
 }
 
@@ -208,7 +234,6 @@ const (
 	sessionWindowLineBellFlagField
 	sessionWindowLineActivityField
 	sessionWindowLineFieldCount
-	legacySessionWindowLineFieldCount = sessionWindowLineActivityField
 )
 
 // Keep window_bell_flag as a sentinel field so empty window names preserve the
@@ -223,19 +248,15 @@ var windowsForSessionFormat = tmuxFormatFields(
 )
 
 type sessionWindowEntry struct {
-	sortIndex    int
-	sortActivity int64
-	bell         bool
-	item         item.Item
+	sort windowSortKey
+	item item.Item
 }
 
 type sessionWindowLine struct {
-	sortIndex     int
-	sortActivity  int64
+	sort          windowSortKey
 	windowIndex   string
 	windowID      string
 	rawWindowName string
-	bellFlag      string
 }
 
 func ParseWindowsForSession(output string, session item.Item) ([]item.Item, error) {
@@ -267,12 +288,9 @@ func parseSessionWindowEntries(output string, session item.Item) ([]sessionWindo
 			continue
 		}
 
-		bell := parsed.bellFlag == "1"
 		entries = append(entries, sessionWindowEntry{
-			sortIndex:    parsed.sortIndex,
-			sortActivity: parsed.sortActivity,
-			bell:         bell,
-			item:         newSessionWindowItem(session, parsed.windowIndex, parsed.windowID, parsed.rawWindowName, bell),
+			sort: parsed.sort,
+			item: newSessionWindowItem(session, parsed),
 		})
 	}
 
@@ -282,13 +300,13 @@ func parseSessionWindowEntries(output string, session item.Item) ([]sessionWindo
 func sortSessionWindowEntries(entries []sessionWindowEntry) {
 	sort.Slice(entries, func(i, j int) bool {
 		left, right := entries[i], entries[j]
-		if left.bell != right.bell {
-			return left.bell
+		if left.sort.bell != right.sort.bell {
+			return left.sort.bell
 		}
-		if left.sortActivity != right.sortActivity {
-			return left.sortActivity > right.sortActivity
+		if left.sort.activity != right.sort.activity {
+			return left.sort.activity > right.sort.activity
 		}
-		return left.sortIndex < right.sortIndex
+		return left.sort.index < right.sort.index
 	})
 }
 
@@ -301,57 +319,44 @@ func itemsFromSessionWindowEntries(entries []sessionWindowEntry) []item.Item {
 }
 
 func parseSessionWindowLine(line string) (sessionWindowLine, bool) {
-	fields, ok := splitTmuxFields(line, sessionWindowLineFieldCount)
+	fields, ok := splitWindowFields(line, sessionWindowLineFieldCount)
 	if !ok {
-		legacyFields, legacyOK := splitTmuxFields(line, legacySessionWindowLineFieldCount)
-		if !legacyOK {
-			return sessionWindowLine{}, false
-		}
-		fields = make([]string, sessionWindowLineFieldCount)
-		copy(fields, legacyFields)
-		fields[sessionWindowLineActivityField] = "0"
+		return sessionWindowLine{}, false
 	}
 
 	windowIndex := fields[sessionWindowLineIndexField]
 	windowID := fields[sessionWindowLineIDField]
-	bellFlag := fields[sessionWindowLineBellFlagField]
-	activity := fields[sessionWindowLineActivityField]
-	sortIndex, err := strconv.Atoi(windowIndex)
-	if err != nil {
-		return sessionWindowLine{}, false
-	}
-	sortActivity, err := strconv.ParseInt(activity, 10, 64)
-	if err != nil {
-		return sessionWindowLine{}, false
-	}
-	if !validTmuxWindowID.MatchString(windowID) || !validTmuxFlag(bellFlag) {
+	sortKey, ok := parseWindowSortKey(
+		windowIndex,
+		fields[sessionWindowLineActivityField],
+		fields[sessionWindowLineBellFlagField],
+	)
+	if !ok || !validTmuxWindowID.MatchString(windowID) {
 		return sessionWindowLine{}, false
 	}
 
 	return sessionWindowLine{
-		sortIndex:     sortIndex,
-		sortActivity:  sortActivity,
+		sort:          sortKey,
 		windowIndex:   windowIndex,
 		windowID:      windowID,
 		rawWindowName: fields[sessionWindowLineNameField],
-		bellFlag:      bellFlag,
 	}, true
 }
 
-func newSessionWindowItem(session item.Item, windowIndex, windowID, rawWindowName string, bell bool) item.Item {
-	windowName := displaySafeTmuxWindowName(rawWindowName)
+func newSessionWindowItem(session item.Item, parsed sessionWindowLine) item.Item {
+	windowName := displaySafeTmuxWindowName(parsed.rawWindowName)
 
 	it := item.NewItem()
 	it.Type = "window"
 	it.Source = "tmux"
-	it.Display = tmuxWindowDisplay(windowIndex, windowName, session.Data["session_name"])
+	it.Display = tmuxWindowDisplay(parsed.windowIndex, windowName, session.Data["session_name"])
 	it.Action = item.ActionExecute
 	it.Cmd = tmuxWindowSwitchCommand
 	maps.Copy(it.Data, session.Data)
-	it.Data["window_index"] = windowIndex
-	it.Data["window_id"] = windowID
+	it.Data["window_index"] = parsed.windowIndex
+	it.Data["window_id"] = parsed.windowID
 	it.Data["window_name"] = windowName
-	if bell {
+	if parsed.sort.bell {
 		it.Data["bell"] = "1"
 	}
 	return it
