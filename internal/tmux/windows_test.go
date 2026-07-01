@@ -77,15 +77,15 @@ func TestParseWindows_MultiSession(t *testing.T) {
 	}
 }
 
-func TestParseWindows_SortBySessionThenIndex(t *testing.T) {
-	output := "z\t$2\t2\t@4\tbash\t0\na\t$1\t3\t@3\tzsh\t0\na\t$1\t1\t@1\tvim\t0\nz\t$2\t1\t@2\tfish\t0\n"
+func TestParseWindows_SortByActivityAcrossSessions(t *testing.T) {
+	output := "z\t$2\t2\t@4\tbash\t0\t200\na\t$1\t3\t@3\tzsh\t0\t400\na\t$1\t1\t@1\tvim\t0\t100\nz\t$2\t1\t@2\tfish\t0\t300\n"
 	items := mustParseWindows(t, output)
 
 	if len(items) != 4 {
 		t.Fatalf("got %d items, want 4", len(items))
 	}
 
-	wantOrder := []string{"tmux:win: 1 vim ‹ a", "tmux:win: 3 zsh ‹ a", "tmux:win: 1 fish ‹ z", "tmux:win: 2 bash ‹ z"}
+	wantOrder := []string{"tmux:win: 3 zsh ‹ a", "tmux:win: 1 fish ‹ z", "tmux:win: 2 bash ‹ z", "tmux:win: 1 vim ‹ a"}
 	for i, display := range wantOrder {
 		if items[i].Display != display {
 			t.Errorf("item[%d].Display = %q, want %q", i, items[i].Display, display)
@@ -94,7 +94,7 @@ func TestParseWindows_SortBySessionThenIndex(t *testing.T) {
 }
 
 func TestParseWindows_WindowNameWithSpaces(t *testing.T) {
-	output := "work\t$9\t1\t@7\tmy cool app\t0\n"
+	output := "work\t$9\t1\t@7\tmy cool app\t0\t123\n"
 	items := mustParseWindows(t, output)
 
 	if len(items) != 1 {
@@ -121,6 +121,20 @@ func TestParseWindows_WindowNameWithSpaces(t *testing.T) {
 	}
 	if got.Data["window_name"] != "my cool app" {
 		t.Errorf("window_name = %q, want %q", got.Data["window_name"], "my cool app")
+	}
+	if _, ok := got.Data["window_activity"]; ok {
+		t.Errorf("window_activity should not be exposed in item data, got %q", got.Data["window_activity"])
+	}
+}
+
+func TestParseWindows_BlankActivityDefaultsToZero(t *testing.T) {
+	items := mustParseWindows(t, "main\t$1\t1\t@1\tzsh\t0\t\n")
+
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
+	}
+	if items[0].Display != "tmux:win: 1 zsh ‹ main" {
+		t.Errorf("Display = %q, want %q", items[0].Display, "tmux:win: 1 zsh ‹ main")
 	}
 }
 
@@ -250,8 +264,8 @@ func TestParseWindows_BellFlag(t *testing.T) {
 	}
 }
 
-func TestParseWindows_BellSortedFirst(t *testing.T) {
-	output := "main\t$1\t1\t@1\tzsh\t0\nmain\t$1\t2\t@2\tvim\t1\nmain\t$1\t3\t@3\tfish\t0\n"
+func TestParseWindows_BellSortedBeforeFresherNonBellWindows(t *testing.T) {
+	output := "main\t$1\t1\t@1\tzsh\t0\t999\nmain\t$1\t2\t@2\tvim\t1\t100\nmain\t$1\t3\t@3\tfish\t0\t500\n"
 	items := mustParseWindows(t, output)
 
 	if len(items) != 3 {
@@ -263,6 +277,9 @@ func TestParseWindows_BellSortedFirst(t *testing.T) {
 	if items[1].Display != "tmux:win: 1 zsh ‹ main" {
 		t.Errorf("item[1].Display = %q, want %q", items[1].Display, "tmux:win: 1 zsh ‹ main")
 	}
+	if items[2].Display != "tmux:win: 3 fish ‹ main" {
+		t.Errorf("item[2].Display = %q, want %q", items[2].Display, "tmux:win: 3 fish ‹ main")
+	}
 }
 
 func TestParseWindowsForSession(t *testing.T) {
@@ -272,7 +289,7 @@ func TestParseWindowsForSession(t *testing.T) {
 	session.Data["session_name"] = "work"
 	session.Data["session_kind"] = "external"
 
-	items := mustParseWindowsForSession(t, "2\t@8\tvim\t0\n1\t@7\tzsh\t1\n", session)
+	items := mustParseWindowsForSession(t, "2\t@8\tvim\t0\t100\n1\t@7\tzsh\t1\t200\n", session)
 
 	if len(items) != 2 {
 		t.Fatalf("got %d items, want 2", len(items))
@@ -307,8 +324,29 @@ func TestParseWindowsForSession(t *testing.T) {
 	if items[0].Cmd != `tmux switch-client -t {{sq .session_id}}:{{sq .window_id}}` {
 		t.Errorf("Cmd = %q", items[0].Cmd)
 	}
-	if _, ok := items[0].Data["bell"]; ok {
-		t.Error("session child windows should not set bell data that would reorder them above Switch to session")
+	if items[0].Data["bell"] != "1" {
+		t.Errorf("items[0] bell = %q, want 1", items[0].Data["bell"])
+	}
+	if _, ok := items[0].Data["window_activity"]; ok {
+		t.Errorf("window_activity should not be exposed in item data, got %q", items[0].Data["window_activity"])
+	}
+	if _, ok := items[1].Data["bell"]; ok {
+		t.Errorf("items[1] should not have bell key, got %q", items[1].Data["bell"])
+	}
+}
+
+func TestParseWindowsForSession_BlankActivityDefaultsToZero(t *testing.T) {
+	session := item.NewItem()
+	session.Data["session_id"] = "$1"
+	session.Data["session_name"] = "work"
+
+	items := mustParseWindowsForSession(t, "1\t@1\tzsh\t0\t\n", session)
+
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
+	}
+	if items[0].Display != "tmux:win: 1 zsh ‹ work" {
+		t.Errorf("Display = %q, want %q", items[0].Display, "tmux:win: 1 zsh ‹ work")
 	}
 }
 

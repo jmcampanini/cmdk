@@ -27,6 +27,20 @@ func tmuxCmd(args ...string) *exec.Cmd {
 	return exec.Command("tmux", append([]string{"-L", tmuxSocket}, args...)...)
 }
 
+func useIsolatedTmuxSocket(t *testing.T) {
+	t.Helper()
+	// Tests that need an empty tmux server should not kill the shared e2e
+	// server mid-package; on CI, starting a new session on a just-killed socket
+	// can race the server shutdown and fail with "server exited unexpectedly".
+	oldSocket := tmuxSocket
+	socket := fmt.Sprintf("%s-%d", oldSocket, time.Now().UnixNano())
+	tmuxSocket = socket
+	t.Cleanup(func() {
+		_ = exec.Command("tmux", "-L", socket, "kill-server").Run()
+		tmuxSocket = oldSocket
+	})
+}
+
 func TestMain(m *testing.M) {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		fmt.Fprintln(os.Stderr, "SKIP: e2e tests require tmux in PATH")
@@ -237,7 +251,9 @@ func navigateToDirItem(t *testing.T, sess string) {
 	}, 3*time.Second)
 	firstDir := strings.Index(content, iconDir)
 	contentBeforeFirstDir := content[:firstDir]
-	itemsBeforeDirs := strings.Count(contentBeforeFirstDir, iconSession) + strings.Count(contentBeforeFirstDir, iconAction)
+	itemsBeforeDirs := strings.Count(contentBeforeFirstDir, iconWindow) +
+		strings.Count(contentBeforeFirstDir, iconSession) +
+		strings.Count(contentBeforeFirstDir, iconAction)
 	for range itemsBeforeDirs {
 		sendKeys(t, sess, "Down")
 		time.Sleep(50 * time.Millisecond)
@@ -445,9 +461,9 @@ matches = "session"
 	switchIdx := strings.Index(content, "Switch to session")
 	actionIdx := strings.Index(content, "xq-sess-action")
 	windowIdx := strings.Index(content, iconWindow)
-	if switchIdx < 0 || switchIdx > actionIdx || actionIdx > windowIdx {
-		t.Errorf("expected order Switch to session < session action < window; got switch@%d action@%d window@%d:\n%s",
-			switchIdx, actionIdx, windowIdx, content)
+	if windowIdx < 0 || windowIdx > switchIdx || switchIdx > actionIdx {
+		t.Errorf("expected order window < Switch to session < session action; got window@%d switch@%d action@%d:\n%s",
+			windowIdx, switchIdx, actionIdx, content)
 	}
 }
 
@@ -458,10 +474,9 @@ func TestE2E_SessionSwitchActionSwitchesAndExits(t *testing.T) {
 	waitForReady(t, sess)
 	drillIntoSession(t, sess)
 
-	// Switch to session is the first child item. Cancel the empty child-list
-	// filter to enter browse mode with the cursor on it, then Enter executes it.
-	exitFilterModeE2E(t, sess)
-	sendKeys(t, sess, "Enter")
+	// Windows sort before actions in session child lists, so filter to the
+	// built-in action before executing it.
+	filterAndExecute(t, sess, "Switch to session")
 	waitForExit(t, sess)
 }
 
@@ -720,7 +735,7 @@ func TestE2E_SessionWindowCreatesRepoWorktreeSessionAndWindows(t *testing.T) {
 func TestE2E_ConfigCommandsVisible(t *testing.T) {
 	xdg := writeConfig(t, `
 [[actions]]
-name = "my-custom-cmd"
+name = "xq-visible-cmd"
 cmd = "echo hello"
 matches = "root"
 `)
@@ -728,10 +743,10 @@ matches = "root"
 	defer killSession(t, sess)
 
 	waitForReady(t, sess)
-	sendKeys(t, sess, "End")
+	typeText(t, sess, "xq-visible-cmd")
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "my-custom-cmd")
+		return strings.Contains(s, "xq-visible-cmd")
 	}, defaultTimeout)
 }
 
@@ -830,40 +845,42 @@ func TestE2E_MalformedConfigShowsError(t *testing.T) {
 }
 
 func TestE2E_ConfigCommandOrder(t *testing.T) {
+	useIsolatedTmuxSocket(t)
 	xdg := writeConfig(t, `
 [[actions]]
-name = "alpha-cmd"
+name = "xqorder-alpha"
 cmd = "echo alpha"
 matches = "root"
 
 [[actions]]
-name = "beta-cmd"
+name = "xqorder-beta"
 cmd = "echo beta"
 matches = "root"
 
 [[actions]]
-name = "gamma-cmd"
+name = "xqorder-gamma"
 cmd = "echo gamma"
 matches = "root"
 `)
 	sess := "cmdk-test-" + strings.ReplaceAll(t.Name(), "/", "-")
 	cmd := tmuxCmd("new-session", "-d", "-s", sess, "-x", "120", "-y", "80",
-		"env", "XDG_CONFIG_HOME="+xdg, binaryPath, "--pane-id=%0")
+		"env", "XDG_CONFIG_HOME="+xdg, "PATH="+restrictedPATH(t), binaryPath, "--pane-id=%0")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("tmux new-session failed: %v\n%s", err, out)
 	}
 	defer killSession(t, sess)
 
 	waitForReady(t, sess)
+	exitFilterModeE2E(t, sess)
 	sendKeys(t, sess, "End")
 
 	content := waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "alpha-cmd") && strings.Contains(s, "gamma-cmd")
+		return strings.Contains(s, "xqorder-alpha") && strings.Contains(s, "xqorder-gamma")
 	}, defaultTimeout)
 
-	alphaIdx := strings.Index(content, "alpha-cmd")
-	betaIdx := strings.Index(content, "beta-cmd")
-	gammaIdx := strings.Index(content, "gamma-cmd")
+	alphaIdx := strings.Index(content, "xqorder-alpha")
+	betaIdx := strings.Index(content, "xqorder-beta")
+	gammaIdx := strings.Index(content, "xqorder-gamma")
 
 	if alphaIdx < 0 || betaIdx < 0 || gammaIdx < 0 {
 		t.Fatalf("not all commands visible\nCapture:\n%s", content)
@@ -1188,6 +1205,7 @@ auto_select_single = false
 [[actions]]
 name = "xq-prompt-action"
 matches = "dir"
+launch_mode = "shell"
 cmd = "sh -c 'echo {{.branch}} > %s'"
 stages = [
   { type = "prompt", text = "Branch:", key = "branch" },
@@ -1222,6 +1240,7 @@ auto_select_single = false
 [[actions]]
 name = "xq-picker-action"
 matches = "dir"
+launch_mode = "shell"
 cmd = "sh -c 'echo {{.chosen}} > %s'"
 stages = [
   { type = "picker", source = "printf 'xq-alpha\\nxq-beta\\nxq-gamma'", key = "chosen" },

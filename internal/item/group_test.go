@@ -41,7 +41,7 @@ func TestGroupAndOrder_MixedTypes(t *testing.T) {
 	}
 
 	got := types(GroupAndOrder(items, false))
-	want := []string{"action", "dir", "dir", "window", "window"}
+	want := []string{"window", "window", "dir", "dir", "action"}
 
 	if !slices.Equal(got, want) {
 		t.Errorf("types = %v, want %v", got, want)
@@ -57,7 +57,7 @@ func TestGroupAndOrder_SessionsAfterWindows(t *testing.T) {
 	}
 
 	got := types(GroupAndOrder(items, false))
-	want := []string{"action", "dir", "window", "session"}
+	want := []string{"window", "session", "dir", "action"}
 
 	if !slices.Equal(got, want) {
 		t.Errorf("types = %v, want %v", got, want)
@@ -97,7 +97,7 @@ func TestGroupAndOrder_BellToTop(t *testing.T) {
 	}
 
 	got := displays(GroupAndOrder(items, true))
-	want := []string{"tmux: main:1 zsh", "htop", "~/foo", "tmux: main:2 vim"}
+	want := []string{"tmux: main:1 zsh", "tmux: main:2 vim", "~/foo", "htop"}
 
 	if !slices.Equal(got, want) {
 		t.Errorf("displays = %v, want %v", got, want)
@@ -114,7 +114,7 @@ func TestGroupAndOrder_BellToTopDisabled(t *testing.T) {
 	}
 
 	got := types(GroupAndOrder(items, false))
-	want := []string{"action", "window", "window"}
+	want := []string{"window", "window", "action"}
 
 	if !slices.Equal(got, want) {
 		t.Errorf("types = %v, want %v", got, want)
@@ -161,7 +161,7 @@ func TestGroupAndOrder_LoadingBeforeBellAndNormalItems(t *testing.T) {
 	}
 
 	got := displays(GroupAndOrder(items, true))
-	want := []string{"Loading windows\u2026", "tmux: main:1 zsh", "deploy", "~/foo"}
+	want := []string{"Loading windows\u2026", "tmux: main:1 zsh", "~/foo", "deploy"}
 
 	if !slices.Equal(got, want) {
 		t.Errorf("displays = %v, want %v", got, want)
@@ -195,7 +195,7 @@ func TestGroupAndOrder_KnownTypesAfterStatusItems(t *testing.T) {
 	}
 
 	got := displays(GroupAndOrder(items, false))
-	want := []string{"zoxide error: command not found", "Loading windows\u2026", "deploy", "~/foo", "main:1 zsh"}
+	want := []string{"zoxide error: command not found", "Loading windows\u2026", "main:1 zsh", "~/foo", "deploy"}
 
 	if !slices.Equal(got, want) {
 		t.Errorf("displays = %v, want %v", got, want)

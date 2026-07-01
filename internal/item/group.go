@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	TypeOrder       = []string{"action", "dir", "window", "session"}
+	TypeOrder       = []string{"window", "session", "dir", "action"}
 	statusTypeOrder = []string{"error", "loading"}
 )
 

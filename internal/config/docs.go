@@ -267,8 +267,9 @@ SESSION WINDOWS
   session window requires a current tmux client for switch-client. It does not
   attach from outside tmux and does not fall back to attach-session.
 
-  In the TUI, selecting a tmux session shows the built-in "Switch to session"
-  action before configured session actions and windows.
+  In the TUI, tmux windows sort above sessions, directories, and actions. When
+  selecting a tmux session, windows in that session sort above the built-in
+  "Switch to session" action and configured session actions.
 
 EXECUTION
   Actions run in one of two launch modes. In session-window mode, cmdk resolves
