@@ -27,6 +27,20 @@ func tmuxCmd(args ...string) *exec.Cmd {
 	return exec.Command("tmux", append([]string{"-L", tmuxSocket}, args...)...)
 }
 
+func useIsolatedTmuxSocket(t *testing.T) {
+	t.Helper()
+	// Tests that need an empty tmux server should not kill the shared e2e
+	// server mid-package; on CI, starting a new session on a just-killed socket
+	// can race the server shutdown and fail with "server exited unexpectedly".
+	oldSocket := tmuxSocket
+	socket := fmt.Sprintf("%s-%d", oldSocket, time.Now().UnixNano())
+	tmuxSocket = socket
+	t.Cleanup(func() {
+		_ = exec.Command("tmux", "-L", socket, "kill-server").Run()
+		tmuxSocket = oldSocket
+	})
+}
+
 func TestMain(m *testing.M) {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		fmt.Fprintln(os.Stderr, "SKIP: e2e tests require tmux in PATH")
@@ -831,7 +845,7 @@ func TestE2E_MalformedConfigShowsError(t *testing.T) {
 }
 
 func TestE2E_ConfigCommandOrder(t *testing.T) {
-	_ = tmuxCmd("kill-server").Run()
+	useIsolatedTmuxSocket(t)
 	xdg := writeConfig(t, `
 [[actions]]
 name = "xqorder-alpha"
