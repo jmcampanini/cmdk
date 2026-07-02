@@ -116,7 +116,12 @@ func runRootCommand(cmd *cobra.Command, _ []string) error {
 	}
 	stop()
 
-	tmuxDisplay := tmux.DisplayOptions{Home: home, ShortenHome: shortenHome, Rules: rules, SessionTruncation: tmuxTrunc}
+	tmuxDisplay := tmux.DisplayOptions{
+		Home:              home,
+		ShortenHome:       shortenHome,
+		Rules:             rules,
+		SessionTruncation: tmuxTrunc,
+	}
 	sources := []generator.Source{
 		traceSource(tr, "source/windows", generator.Source{Name: "windows", Async: true, Fetch: func(ctx context.Context) ([]item.Item, error) {
 			return tmux.ListWindowsWithDisplay(ctx, tmuxDisplay)

@@ -53,7 +53,7 @@ func ParseSessionsWithDisplay(output string, display DisplayOptions) ([]item.Ite
 	}
 
 	sort.SliceStable(entries, func(i, j int) bool {
-		return entries[i].sortName < entries[j].sortName
+		return entries[i].sortValue < entries[j].sortValue
 	})
 
 	items := make([]item.Item, len(entries))
@@ -67,8 +67,8 @@ func ParseSessionsWithDisplay(output string, display DisplayOptions) ([]item.Ite
 }
 
 type sessionEntry struct {
-	sortName string
-	item     item.Item
+	sortValue string
+	item      item.Item
 }
 
 func parseSessionLine(line string, display DisplayOptions) (sessionEntry, bool) {
@@ -93,8 +93,8 @@ func parseSessionLine(line string, display DisplayOptions) (sessionEntry, bool) 
 	}
 
 	return sessionEntry{
-		sortName: sessionDisplayValue(sessionName, sessionKey),
-		item:     newSessionItem(sessionID, sessionName, sessionKey, sessionWindows, sessionAttached, display),
+		sortValue: sessionDisplayValue(sessionName, sessionKey),
+		item:      newSessionItem(sessionID, sessionName, sessionKey, sessionWindows, sessionAttached, display),
 	}, true
 }
 
@@ -111,14 +111,14 @@ func splitSessionFields(line string) ([]string, bool) {
 }
 
 func newSessionItem(sessionID, sessionName, sessionKey, sessionWindows, sessionAttached string, displayOptions DisplayOptions) item.Item {
-	display := "tmux ses " + displayOptions.formatSessionValue(sessionDisplayValue(sessionName, sessionKey))
+	displayText := "tmux ses " + displayOptions.formatSessionDisplay(sessionName, sessionKey)
 	it := item.NewItem()
 	it.Type = "session"
 	it.Source = "tmux"
-	it.Display = display
+	it.Display = displayText
 	it.Action = item.ActionNextList
 	it.Data["session_attached"] = sessionAttached
-	it.Data["session_display"] = display
+	it.Data["session_display"] = displayText
 	it.Data["session_id"] = sessionID
 	if sessionKey != "" {
 		it.Data["session_key"] = sessionKey

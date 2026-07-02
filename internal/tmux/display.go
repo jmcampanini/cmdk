@@ -18,6 +18,10 @@ func (o DisplayOptions) formatSessionValue(value string) string {
 	return pathfmt.DisplayPath(value, o.Home, o.ShortenHome, o.Rules, o.SessionTruncation)
 }
 
+func (o DisplayOptions) formatSessionDisplay(sessionName, sessionKey string) string {
+	return o.formatSessionValue(sessionDisplayValue(sessionName, sessionKey))
+}
+
 func sessionDisplayValue(sessionName, sessionKey string) string {
 	if sessionKey != "" {
 		return sessionKey

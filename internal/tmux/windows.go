@@ -141,7 +141,7 @@ func splitRootWindowFields(line string) ([]string, bool) {
 	case windowLineFieldCount:
 		return rootWindowFieldsWithDefaultActivity(fields), true
 	case windowLineFieldCount - 1:
-		if validTmuxSessionID.MatchString(fields[windowLineSessionIDField]) && validTmuxWindowID.MatchString(fields[windowLineWindowIDField]) {
+		if rootWindowFieldsHaveSessionKey(fields) {
 			fields = append(fields, defaultWindowActivity)
 			return fields, true
 		}
@@ -151,6 +151,12 @@ func splitRootWindowFields(line string) ([]string, bool) {
 	default:
 		return nil, false
 	}
+}
+
+func rootWindowFieldsHaveSessionKey(fields []string) bool {
+	return len(fields) == windowLineFieldCount-1 &&
+		validTmuxSessionID.MatchString(fields[windowLineSessionIDField]) &&
+		validTmuxWindowID.MatchString(fields[windowLineWindowIDField])
 }
 
 func rootWindowFieldsWithDefaultActivity(fields []string) []string {
@@ -164,7 +170,9 @@ func rootWindowFieldsWithoutSessionKey(fields []string) ([]string, bool) {
 	if len(fields) != windowLineFieldCount-1 {
 		return nil, false
 	}
-	if !validTmuxSessionID.MatchString(fields[1]) || !validTmuxWindowID.MatchString(fields[3]) {
+	sessionID := fields[1]
+	windowID := fields[3]
+	if !validTmuxSessionID.MatchString(sessionID) || !validTmuxWindowID.MatchString(windowID) {
 		return nil, false
 	}
 	withSessionKey := make([]string, 0, windowLineFieldCount)
@@ -177,7 +185,7 @@ func newWindowItem(parsed windowLine, display DisplayOptions) item.Item {
 	sessionName := displaySafeTmuxSessionName(parsed.rawSessionName)
 	sessionKey := displaySafeTmuxControls(parsed.rawSessionKey)
 	windowName := displaySafeTmuxWindowName(parsed.rawWindowName)
-	sessionDisplay := display.formatSessionValue(sessionDisplayValue(sessionName, sessionKey))
+	sessionDisplay := display.formatSessionDisplay(sessionName, sessionKey)
 
 	it := item.NewItem()
 	it.Type = "window"
@@ -200,9 +208,9 @@ func newWindowItem(parsed windowLine, display DisplayOptions) item.Item {
 }
 
 type windowEntry struct {
-	sortSessionName string
-	sortKey         windowSortKey
-	item            item.Item
+	sortSessionValue string
+	sortKey          windowSortKey
+	item             item.Item
 }
 
 func parseWindowEntries(output string, display DisplayOptions) ([]windowEntry, int) {
@@ -218,9 +226,9 @@ func parseWindowEntries(output string, display DisplayOptions) ([]windowEntry, i
 		}
 
 		entries = append(entries, windowEntry{
-			sortSessionName: sessionDisplayValue(parsed.rawSessionName, parsed.rawSessionKey),
-			sortKey:         parsed.sortKey,
-			item:            newWindowItem(parsed, display),
+			sortSessionValue: sessionDisplayValue(parsed.rawSessionName, parsed.rawSessionKey),
+			sortKey:          parsed.sortKey,
+			item:             newWindowItem(parsed, display),
 		})
 	}
 
@@ -247,8 +255,8 @@ func sortWindowEntries(entries []windowEntry) {
 		if less, ok := lessWindowPriority(left.sortKey, right.sortKey); ok {
 			return less
 		}
-		if left.sortSessionName != right.sortSessionName {
-			return left.sortSessionName < right.sortSessionName
+		if left.sortSessionValue != right.sortSessionValue {
+			return left.sortSessionValue < right.sortSessionValue
 		}
 		return left.sortKey.index < right.sortKey.index
 	})
@@ -414,7 +422,9 @@ func parseSessionWindowLine(line string) (sessionWindowLine, bool) {
 
 func newSessionWindowItem(session item.Item, parsed sessionWindowLine, display DisplayOptions) item.Item {
 	windowName := displaySafeTmuxWindowName(parsed.rawWindowName)
-	sessionDisplay := display.formatSessionValue(sessionDisplayValue(session.Data["session_name"], session.Data["session_key"]))
+	sessionName := session.Data["session_name"]
+	sessionKey := session.Data["session_key"]
+	sessionDisplay := display.formatSessionDisplay(sessionName, sessionKey)
 
 	it := item.NewItem()
 	it.Type = "window"
@@ -432,13 +442,13 @@ func newSessionWindowItem(session item.Item, parsed sessionWindowLine, display D
 	return it
 }
 
-func tmuxWindowDisplay(windowName, sessionName string) string {
+func tmuxWindowDisplay(windowName, sessionDisplay string) string {
 	display := "tmux win"
 	if windowName != "" {
 		display += " " + windowName
 	}
-	if sessionName != "" {
-		display += " ‹ " + sessionName
+	if sessionDisplay != "" {
+		display += " ‹ " + sessionDisplay
 	}
 	return display
 }
