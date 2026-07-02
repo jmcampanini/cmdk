@@ -164,7 +164,7 @@ func TestExpandInline_DoesNotExpandSessions(t *testing.T) {
 	ctx := generator.Context{}
 
 	items := []item.Item{
-		{Type: "session", Display: "tmux:ses: work", Action: item.ActionNextList},
+		{Type: "session", Display: "tmux ses work", Action: item.ActionNextList},
 	}
 
 	result := expandInline(items, reg, ctx)
@@ -172,8 +172,8 @@ func TestExpandInline_DoesNotExpandSessions(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d items, want 1", len(result))
 	}
-	if result[0].Display != "tmux:ses: work" {
-		t.Errorf("Display = %q, want tmux:ses: work", result[0].Display)
+	if result[0].Display != "tmux ses work" {
+		t.Errorf("Display = %q, want tmux ses work", result[0].Display)
 	}
 	if result[0].InlineParent != nil {
 		t.Error("InlineParent should be nil for preserved session item")

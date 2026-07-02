@@ -140,11 +140,13 @@ func ConfigDocs() []SectionDoc {
 			Description: "Path display formatting. Most string values support inline Nerdfont icon\n  aliases (e.g. :nf-dev-github:) which are resolved to glyphs at load time.",
 			Fields: []FieldDoc{
 				{Name: "shorten_home", Type: "string", Description: "Replace $HOME prefix in display paths; empty string disables. Supports icon aliases."},
-				{Name: "truncation_length", Type: "int", Description: "Number of rightmost path segments to display; 0 disables. Paths with this many or fewer segments are left unchanged. Applied after home shortening and rules.", Validation: "cannot be negative"},
-				{Name: "truncation_symbol", Type: "string", Description: "String prepended (with an implied trailing /) when truncation occurs. Empty string means no prefix. For example, \":nf-cod-ellipsis:\" produces \"\uea7c/foo/bar\". Supports icon aliases."},
-				{Name: "rules", Type: "map[string]string", Description: "Literal substring replacements applied to display paths. Keys are substrings to match, values are replacements. Replacement values support icon aliases; match keys do not.", Validation: "match key cannot be empty"},
+				{Name: "truncation_length", Type: "int", Description: "Number of rightmost path segments to display for directory/path rows; 0 disables. Paths with this many or fewer segments are left unchanged. Applied after home shortening and rules.", Validation: "cannot be negative"},
+				{Name: "truncation_symbol", Type: "string", Description: "String prepended (with an implied trailing /) when directory/path truncation occurs. Empty string means no prefix. For example, \":nf-cod-ellipsis:\" produces \"\uea7c/foo/bar\". Supports icon aliases."},
+				{Name: "tmux_session_truncation_length", Type: "int", Description: "Number of rightmost path segments to display for tmux session keys and window owner labels; 0 disables. Uses shorten_home and rules before truncating. Default: 2.", Validation: "cannot be negative"},
+				{Name: "tmux_session_truncation_symbol", Type: "string", Description: "String prepended (with an implied trailing /) when tmux session key truncation occurs. Empty string means no prefix. Supports icon aliases."},
+				{Name: "rules", Type: "map[string]string", Description: "Literal substring replacements applied to display paths, including tmux session keys. Keys are substrings to match, values are replacements. Replacement values support icon aliases; match keys do not.", Validation: "match key cannot be empty"},
 			},
-			Example: "[display]\nshorten_home = \"~\"\ntruncation_length = 3\ntruncation_symbol = \":nf-cod-ellipsis:\"\n\n[display.rules]\n\"github.com\" = \":nf-dev-github:gh\"\n\"~/Code\" = \":nf-cod-folder:Code\"",
+			Example: "[display]\nshorten_home = \"~\"\ntruncation_length = 3\ntruncation_symbol = \":nf-cod-ellipsis:\"\ntmux_session_truncation_length = 2\ntmux_session_truncation_symbol = \"\"\n\n[display.rules]\n\"github.com\" = \":nf-dev-github:gh\"\n\"~/Code\" = \":nf-cod-folder:Code\"",
 		},
 	}
 }
@@ -192,6 +194,7 @@ TEMPLATE VARIABLES
       {{.path}}           directory path (for dir-matching actions)
       {{.pane_id}}        tmux pane ID (when --pane-id is set)
       {{.session_id}}     stable tmux session ID (from window or session items)
+      {{.session_key}}    cmdk-managed canonical session path when present (from window or session items)
       {{.session_name}}   display-safe tmux session name (from window or session items)
       {{.window_id}}      stable tmux window ID (from window items in the selection stack)
       {{.window_index}}   tmux window index (from window items in the selection stack)
@@ -211,8 +214,10 @@ TEMPLATE VARIABLES
   come from external sources (tmux, zoxide, user input) and may
   contain shell metacharacters. session_name renders tabs and newlines as
   display glyphs (⇥, ↵), but it is not a stable tmux target and is not
-  shell-safe. Use session_id for tmux targets, and wrap command arguments with
-  {{sq .var}}, e.g. {{sq .session_name}}, not {{.session_name}}. Built-in
+  shell-safe. session_key is a path-like grouping key for cmdk-managed
+  sessions, not a tmux target. Use session_id for tmux targets, and wrap
+  command arguments with {{sq .var}}, e.g. {{sq .session_name}}, not
+  {{.session_name}}. Built-in
   built-in session switch and child-window actions target by session_id and
   shell-quote the tmux target.
 
@@ -339,6 +344,12 @@ func defaultValue(cfg Config, section, field string) string {
 		case "truncation_symbol":
 			if cfg.Display.TruncationSymbol != "" {
 				return fmt.Sprintf("%q", cfg.Display.TruncationSymbol)
+			}
+		case "tmux_session_truncation_length":
+			return fmt.Sprintf("%d", cfg.Display.TmuxSessionTruncationLength)
+		case "tmux_session_truncation_symbol":
+			if cfg.Display.TmuxSessionTruncationSymbol != "" {
+				return fmt.Sprintf("%q", cfg.Display.TmuxSessionTruncationSymbol)
 			}
 		}
 	}

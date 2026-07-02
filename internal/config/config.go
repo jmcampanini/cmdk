@@ -62,10 +62,12 @@ type SourceConfig struct {
 }
 
 type Display struct {
-	ShortenHome      string            `toml:"shorten_home"`
-	TruncationLength int               `toml:"truncation_length"`
-	TruncationSymbol string            `toml:"truncation_symbol"`
-	Rules            map[string]string `toml:"rules"`
+	ShortenHome                 string            `toml:"shorten_home"`
+	TruncationLength            int               `toml:"truncation_length"`
+	TruncationSymbol            string            `toml:"truncation_symbol"`
+	TmuxSessionTruncationLength int               `toml:"tmux_session_truncation_length"`
+	TmuxSessionTruncationSymbol string            `toml:"tmux_session_truncation_symbol"`
+	Rules                       map[string]string `toml:"rules"`
 }
 
 type Startup struct {
@@ -104,6 +106,7 @@ var reservedStageKeys = []string{
 	"path",
 	"pane_id",
 	"session_id",
+	"session_key",
 	"session_name",
 	"window_id",
 	"window_index",
@@ -136,7 +139,7 @@ func DefaultConfig() Config {
 		},
 		Timeout: Timeout{Fetch: 2 * time.Second, Picker: 2 * time.Second},
 		Sources: map[string]SourceConfig{"zoxide": {Limit: 0}},
-		Display: Display{ShortenHome: "~"},
+		Display: Display{ShortenHome: "~", TmuxSessionTruncationLength: 2},
 	}
 }
 
@@ -166,6 +169,9 @@ func (c Config) Validate() error {
 	}
 	if c.Display.TruncationLength < 0 {
 		return errors.New("display.truncation_length cannot be negative")
+	}
+	if c.Display.TmuxSessionTruncationLength < 0 {
+		return errors.New("display.tmux_session_truncation_length cannot be negative")
 	}
 	for match := range c.Display.Rules {
 		if match == "" {
@@ -334,6 +340,9 @@ func (c *Config) resolveIcons() error {
 		return err
 	}
 	if err := resolveInlineField(&c.Display.TruncationSymbol, "display.truncation_symbol"); err != nil {
+		return err
+	}
+	if err := resolveInlineField(&c.Display.TmuxSessionTruncationSymbol, "display.tmux_session_truncation_symbol"); err != nil {
 		return err
 	}
 	for match, replace := range c.Display.Rules {

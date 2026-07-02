@@ -55,7 +55,7 @@ func TestTmuxWindowFormatEscapesActualControlCharacters(t *testing.T) {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
 
-	want := "tmux:win: 0 win" + tmuxEscapedTab + "name" + tmuxEscapedNewline + "next ‹ plain"
+	want := "tmux win win" + tmuxEscapedTab + "name" + tmuxEscapedNewline + "next ‹ plain"
 	if items[0].Display != want {
 		t.Errorf("Display = %q, want %q", items[0].Display, want)
 	}
@@ -74,7 +74,7 @@ func TestTmuxWindowFormatPreservesLiteralBackslashSequences(t *testing.T) {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
 
-	want := `tmux:win: 0 win\tname\nnext ‹ plain`
+	want := `tmux win win\tname\nnext ‹ plain`
 	if items[0].Display != want {
 		t.Errorf("Display = %q, want %q", items[0].Display, want)
 	}
@@ -96,7 +96,7 @@ func TestTmuxSessionFormatEscapesActualControlCharacters(t *testing.T) {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
 
-	want := "tmux:ses: sess" + tmuxEscapedTab + "name" + tmuxEscapedNewline + "next"
+	want := "tmux ses sess" + tmuxEscapedTab + "name" + tmuxEscapedNewline + "next"
 	if items[0].Display != want {
 		t.Errorf("Display = %q, want %q", items[0].Display, want)
 	}
@@ -116,7 +116,7 @@ func TestTmuxSessionFormatPreservesLiteralBackslashSequences(t *testing.T) {
 		t.Fatalf("got %d items, want 1", len(items))
 	}
 
-	want := `tmux:ses: sess\tname\nnext`
+	want := `tmux ses sess\tname\nnext`
 	if items[0].Display != want {
 		t.Errorf("Display = %q, want %q", items[0].Display, want)
 	}

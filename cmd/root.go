@@ -108,6 +108,7 @@ func runRootCommand(cmd *cobra.Command, _ []string) error {
 	zoxideCfg := cfg.Sources["zoxide"]
 	shortenHome := cfg.Display.ShortenHome
 	trunc := pathfmt.Truncation{Length: cfg.Display.TruncationLength, Symbol: cfg.Display.TruncationSymbol}
+	tmuxTrunc := pathfmt.Truncation{Length: cfg.Display.TmuxSessionTruncationLength, Symbol: cfg.Display.TmuxSessionTruncationSymbol}
 	rules := pathfmt.CompileRules(cfg.Display.Rules)
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -115,9 +116,14 @@ func runRootCommand(cmd *cobra.Command, _ []string) error {
 	}
 	stop()
 
+	tmuxDisplay := tmux.DisplayOptions{Home: home, ShortenHome: shortenHome, Rules: rules, SessionTruncation: tmuxTrunc}
 	sources := []generator.Source{
-		traceSource(tr, "source/windows", generator.Source{Name: "windows", Async: true, Fetch: tmux.ListWindows}),
-		traceSource(tr, "source/sessions", generator.Source{Name: "sessions", Async: true, Fetch: tmux.ListSessions}),
+		traceSource(tr, "source/windows", generator.Source{Name: "windows", Async: true, Fetch: func(ctx context.Context) ([]item.Item, error) {
+			return tmux.ListWindowsWithDisplay(ctx, tmuxDisplay)
+		}}),
+		traceSource(tr, "source/sessions", generator.Source{Name: "sessions", Async: true, Fetch: func(ctx context.Context) ([]item.Item, error) {
+			return tmux.ListSessionsWithDisplay(ctx, tmuxDisplay)
+		}}),
 		traceSource(tr, "source/zoxide", generator.Source{Name: "zoxide", Limit: zoxideCfg.Limit, Async: true, Fetch: func(ctx context.Context) ([]item.Item, error) {
 			return zoxide.ListDirs(ctx, zoxideCfg.MinScore, home, shortenHome, rules, trunc)
 		}}),
@@ -131,7 +137,9 @@ func runRootCommand(cmd *cobra.Command, _ []string) error {
 
 	reg := generator.NewRegistry()
 	reg.Register("dir-actions", generator.NewActionsGenerator())
-	reg.Register("session-children", generator.NewSessionGenerator(tmux.ListWindowsForSession))
+	reg.Register("session-children", generator.NewSessionGenerator(func(ctx context.Context, session item.Item) ([]item.Item, error) {
+		return tmux.ListWindowsForSessionWithDisplay(ctx, session, tmuxDisplay)
+	}))
 	reg.MapType("dir", "dir-actions")
 	reg.MapType("session", "session-children")
 

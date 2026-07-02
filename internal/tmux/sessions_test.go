@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/jmcampanini/cmdk/internal/item"
+	"github.com/jmcampanini/cmdk/internal/pathfmt"
 )
 
 func mustParseSessions(t *testing.T, output string) []item.Item {
@@ -24,7 +25,7 @@ func TestParseSessions_MultiSessionSortedByName(t *testing.T) {
 		t.Fatalf("got %d items, want 3", len(items))
 	}
 
-	wantDisplays := []string{"tmux:ses: cmdk", "tmux:ses: dotfiles", "tmux:ses: scratch"}
+	wantDisplays := []string{"tmux ses cmdk", "tmux ses dotfiles", "tmux ses scratch"}
 	gotDisplays := make([]string, len(items))
 	for i, it := range items {
 		gotDisplays[i] = it.Display
@@ -53,8 +54,8 @@ func TestParseSessions_ItemFields(t *testing.T) {
 	if it.Source != "tmux" {
 		t.Errorf("Source = %q, want tmux", it.Source)
 	}
-	if it.Display != "tmux:ses: work/main" {
-		t.Errorf("Display = %q, want tmux:ses: work/main", it.Display)
+	if it.Display != "tmux ses work/main" {
+		t.Errorf("Display = %q, want tmux ses work/main", it.Display)
 	}
 	if it.Action != item.ActionNextList {
 		t.Errorf("Action = %q, want next-list", it.Action)
@@ -62,7 +63,7 @@ func TestParseSessions_ItemFields(t *testing.T) {
 
 	wantData := map[string]string{
 		"session_attached": "2",
-		"session_display":  "tmux:ses: work/main",
+		"session_display":  "tmux ses work/main",
 		"session_id":       "$7",
 		"session_kind":     "external",
 		"session_name":     "work/main",
@@ -72,6 +73,34 @@ func TestParseSessions_ItemFields(t *testing.T) {
 		if it.Data[k] != want {
 			t.Errorf("Data[%s] = %q, want %q", k, it.Data[k], want)
 		}
+	}
+}
+
+func TestParseSessions_UsesSessionKeyForDisplayWhenPresent(t *testing.T) {
+	items, err := ParseSessionsWithDisplay("$7\tUsers/me/Code/github.com/acme/project\t4\t2\t/Users/me/Code/github.com/acme/project\n", DisplayOptions{
+		Home:              "/Users/me",
+		ShortenHome:       "~",
+		SessionTruncation: pathfmt.Truncation{Length: 2},
+	})
+	if err != nil {
+		t.Fatalf("ParseSessionsWithDisplay returned error: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
+	}
+
+	it := items[0]
+	if it.Display != "tmux ses acme/project" {
+		t.Errorf("Display = %q, want %q", it.Display, "tmux ses acme/project")
+	}
+	if it.Data["session_display"] != "tmux ses acme/project" {
+		t.Errorf("session_display = %q", it.Data["session_display"])
+	}
+	if it.Data["session_name"] != "Users/me/Code/github.com/acme/project" {
+		t.Errorf("session_name = %q", it.Data["session_name"])
+	}
+	if it.Data["session_key"] != "/Users/me/Code/github.com/acme/project" {
+		t.Errorf("session_key = %q", it.Data["session_key"])
 	}
 }
 
@@ -134,8 +163,8 @@ func TestParseSessions_PreservesDisplaySafeSessionName(t *testing.T) {
 	if items[0].Data["session_name"] != "feature/foo bar" {
 		t.Errorf("session_name = %q, want feature/foo bar", items[0].Data["session_name"])
 	}
-	if items[0].Display != "tmux:ses: feature/foo bar" {
-		t.Errorf("Display = %q, want tmux:ses: feature/foo bar", items[0].Display)
+	if items[0].Display != "tmux ses feature/foo bar" {
+		t.Errorf("Display = %q, want tmux ses feature/foo bar", items[0].Display)
 	}
 }
 
@@ -152,8 +181,8 @@ func TestParseSessions_ReplacesEscapedControlCharsForDisplay(t *testing.T) {
 	if _, ok := items[0].Data["session"]; ok {
 		t.Error("Data[session] should not be set; use session_name")
 	}
-	if items[0].Display != "tmux:ses: "+wantName {
-		t.Errorf("Display = %q, want %q", items[0].Display, "tmux:ses: "+wantName)
+	if items[0].Display != "tmux ses "+wantName {
+		t.Errorf("Display = %q, want %q", items[0].Display, "tmux ses "+wantName)
 	}
 }
 
@@ -167,7 +196,7 @@ func TestParseSessions_PreservesLiteralBackslashSequences(t *testing.T) {
 	if items[0].Data["session_name"] != wantName {
 		t.Errorf("session_name = %q, want %q", items[0].Data["session_name"], wantName)
 	}
-	if items[0].Display != "tmux:ses: "+wantName {
-		t.Errorf("Display = %q, want %q", items[0].Display, "tmux:ses: "+wantName)
+	if items[0].Display != "tmux ses "+wantName {
+		t.Errorf("Display = %q, want %q", items[0].Display, "tmux ses "+wantName)
 	}
 }
