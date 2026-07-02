@@ -270,7 +270,7 @@ func exitFilterModeE2E(t *testing.T, sess string) {
 }
 
 func windowFilterQuery(sess string) string {
-	return "tmux:win: " + sess
+	return "tmux win " + sess
 }
 
 func sessionWindowMarker(sess string) string {

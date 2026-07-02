@@ -29,6 +29,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Display.ShortenHome != "~" {
 		t.Errorf("Display.ShortenHome = %q, want \"~\"", cfg.Display.ShortenHome)
 	}
+	if cfg.Display.TmuxSessionTruncationLength != 2 {
+		t.Errorf("Display.TmuxSessionTruncationLength = %d, want 2", cfg.Display.TmuxSessionTruncationLength)
+	}
 	if !cfg.Behavior.BellToTop {
 		t.Error("Behavior.BellToTop = false, want true")
 	}
@@ -1114,6 +1117,29 @@ truncation_symbol = "…"
 	}
 }
 
+func TestLoad_TmuxSessionDisplayTruncation(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[display]
+tmux_session_truncation_length = 3
+tmux_session_truncation_symbol = "…"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Display.TmuxSessionTruncationLength != 3 {
+		t.Errorf("TmuxSessionTruncationLength = %d, want 3", cfg.Display.TmuxSessionTruncationLength)
+	}
+	if cfg.Display.TmuxSessionTruncationSymbol != "…" {
+		t.Errorf("TmuxSessionTruncationSymbol = %q, want %q", cfg.Display.TmuxSessionTruncationSymbol, "…")
+	}
+}
+
 func TestLoad_DisplayTruncationDefaults(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
@@ -1134,6 +1160,12 @@ shorten_home = "~"
 	if cfg.Display.TruncationSymbol != "" {
 		t.Errorf("TruncationSymbol = %q, want empty (default)", cfg.Display.TruncationSymbol)
 	}
+	if cfg.Display.TmuxSessionTruncationLength != 2 {
+		t.Errorf("TmuxSessionTruncationLength = %d, want 2 (default)", cfg.Display.TmuxSessionTruncationLength)
+	}
+	if cfg.Display.TmuxSessionTruncationSymbol != "" {
+		t.Errorf("TmuxSessionTruncationSymbol = %q, want empty (default)", cfg.Display.TmuxSessionTruncationSymbol)
+	}
 }
 
 func TestValidate_NegativeTruncationLength(t *testing.T) {
@@ -1145,6 +1177,18 @@ func TestValidate_NegativeTruncationLength(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "truncation_length") {
 		t.Errorf("error = %q, want mention of truncation_length", err.Error())
+	}
+}
+
+func TestValidate_NegativeTmuxSessionTruncationLength(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Display.TmuxSessionTruncationLength = -1
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for negative tmux_session_truncation_length")
+	}
+	if !strings.Contains(err.Error(), "tmux_session_truncation_length") {
+		t.Errorf("error = %q, want mention of tmux_session_truncation_length", err.Error())
 	}
 }
 
@@ -1467,6 +1511,15 @@ func TestLoad_DisplayInlineIconResolution(t *testing.T) {
 			},
 		},
 		{
+			name: "tmux_session_truncation_symbol alias",
+			toml: "[display]\ntmux_session_truncation_symbol = \":nf-cod-ellipsis:\"",
+			check: func(t *testing.T, cfg Config) {
+				if cfg.Display.TmuxSessionTruncationSymbol != "\uea7c" {
+					t.Errorf("TmuxSessionTruncationSymbol = %q, want \\uea7c", cfg.Display.TmuxSessionTruncationSymbol)
+				}
+			},
+		},
+		{
 			name: "rule value alias with text",
 			toml: "[display.rules]\n\"github.com\" = \":nf-dev-github:gh\"",
 			check: func(t *testing.T, cfg Config) {
@@ -1544,6 +1597,11 @@ func TestLoad_DisplayInvalidInlineIcon(t *testing.T) {
 			name:      "invalid truncation_symbol alias",
 			toml:      "[display]\ntruncation_symbol = \":nf-fake:\"",
 			wantInErr: "display.truncation_symbol",
+		},
+		{
+			name:      "invalid tmux_session_truncation_symbol alias",
+			toml:      "[display]\ntmux_session_truncation_symbol = \":nf-fake:\"",
+			wantInErr: "display.tmux_session_truncation_symbol",
 		},
 		{
 			name:      "invalid rule alias",

@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/jmcampanini/cmdk/internal/item"
 )
@@ -18,6 +19,7 @@ const (
 
 var tmuxListWindowsFormat = tmuxFormatFields(
 	tmuxEscapedSessionNameFormat,
+	tmuxEscapedFormat(cmdkSessionKeyOption),
 	"#{session_id}",
 	"#{window_index}",
 	"#{window_id}",
@@ -28,6 +30,7 @@ var tmuxListWindowsFormat = tmuxFormatFields(
 
 const (
 	windowLineSessionField = iota
+	windowLineSessionKeyField
 	windowLineSessionIDField
 	windowLineWindowIndexField
 	windowLineWindowIDField
@@ -96,6 +99,7 @@ func parseWindowSortKey(windowIndex, bellFlag, activity string) (windowSortKey, 
 type windowLine struct {
 	sortKey        windowSortKey
 	rawSessionName string
+	rawSessionKey  string
 	sessionID      string
 	windowIndex    string
 	windowID       string
@@ -103,7 +107,7 @@ type windowLine struct {
 }
 
 func parseWindowLine(line string) (windowLine, bool) {
-	fields, ok := splitWindowFields(line, windowLineFieldCount)
+	fields, ok := splitRootWindowFields(line)
 	if !ok {
 		return windowLine{}, false
 	}
@@ -123,6 +127,7 @@ func parseWindowLine(line string) (windowLine, bool) {
 	return windowLine{
 		sortKey:        sortKey,
 		rawSessionName: fields[windowLineSessionField],
+		rawSessionKey:  fields[windowLineSessionKeyField],
 		sessionID:      sessionID,
 		windowIndex:    windowIndex,
 		windowID:       windowID,
@@ -130,17 +135,68 @@ func parseWindowLine(line string) (windowLine, bool) {
 	}, true
 }
 
-func newWindowItem(parsed windowLine) item.Item {
+func splitRootWindowFields(line string) ([]string, bool) {
+	fields := strings.Split(cleanTmuxLine(line), tmuxFieldSeparator)
+	switch len(fields) {
+	case windowLineFieldCount:
+		return rootWindowFieldsWithDefaultActivity(fields), true
+	case windowLineFieldCount - 1:
+		if rootWindowFieldsHaveSessionKey(fields) {
+			fields = append(fields, defaultWindowActivity)
+			return fields, true
+		}
+		return rootWindowFieldsWithoutSessionKey(fields)
+	case windowLineFieldCount - 2:
+		return rootWindowFieldsWithoutSessionKey(append(fields, defaultWindowActivity))
+	default:
+		return nil, false
+	}
+}
+
+func rootWindowFieldsHaveSessionKey(fields []string) bool {
+	return len(fields) == windowLineFieldCount-1 &&
+		validTmuxSessionID.MatchString(fields[windowLineSessionIDField]) &&
+		validTmuxWindowID.MatchString(fields[windowLineWindowIDField])
+}
+
+func rootWindowFieldsWithDefaultActivity(fields []string) []string {
+	if fields[windowLineActivityField] == "" {
+		fields[windowLineActivityField] = defaultWindowActivity
+	}
+	return fields
+}
+
+func rootWindowFieldsWithoutSessionKey(fields []string) ([]string, bool) {
+	if len(fields) != windowLineFieldCount-1 {
+		return nil, false
+	}
+	sessionID := fields[1]
+	windowID := fields[3]
+	if !validTmuxSessionID.MatchString(sessionID) || !validTmuxWindowID.MatchString(windowID) {
+		return nil, false
+	}
+	withSessionKey := make([]string, 0, windowLineFieldCount)
+	withSessionKey = append(withSessionKey, fields[0], "")
+	withSessionKey = append(withSessionKey, fields[1:]...)
+	return rootWindowFieldsWithDefaultActivity(withSessionKey), true
+}
+
+func newWindowItem(parsed windowLine, display DisplayOptions) item.Item {
 	sessionName := displaySafeTmuxSessionName(parsed.rawSessionName)
+	sessionKey := displaySafeTmuxControls(parsed.rawSessionKey)
 	windowName := displaySafeTmuxWindowName(parsed.rawWindowName)
+	sessionDisplay := display.formatSessionDisplay(sessionName, sessionKey)
 
 	it := item.NewItem()
 	it.Type = "window"
 	it.Source = "tmux"
-	it.Display = tmuxWindowDisplay(parsed.windowIndex, windowName, sessionName)
+	it.Display = tmuxWindowDisplay(windowName, sessionDisplay)
 	it.Action = item.ActionExecute
 	it.Cmd = tmuxWindowSwitchCommand
 	it.Data["session_name"] = sessionName
+	if sessionKey != "" {
+		it.Data["session_key"] = sessionKey
+	}
 	it.Data["session_id"] = parsed.sessionID
 	it.Data["window_index"] = parsed.windowIndex
 	it.Data["window_id"] = parsed.windowID
@@ -152,12 +208,12 @@ func newWindowItem(parsed windowLine) item.Item {
 }
 
 type windowEntry struct {
-	sortSessionName string
-	sortKey         windowSortKey
-	item            item.Item
+	sortSessionValue string
+	sortKey          windowSortKey
+	item             item.Item
 }
 
-func parseWindowEntries(output string) ([]windowEntry, int) {
+func parseWindowEntries(output string, display DisplayOptions) ([]windowEntry, int) {
 	lines := tmuxLines(output)
 	entries := make([]windowEntry, 0, len(lines))
 	malformedRows := 0
@@ -170,9 +226,9 @@ func parseWindowEntries(output string) ([]windowEntry, int) {
 		}
 
 		entries = append(entries, windowEntry{
-			sortSessionName: parsed.rawSessionName,
-			sortKey:         parsed.sortKey,
-			item:            newWindowItem(parsed),
+			sortSessionValue: sessionDisplayValue(parsed.rawSessionName, parsed.rawSessionKey),
+			sortKey:          parsed.sortKey,
+			item:             newWindowItem(parsed, display),
 		})
 	}
 
@@ -199,8 +255,8 @@ func sortWindowEntries(entries []windowEntry) {
 		if less, ok := lessWindowPriority(left.sortKey, right.sortKey); ok {
 			return less
 		}
-		if left.sortSessionName != right.sortSessionName {
-			return left.sortSessionName < right.sortSessionName
+		if left.sortSessionValue != right.sortSessionValue {
+			return left.sortSessionValue < right.sortSessionValue
 		}
 		return left.sortKey.index < right.sortKey.index
 	})
@@ -215,7 +271,11 @@ func itemsFromWindowEntries(entries []windowEntry) []item.Item {
 }
 
 func ParseWindows(output string) ([]item.Item, error) {
-	entries, malformedRows := parseWindowEntries(output)
+	return ParseWindowsWithDisplay(output, DisplayOptions{})
+}
+
+func ParseWindowsWithDisplay(output string, display DisplayOptions) ([]item.Item, error) {
+	entries, malformedRows := parseWindowEntries(output, display)
 	if len(entries) == 0 {
 		if malformedRows > 0 {
 			return nil, newTmuxRowsParseError("list-windows", malformedRows)
@@ -232,11 +292,15 @@ func ParseWindows(output string) ([]item.Item, error) {
 }
 
 func ListWindows(ctx context.Context) ([]item.Item, error) {
+	return ListWindowsWithDisplay(ctx, DisplayOptions{})
+}
+
+func ListWindowsWithDisplay(ctx context.Context, display DisplayOptions) ([]item.Item, error) {
 	out, err := tmuxOutput(ctx, "list-windows", "-a", "-F", tmuxListWindowsFormat)
 	if err != nil {
 		return nil, err
 	}
-	return ParseWindows(string(out))
+	return ParseWindowsWithDisplay(string(out), display)
 }
 
 const (
@@ -272,7 +336,11 @@ type sessionWindowLine struct {
 }
 
 func ParseWindowsForSession(output string, session item.Item) ([]item.Item, error) {
-	entries, malformedRows := parseSessionWindowEntries(output, session)
+	return ParseWindowsForSessionWithDisplay(output, session, DisplayOptions{})
+}
+
+func ParseWindowsForSessionWithDisplay(output string, session item.Item, display DisplayOptions) ([]item.Item, error) {
+	entries, malformedRows := parseSessionWindowEntries(output, session, display)
 	if len(entries) == 0 {
 		if malformedRows > 0 {
 			return nil, newTmuxRowsParseError("list-windows", malformedRows)
@@ -288,7 +356,7 @@ func ParseWindowsForSession(output string, session item.Item) ([]item.Item, erro
 	return items, nil
 }
 
-func parseSessionWindowEntries(output string, session item.Item) ([]sessionWindowEntry, int) {
+func parseSessionWindowEntries(output string, session item.Item, display DisplayOptions) ([]sessionWindowEntry, int) {
 	lines := tmuxLines(output)
 	entries := make([]sessionWindowEntry, 0, len(lines))
 	malformedRows := 0
@@ -302,7 +370,7 @@ func parseSessionWindowEntries(output string, session item.Item) ([]sessionWindo
 
 		entries = append(entries, sessionWindowEntry{
 			sortKey: parsed.sortKey,
-			item:    newSessionWindowItem(session, parsed),
+			item:    newSessionWindowItem(session, parsed, display),
 		})
 	}
 
@@ -352,13 +420,16 @@ func parseSessionWindowLine(line string) (sessionWindowLine, bool) {
 	}, true
 }
 
-func newSessionWindowItem(session item.Item, parsed sessionWindowLine) item.Item {
+func newSessionWindowItem(session item.Item, parsed sessionWindowLine, display DisplayOptions) item.Item {
 	windowName := displaySafeTmuxWindowName(parsed.rawWindowName)
+	sessionName := session.Data["session_name"]
+	sessionKey := session.Data["session_key"]
+	sessionDisplay := display.formatSessionDisplay(sessionName, sessionKey)
 
 	it := item.NewItem()
 	it.Type = "window"
 	it.Source = "tmux"
-	it.Display = tmuxWindowDisplay(parsed.windowIndex, windowName, session.Data["session_name"])
+	it.Display = tmuxWindowDisplay(windowName, sessionDisplay)
 	it.Action = item.ActionExecute
 	it.Cmd = tmuxWindowSwitchCommand
 	maps.Copy(it.Data, session.Data)
@@ -371,18 +442,22 @@ func newSessionWindowItem(session item.Item, parsed sessionWindowLine) item.Item
 	return it
 }
 
-func tmuxWindowDisplay(windowIndex, windowName, sessionName string) string {
-	display := "tmux:win: " + windowIndex
+func tmuxWindowDisplay(windowName, sessionDisplay string) string {
+	display := "tmux win"
 	if windowName != "" {
 		display += " " + windowName
 	}
-	if sessionName != "" {
-		display += " ‹ " + sessionName
+	if sessionDisplay != "" {
+		display += " ‹ " + sessionDisplay
 	}
 	return display
 }
 
 func ListWindowsForSession(ctx context.Context, session item.Item) ([]item.Item, error) {
+	return ListWindowsForSessionWithDisplay(ctx, session, DisplayOptions{})
+}
+
+func ListWindowsForSessionWithDisplay(ctx context.Context, session item.Item, display DisplayOptions) ([]item.Item, error) {
 	target, err := sessionTarget(session)
 	if err != nil {
 		return nil, err
@@ -392,7 +467,7 @@ func ListWindowsForSession(ctx context.Context, session item.Item) ([]item.Item,
 	if err != nil {
 		return nil, err
 	}
-	return ParseWindowsForSession(string(out), session)
+	return ParseWindowsForSessionWithDisplay(string(out), session, display)
 }
 
 func sessionTarget(session item.Item) (string, error) {

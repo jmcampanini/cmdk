@@ -46,20 +46,20 @@ func TestMultiTermFilter_TwoTerms(t *testing.T) {
 	}
 }
 
-func TestMultiTermFilter_TmuxKindPrefixes(t *testing.T) {
+func TestMultiTermFilter_TmuxKindPrefixesAreFuzzyTerms(t *testing.T) {
 	targets := []string{
-		"tmux:win: 1 cmdk/wt-sessions-p1-pi ‹ 0",
-		"tmux:ses: cmdk/wt-sessions-p1-pi",
+		"tmux win cmdk/wt-sessions-p1-pi ‹ 0",
+		"tmux ses cmdk/wt-sessions-p1-pi",
 	}
 
-	win := multiTermFilter("tmux:win: cmdk", targets)
-	if len(win) != 1 || win[0].Index != 0 {
-		t.Fatalf("tmux:win query = %v, want only index 0", win)
+	win := multiTermFilter("tmux win cmdk", targets)
+	if !rankIncludes(win, 0) {
+		t.Fatalf("tmux win query = %v, want window row included", win)
 	}
 
-	session := multiTermFilter("tmux:ses: cmdk", targets)
-	if len(session) != 1 || session[0].Index != 1 {
-		t.Fatalf("tmux:ses query = %v, want only index 1", session)
+	session := multiTermFilter("tmux ses cmdk", targets)
+	if !rankIncludes(session, 1) {
+		t.Fatalf("tmux ses query = %v, want session row included", session)
 	}
 }
 
@@ -148,7 +148,7 @@ func TestMultiTermFilter_MultipleMatches(t *testing.T) {
 
 func TestMultiTermFilter_Regression_DotfilesMainRanking(t *testing.T) {
 	targets := []string{
-		"tmux:win: 2 dotfiles/main ‹ 0",
+		"tmux win dotfiles/main ‹ 0",
 		"~/Code/github.com/jmcampanini/dotfiles",
 		"~/Code/github.com/jmcampanini/dotfiles/main",
 		"~/Code/github.com/jmcampanini/cmdk/wt-filter-with-spaces",
@@ -253,8 +253,8 @@ func TestMultiTermFilter_Ranking(t *testing.T) {
 		{
 			name: "path beats tmux for same segments",
 			targets: []string{
-				"tmux:win: 1 nvim ‹ dotfiles",
-				"tmux:win: 2 shell ‹ dotfiles-main",
+				"tmux win nvim ‹ dotfiles",
+				"tmux win shell ‹ dotfiles-main",
 				"~/Code/github.com/jmcampanini/dotfiles/main",
 				"~/Code/github.com/jmcampanini/dotfiles",
 				"~/Code/github.com/jmcampanini/cmdk/main",
@@ -277,8 +277,8 @@ func TestMultiTermFilter_Ranking(t *testing.T) {
 		{
 			name: "camelCase boundary bonus",
 			targets: []string{
-				"tmux:win: 1 server ‹ apiGateway",
-				"tmux:win: 1 server ‹ apigateway",
+				"tmux win server ‹ apiGateway",
+				"tmux win server ‹ apigateway",
 				"~/projects/api-gateway",
 			},
 			query:     "ag",
@@ -294,7 +294,7 @@ func TestMultiTermFilter_Ranking(t *testing.T) {
 				"~/Code/github.com/jmcampanini/cmdk",
 				"~/Code/github.com/jmcampanini/cmdk/main",
 				"~/Code/github.com/jmcampanini/cmdk/wt-filter-with-spaces",
-				"tmux:win: 1 shell ‹ cmdk",
+				"tmux win shell ‹ cmdk",
 			},
 			query:     "cmdk",
 			wantFirst: 0,
@@ -381,6 +381,15 @@ func TestSingleTermFilter_MatchesBehavior(t *testing.T) {
 			t.Errorf("result[%d] index mismatch: single=%d multi=%d", i, single[i].Index, multi[i].Index)
 		}
 	}
+}
+
+func rankIncludes(ranks []list.Rank, index int) bool {
+	for _, r := range ranks {
+		if r.Index == index {
+			return true
+		}
+	}
+	return false
 }
 
 func containsAll(set, subset []int) bool {
