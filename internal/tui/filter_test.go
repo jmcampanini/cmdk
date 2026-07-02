@@ -46,20 +46,20 @@ func TestMultiTermFilter_TwoTerms(t *testing.T) {
 	}
 }
 
-func TestMultiTermFilter_TmuxKindPrefixes(t *testing.T) {
+func TestMultiTermFilter_TmuxKindPrefixesAreFuzzyTerms(t *testing.T) {
 	targets := []string{
 		"tmux win cmdk/wt-sessions-p1-pi ‹ 0",
 		"tmux ses cmdk/wt-sessions-p1-pi",
 	}
 
 	win := multiTermFilter("tmux win cmdk", targets)
-	if len(win) != 1 || win[0].Index != 0 {
-		t.Fatalf("tmux win query = %v, want only index 0", win)
+	if !rankIncludes(win, 0) {
+		t.Fatalf("tmux win query = %v, want window row included", win)
 	}
 
 	session := multiTermFilter("tmux ses cmdk", targets)
-	if len(session) != 1 || session[0].Index != 1 {
-		t.Fatalf("tmux ses query = %v, want only index 1", session)
+	if !rankIncludes(session, 1) {
+		t.Fatalf("tmux ses query = %v, want session row included", session)
 	}
 }
 
@@ -381,6 +381,15 @@ func TestSingleTermFilter_MatchesBehavior(t *testing.T) {
 			t.Errorf("result[%d] index mismatch: single=%d multi=%d", i, single[i].Index, multi[i].Index)
 		}
 	}
+}
+
+func rankIncludes(ranks []list.Rank, index int) bool {
+	for _, r := range ranks {
+		if r.Index == index {
+			return true
+		}
+	}
+	return false
 }
 
 func containsAll(set, subset []int) bool {

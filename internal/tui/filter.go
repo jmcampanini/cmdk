@@ -46,7 +46,6 @@ func multiTermFilter(term string, targets []string) []list.Rank {
 	if len(terms) == 1 {
 		return singleTermFilter(terms[0], targets)
 	}
-	tmuxKind := tmuxKindFilter(terms)
 
 	type candidate struct {
 		sumScore       int
@@ -55,9 +54,6 @@ func multiTermFilter(term string, targets []string) []list.Rank {
 
 	candidates := make(map[int]*candidate, len(targets))
 	for i, t := range targets {
-		if !matchesTmuxKindFilter(t, tmuxKind) {
-			continue
-		}
 		r := FuzzyMatch(false, t, terms[0])
 		if r.Score > 0 {
 			candidates[i] = &candidate{
@@ -97,34 +93,6 @@ func multiTermFilter(term string, targets []string) []list.Rank {
 		})
 	}
 	return ranksByScore(results)
-}
-
-func tmuxKindFilter(terms []string) string {
-	hasTmux := false
-	kind := ""
-	for _, term := range terms {
-		switch term {
-		case "tmux":
-			hasTmux = true
-		case "win", "ses":
-			if kind == "" {
-				kind = term
-			} else if kind != term {
-				return ""
-			}
-		}
-	}
-	if hasTmux {
-		return kind
-	}
-	return ""
-}
-
-func matchesTmuxKindFilter(target, kind string) bool {
-	if kind == "" {
-		return true
-	}
-	return strings.HasPrefix(strings.ToLower(target), "tmux "+kind+" ")
 }
 
 func singleTermFilter(term string, targets []string) []list.Rank {
