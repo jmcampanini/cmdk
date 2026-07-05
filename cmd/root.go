@@ -68,6 +68,7 @@ Log file:
 		newIconsCommand(),
 		newSessionCommand(),
 		newShortenCommand(),
+		newWindowCommand(),
 	)
 	return cmd
 }
