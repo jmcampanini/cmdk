@@ -30,7 +30,7 @@ var (
 	validTmuxPaneID             = regexp.MustCompile(`^%\d+$`)
 	currentWindowFormat         = tmuxFormatFields("#{session_id}", "#{window_id}")
 	windowNavigationListFormat  = tmuxFormatFields("#{session_id}", "#{window_index}", "#{window_id}")
-	errInvalidWindowDirection    = errors.New("invalid window direction")
+	errInvalidWindowDirection   = errors.New("invalid window direction")
 	errNoTmuxWindows            = errors.New("tmux list-windows returned no windows")
 	errCurrentWindowNotInWindow = errors.New("current tmux window was not found in window list")
 )
