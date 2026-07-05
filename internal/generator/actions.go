@@ -29,7 +29,7 @@ func NewActionsGenerator() GeneratorFunc {
 				Source:     "builtin",
 				Display:    "New window",
 				Action:     item.ActionExecute,
-				Data:       maps.Clone(data),
+				Data:       data,
 				Icon:       "\ueb7f",
 				MatchType:  matchType,
 				LaunchMode: config.LaunchModeSessionWindow,
