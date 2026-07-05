@@ -34,16 +34,6 @@ func NewActionsGenerator() GeneratorFunc {
 				MatchType:  matchType,
 				LaunchMode: config.LaunchModeSessionWindow,
 				NewShell:   true,
-			}, item.Item{
-				Type:       "action",
-				Source:     "builtin",
-				Display:    "New tmux window",
-				Action:     item.ActionExecute,
-				Cmd:        "tmux new-window -c {{sq .launch_path}}",
-				Data:       maps.Clone(data),
-				Icon:       "\ueb7f",
-				MatchType:  matchType,
-				LaunchMode: config.LaunchModeShell,
 			})
 		}
 
