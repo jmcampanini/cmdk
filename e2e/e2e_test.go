@@ -509,7 +509,7 @@ auto_select_single = false
 	sendKeys(t, sess, "Enter")
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "New window") && strings.Contains(s, "New tmux window")
+		return strings.Contains(s, "New window")
 	}, defaultTimeout)
 }
 
@@ -529,7 +529,7 @@ auto_select_single = false
 	sendKeys(t, sess, "Enter")
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "New window") && strings.Contains(s, "New tmux window")
+		return strings.Contains(s, "New window")
 	}, defaultTimeout)
 
 	// First Escape exits filter mode (drill-down re-enters filter).
@@ -909,7 +909,6 @@ matches = "dir"
 
 	waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, "New window") &&
-			strings.Contains(s, "New tmux window") &&
 			strings.Contains(s, "xq-yazi-action")
 	}, defaultTimeout)
 }
@@ -937,19 +936,17 @@ matches = "dir"
 
 	content := waitForContent(t, sess, func(s string) bool {
 		return strings.Contains(s, "New window") &&
-			strings.Contains(s, "New tmux window") &&
 			strings.Contains(s, "xq-alpha-dirc") &&
 			strings.Contains(s, "xq-beta-dirc")
 	}, defaultTimeout)
 
 	newWindowIdx := strings.Index(content, "New window")
-	newSessionWindowIdx := strings.Index(content, "New tmux window")
 	alphaIdx := strings.Index(content, "xq-alpha-dirc")
 	betaIdx := strings.Index(content, "xq-beta-dirc")
 
-	if newWindowIdx > newSessionWindowIdx || newSessionWindowIdx > alphaIdx || alphaIdx > betaIdx {
-		t.Errorf("items not in expected order: New window@%d New tmux window@%d alpha@%d beta@%d\nCapture:\n%s",
-			newWindowIdx, newSessionWindowIdx, alphaIdx, betaIdx, content)
+	if newWindowIdx > alphaIdx || alphaIdx > betaIdx {
+		t.Errorf("items not in expected order: New window@%d alpha@%d beta@%d\nCapture:\n%s",
+			newWindowIdx, alphaIdx, betaIdx, content)
 	}
 }
 
@@ -967,9 +964,12 @@ auto_select_single = false
 	navigateToDirItem(t, sess)
 	sendKeys(t, sess, "Enter")
 
-	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "New window") && strings.Contains(s, "New tmux window")
+	content := waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "New window")
 	}, defaultTimeout)
+	if strings.Contains(content, "New tmux window") {
+		t.Fatalf("unexpected removed built-in action in capture:\n%s", content)
+	}
 }
 
 func restrictedPATH(t *testing.T) string {

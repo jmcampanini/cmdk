@@ -9,51 +9,31 @@ import (
 
 func TestActionsGenerator_ProducesBuiltInDirActions(t *testing.T) {
 	items := runActions(dirAccumulated("/home/user/projects"), Context{})
-	if len(items) != 2 {
-		t.Fatalf("got %d items, want 2", len(items))
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
 	}
 
-	sessioned := items[0]
-	if sessioned.Display != "New window" {
-		t.Errorf("Display = %q, want %q", sessioned.Display, "New window")
+	newWindow := items[0]
+	if newWindow.Display != "New window" {
+		t.Errorf("Display = %q, want %q", newWindow.Display, "New window")
 	}
-	if sessioned.Type != "action" {
-		t.Errorf("Type = %q, want %q", sessioned.Type, "action")
+	if newWindow.Type != "action" {
+		t.Errorf("Type = %q, want %q", newWindow.Type, "action")
 	}
-	if sessioned.Source != "builtin" {
-		t.Errorf("Source = %q, want %q", sessioned.Source, "builtin")
+	if newWindow.Source != "builtin" {
+		t.Errorf("Source = %q, want %q", newWindow.Source, "builtin")
 	}
-	if sessioned.Action != item.ActionExecute {
-		t.Errorf("Action = %q, want %q", sessioned.Action, item.ActionExecute)
+	if newWindow.Action != item.ActionExecute {
+		t.Errorf("Action = %q, want %q", newWindow.Action, item.ActionExecute)
 	}
-	if sessioned.Cmd != "" {
-		t.Errorf("Cmd = %q, want empty for internal new-shell action", sessioned.Cmd)
+	if newWindow.Cmd != "" {
+		t.Errorf("Cmd = %q, want empty for internal new-shell action", newWindow.Cmd)
 	}
-	if !sessioned.NewShell {
+	if !newWindow.NewShell {
 		t.Error("NewShell = false, want true")
 	}
-	if sessioned.MatchType != "dir" || sessioned.LaunchMode != config.LaunchModeSessionWindow {
-		t.Errorf("sessioned launch metadata = match %q mode %q, want dir/session-window", sessioned.MatchType, sessioned.LaunchMode)
-	}
-
-	plain := items[1]
-	if plain.Display != "New tmux window" {
-		t.Errorf("Display = %q, want %q", plain.Display, "New tmux window")
-	}
-	if plain.Type != "action" {
-		t.Errorf("Type = %q, want %q", plain.Type, "action")
-	}
-	if plain.Source != "builtin" {
-		t.Errorf("Source = %q, want %q", plain.Source, "builtin")
-	}
-	if plain.Action != item.ActionExecute {
-		t.Errorf("Action = %q, want %q", plain.Action, item.ActionExecute)
-	}
-	if plain.Cmd != "tmux new-window -c {{sq .launch_path}}" {
-		t.Errorf("Cmd = %q, want plain tmux new-window template", plain.Cmd)
-	}
-	if plain.MatchType != "dir" || plain.LaunchMode != config.LaunchModeShell {
-		t.Errorf("plain launch metadata = match %q mode %q, want dir/shell", plain.MatchType, plain.LaunchMode)
+	if newWindow.MatchType != "dir" || newWindow.LaunchMode != config.LaunchModeSessionWindow {
+		t.Errorf("new window launch metadata = match %q mode %q, want dir/session-window", newWindow.MatchType, newWindow.LaunchMode)
 	}
 }
 
@@ -92,14 +72,11 @@ func TestActionsGenerator_UsesLastItem(t *testing.T) {
 	}
 
 	items := runActions(accumulated, Context{})
-	if len(items) != 2 {
-		t.Fatalf("got %d items, want 2", len(items))
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1", len(items))
 	}
 	if items[0].Display != "New window" {
 		t.Errorf("Display = %q, want %q", items[0].Display, "New window")
-	}
-	if items[1].Display != "New tmux window" {
-		t.Errorf("Display = %q, want %q", items[1].Display, "New tmux window")
 	}
 }
 
@@ -122,10 +99,10 @@ func TestActionsGenerator_WithConfigActions(t *testing.T) {
 	}
 
 	items := runActions(dirAccumulated("/home/user/projects"), Context{PaneID: "%5", Config: cfg})
-	if len(items) != 4 {
-		t.Fatalf("got %d items, want 4", len(items))
+	if len(items) != 3 {
+		t.Fatalf("got %d items, want 3", len(items))
 	}
-	wantDisplays := []string{"New window", "New tmux window", "Yazi", "New pane"}
+	wantDisplays := []string{"New window", "Yazi", "New pane"}
 	for i, want := range wantDisplays {
 		if items[i].Display != want {
 			t.Errorf("items[%d].Display = %q, want %q", i, items[i].Display, want)
@@ -136,8 +113,8 @@ func TestActionsGenerator_WithConfigActions(t *testing.T) {
 			t.Errorf("items[%d].Action = %q, want %q", i, it.Action, item.ActionExecute)
 		}
 	}
-	if items[2].Cmd != "tmux split-window -h yazi" {
-		t.Errorf("items[2].Cmd = %q, want config cmd passed through", items[2].Cmd)
+	if items[1].Cmd != "tmux split-window -h yazi" {
+		t.Errorf("items[1].Cmd = %q, want config cmd passed through", items[1].Cmd)
 	}
 }
 
@@ -152,11 +129,11 @@ func TestActionsGenerator_BuiltInsAlwaysFirst(t *testing.T) {
 	if items[0].Display != "New window" {
 		t.Errorf("first item should be 'New window', got %q", items[0].Display)
 	}
-	if items[1].Display != "New tmux window" {
-		t.Errorf("second item should be 'New tmux window', got %q", items[1].Display)
+	if items[0].Source != "builtin" {
+		t.Errorf("built-in Source = %q, want builtin", items[0].Source)
 	}
-	if items[0].Source != "builtin" || items[1].Source != "builtin" {
-		t.Errorf("built-ins Source = %q/%q, want builtin", items[0].Source, items[1].Source)
+	if items[1].Display != "Alpha" || items[1].Source != "config" {
+		t.Errorf("second item = %q/%q, want Alpha/config", items[1].Display, items[1].Source)
 	}
 }
 
@@ -189,18 +166,15 @@ func TestActionsGenerator_ConfigItemSource(t *testing.T) {
 	if items[0].Source != "builtin" {
 		t.Errorf("built-in Source = %q, want builtin", items[0].Source)
 	}
-	if items[1].Source != "builtin" {
-		t.Errorf("built-in Source = %q, want builtin", items[1].Source)
-	}
-	if items[2].Source != "config" {
-		t.Errorf("config item Source = %q, want config", items[2].Source)
+	if items[1].Source != "config" {
+		t.Errorf("config item Source = %q, want config", items[1].Source)
 	}
 }
 
 func TestActionsGenerator_ZeroConfig(t *testing.T) {
 	items := runActions(dirAccumulated("/tmp"), Context{})
-	if len(items) != 2 {
-		t.Fatalf("got %d items, want 2 built-ins", len(items))
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1 built-in", len(items))
 	}
 }
 
@@ -208,8 +182,8 @@ func TestActionsGenerator_EmptyActions(t *testing.T) {
 	cfg := config.Config{Actions: []config.Action{}}
 
 	items := runActions(dirAccumulated("/tmp"), Context{Config: cfg})
-	if len(items) != 2 {
-		t.Fatalf("got %d items, want 2 built-ins", len(items))
+	if len(items) != 1 {
+		t.Fatalf("got %d items, want 1 built-in", len(items))
 	}
 }
 
@@ -224,7 +198,7 @@ func TestActionsGenerator_NoPaneID_NoKeyInData(t *testing.T) {
 
 func TestActionsGenerator_BuiltInsHaveIcon(t *testing.T) {
 	items := runActions(dirAccumulated("/tmp"), Context{})
-	for i, it := range items[:2] {
+	for i, it := range items {
 		if it.Icon == "" {
 			t.Errorf("items[%d] should have a non-empty Icon", i)
 		}
@@ -241,11 +215,11 @@ func TestActionsGenerator_ConfigIconPassedThrough(t *testing.T) {
 		},
 	}
 	items := runActions(dirAccumulated("/tmp"), Context{Config: cfg})
-	if len(items) != 3 {
-		t.Fatalf("got %d items, want 3", len(items))
+	if len(items) != 2 {
+		t.Fatalf("got %d items, want 2", len(items))
 	}
-	if items[2].Icon != "\ue709" {
-		t.Errorf("config item Icon = %q, want \\ue709", items[2].Icon)
+	if items[1].Icon != "\ue709" {
+		t.Errorf("config item Icon = %q, want \\ue709", items[1].Icon)
 	}
 }
 
@@ -256,8 +230,8 @@ func TestActionsGenerator_ConfigNoIcon(t *testing.T) {
 		},
 	}
 	items := runActions(dirAccumulated("/tmp"), Context{Config: cfg})
-	if items[2].Icon != "" {
-		t.Errorf("config item Icon = %q, want empty", items[2].Icon)
+	if items[1].Icon != "" {
+		t.Errorf("config item Icon = %q, want empty", items[1].Icon)
 	}
 }
 
@@ -271,9 +245,6 @@ func TestActionsGenerator_DataMapsAreIndependent(t *testing.T) {
 	items := runActions(dirAccumulated("/tmp"), Context{PaneID: "%1", Config: cfg})
 	items[0].Data["extra"] = "mutated"
 	if _, ok := items[1].Data["extra"]; ok {
-		t.Error("mutating one built-in Data should not affect another")
-	}
-	if _, ok := items[2].Data["extra"]; ok {
 		t.Error("mutating built-in Data should not affect config item")
 	}
 }
@@ -287,11 +258,11 @@ func TestActionsGenerator_FiltersNonMatchingActions(t *testing.T) {
 	}
 
 	items := runActions(dirAccumulated("/tmp"), Context{Config: cfg})
-	if len(items) != 3 {
-		t.Fatalf("got %d items, want 3 (built-ins + Dir action)", len(items))
+	if len(items) != 2 {
+		t.Fatalf("got %d items, want 2 (built-in + Dir action)", len(items))
 	}
-	if items[2].Display != "Dir action" {
-		t.Errorf("items[2].Display = %q, want Dir action", items[2].Display)
+	if items[1].Display != "Dir action" {
+		t.Errorf("items[1].Display = %q, want Dir action", items[1].Display)
 	}
 }
 
@@ -323,10 +294,10 @@ func TestActionsGenerator_StagedAction(t *testing.T) {
 	}
 
 	items := runActions(dirAccumulated("/tmp"), Context{Config: cfg})
-	if len(items) != 3 {
-		t.Fatalf("got %d items, want 3", len(items))
+	if len(items) != 2 {
+		t.Fatalf("got %d items, want 2", len(items))
 	}
-	staged := items[2]
+	staged := items[1]
 	if staged.Action != item.ActionStaged {
 		t.Errorf("Action = %q, want %q", staged.Action, item.ActionStaged)
 	}

@@ -74,14 +74,11 @@ func TestIntegration_TwoLevelChain(t *testing.T) {
 	}
 	actionItems := gen(accumulated, ctx)
 
-	if len(actionItems) != 2 {
-		t.Fatalf("action items = %d, want 2", len(actionItems))
+	if len(actionItems) != 1 {
+		t.Fatalf("action items = %d, want 1", len(actionItems))
 	}
 	if actionItems[0].Display != "New window" {
 		t.Errorf("action Display = %q, want %q", actionItems[0].Display, "New window")
-	}
-	if actionItems[1].Display != "New tmux window" {
-		t.Errorf("action Display = %q, want %q", actionItems[1].Display, "New tmux window")
 	}
 
 	if !actionItems[0].NewShell {
@@ -110,8 +107,8 @@ func TestIntegration_BackNavigation(t *testing.T) {
 		t.Fatalf("resolve dir-actions: %v", err)
 	}
 	actionItems := gen(accumulated, ctx)
-	if len(actionItems) != 2 {
-		t.Fatalf("action items = %d, want 2", len(actionItems))
+	if len(actionItems) != 1 {
+		t.Fatalf("action items = %d, want 1", len(actionItems))
 	}
 
 	accumulated = accumulated[:0]
@@ -359,20 +356,17 @@ func TestIntegration_DirActionsWithConfig(t *testing.T) {
 	}
 	actionItems := gen(accumulated, ctx)
 
-	if len(actionItems) != 4 {
-		t.Fatalf("action items = %d, want 4", len(actionItems))
+	if len(actionItems) != 3 {
+		t.Fatalf("action items = %d, want 3", len(actionItems))
 	}
 	if actionItems[0].Display != "New window" {
 		t.Errorf("actionItems[0].Display = %q, want New window", actionItems[0].Display)
 	}
-	if actionItems[1].Display != "New tmux window" {
-		t.Errorf("actionItems[1].Display = %q, want New tmux window", actionItems[1].Display)
+	if actionItems[1].Display != "Yazi" {
+		t.Errorf("actionItems[1].Display = %q, want Yazi", actionItems[1].Display)
 	}
-	if actionItems[2].Display != "Yazi" {
-		t.Errorf("actionItems[2].Display = %q, want Yazi", actionItems[2].Display)
-	}
-	if actionItems[3].Display != "New pane" {
-		t.Errorf("actionItems[3].Display = %q, want New pane", actionItems[3].Display)
+	if actionItems[2].Display != "New pane" {
+		t.Errorf("actionItems[2].Display = %q, want New pane", actionItems[2].Display)
 	}
 }
 
@@ -399,7 +393,7 @@ func TestIntegration_DirActionConfigCmdRendersWithPathAndPaneID(t *testing.T) {
 	}
 	actionItems := gen(accumulated, ctx)
 
-	yaziItem := actionItems[2]
+	yaziItem := actionItems[1]
 	allAccumulated := slices.Concat(accumulated, []item.Item{yaziItem})
 	data := execute.FlattenData(allAccumulated)
 	rendered, err := execute.RenderCmd(yaziItem.Cmd, data)
@@ -431,14 +425,11 @@ func TestIntegration_DirActionsEmptyConfig(t *testing.T) {
 	}
 	actionItems := gen(accumulated, ctx)
 
-	if len(actionItems) != 2 {
-		t.Fatalf("action items = %d, want 2 built-ins", len(actionItems))
+	if len(actionItems) != 1 {
+		t.Fatalf("action items = %d, want 1 built-in", len(actionItems))
 	}
 	if actionItems[0].Display != "New window" {
 		t.Errorf("Display = %q, want New window", actionItems[0].Display)
-	}
-	if actionItems[1].Display != "New tmux window" {
-		t.Errorf("Display = %q, want New tmux window", actionItems[1].Display)
 	}
 }
 
