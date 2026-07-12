@@ -17,7 +17,7 @@ import (
 func newSessionCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "session",
-		Short: "Resolve and manage cmdk sessions",
+		Short: "Resolve paths and launch windows in managed sessions",
 		Long: `Resolve and manage cmdk sessions.
 
 Session commands turn existing directories into cmdk session plans and can
