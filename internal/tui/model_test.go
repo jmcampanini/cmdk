@@ -1919,11 +1919,14 @@ func TestPickerStage_CommandErrorDetailsIncludeExecutionContext(t *testing.T) {
 	}
 
 	content := ansi.Strip(m.errorDetailsView())
+	compactContent := strings.Join(strings.Fields(content), "")
+	if want := "Working directory: " + cwd; !strings.Contains(compactContent, strings.Join(strings.Fields(want), "")) {
+		t.Fatalf("details view should contain wrapped %q, got:\n%s", want, content)
+	}
 	for _, want := range []string{
 		"Source: picker",
 		"picker source failed: exit status 7",
 		"Stage key: file",
-		"Working directory: " + cwd,
 		"Timeout: 2s",
 		"Exit code: 7",
 		"Error: picker source failed: exit status 7",

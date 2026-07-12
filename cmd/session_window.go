@@ -52,8 +52,8 @@ literal by default; invoke a shell explicitly for shell features, for example:
 --switch must appear before --. Arguments after -- are always part of the window
 command. cmdk creates a fresh window every time and tracks it by the returned
 tmux window_id.`,
-
-		Args: cobra.MinimumNArgs(1),
+		Args:    cobra.MinimumNArgs(1),
+		PreRunE: requireTmux,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			options.nameSet = cmd.Flags().Changed("name")
 			options.argsLenAtDash = cmd.Flags().ArgsLenAtDash()

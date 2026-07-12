@@ -237,6 +237,7 @@ func TestSessionWindowCommandParsesFlagsOnlyBeforeDashDash(t *testing.T) {
 
 	oldCreate := createResolvedSessionWindow
 	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
+	stubTmuxPrerequisite(t, func(context.Context) error { return nil })
 
 	var got tmux.SessionWindowOptions
 	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, _ string, opts tmux.SessionWindowOptions) error {

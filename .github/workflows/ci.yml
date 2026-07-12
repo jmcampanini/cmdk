@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     steps:
@@ -32,6 +32,13 @@ jobs:
         with:
           version: v2.12.2
           install-only: true
+
+      - name: Install tmux
+        run: |
+          sudo apt-get update
+          sudo apt-get install tmux --no-install-recommends --yes
+          apt-cache policy tmux
+          tmux -V
 
       - name: Check
         run: make check
