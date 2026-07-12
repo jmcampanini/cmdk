@@ -236,12 +236,8 @@ func TestSessionWindowCommandAllowsArgsAfterDashDash(t *testing.T) {
 	}
 
 	oldCreate := createResolvedSessionWindow
-	oldCheck := checkTmuxPrerequisite
-	t.Cleanup(func() {
-		createResolvedSessionWindow = oldCreate
-		checkTmuxPrerequisite = oldCheck
-	})
-	checkTmuxPrerequisite = func(context.Context) error { return nil }
+	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
+	stubTmuxPrerequisite(t, func(context.Context) error { return nil })
 
 	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, launchPath string, opts tmux.SessionWindowOptions) error {
 		want := []string{"--flag", "value"}

@@ -21,14 +21,26 @@ func windowLeafCommand(t *testing.T, name string) *cobra.Command {
 	return nil
 }
 
-func TestTmuxBackedCommandsCheckPrerequisite(t *testing.T) {
+func stubTmuxPrerequisite(t *testing.T, check func(context.Context) error) {
+	t.Helper()
 	oldCheck := checkTmuxPrerequisite
+	checkTmuxPrerequisite = check
+	t.Cleanup(func() { checkTmuxPrerequisite = oldCheck })
+}
+
+func forbidTmuxPrerequisite(t *testing.T) {
+	t.Helper()
+	stubTmuxPrerequisite(t, func(context.Context) error {
+		return errors.New("unexpected tmux prerequisite check")
+	})
+}
+
+func TestTmuxBackedCommandsCheckPrerequisite(t *testing.T) {
 	calls := 0
-	checkTmuxPrerequisite = func(context.Context) error {
+	stubTmuxPrerequisite(t, func(context.Context) error {
 		calls++
 		return nil
-	}
-	t.Cleanup(func() { checkTmuxPrerequisite = oldCheck })
+	})
 
 	commands := []*cobra.Command{
 		newRootCommand(),
@@ -52,11 +64,7 @@ func TestTmuxBackedCommandsCheckPrerequisite(t *testing.T) {
 
 func TestTmuxFreeCommandDoesNotCheckPrerequisite(t *testing.T) {
 	useTempConfigHome(t)
-	oldCheck := checkTmuxPrerequisite
-	checkTmuxPrerequisite = func(context.Context) error {
-		return errors.New("unexpected tmux prerequisite check")
-	}
-	t.Cleanup(func() { checkTmuxPrerequisite = oldCheck })
+	forbidTmuxPrerequisite(t)
 
 	command := newRootCommand()
 	command.SetOut(io.Discard)
@@ -68,11 +76,7 @@ func TestTmuxFreeCommandDoesNotCheckPrerequisite(t *testing.T) {
 }
 
 func TestHelpDoesNotCheckTmuxPrerequisite(t *testing.T) {
-	oldCheck := checkTmuxPrerequisite
-	checkTmuxPrerequisite = func(context.Context) error {
-		return errors.New("unexpected tmux prerequisite check")
-	}
-	t.Cleanup(func() { checkTmuxPrerequisite = oldCheck })
+	forbidTmuxPrerequisite(t)
 
 	command := newRootCommand()
 	command.SetOut(io.Discard)
@@ -84,11 +88,7 @@ func TestHelpDoesNotCheckTmuxPrerequisite(t *testing.T) {
 }
 
 func TestVersionDoesNotCheckTmuxPrerequisite(t *testing.T) {
-	oldCheck := checkTmuxPrerequisite
-	checkTmuxPrerequisite = func(context.Context) error {
-		return errors.New("unexpected tmux prerequisite check")
-	}
-	t.Cleanup(func() { checkTmuxPrerequisite = oldCheck })
+	forbidTmuxPrerequisite(t)
 
 	command := newRootCommand()
 	command.SetOut(io.Discard)
@@ -100,13 +100,11 @@ func TestVersionDoesNotCheckTmuxPrerequisite(t *testing.T) {
 }
 
 func TestArgumentValidationRunsBeforeTmuxPrerequisite(t *testing.T) {
-	oldCheck := checkTmuxPrerequisite
 	called := false
-	checkTmuxPrerequisite = func(context.Context) error {
+	stubTmuxPrerequisite(t, func(context.Context) error {
 		called = true
 		return nil
-	}
-	t.Cleanup(func() { checkTmuxPrerequisite = oldCheck })
+	})
 
 	command := newWindowCommand()
 	command.SetOut(io.Discard)

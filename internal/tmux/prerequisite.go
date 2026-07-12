@@ -27,13 +27,12 @@ type version struct {
 
 type boundedBuffer struct {
 	buf      bytes.Buffer
-	limit    int
 	overflow bool
 }
 
 func (b *boundedBuffer) Write(p []byte) (int, error) {
 	originalLen := len(p)
-	remaining := b.limit - b.buf.Len()
+	remaining := prerequisiteLimit - b.buf.Len()
 	if remaining <= 0 {
 		b.overflow = true
 		return originalLen, nil
@@ -59,8 +58,6 @@ func checkPrerequisite(ctx context.Context, timeout time.Duration) error {
 	defer cancel()
 
 	var stdout, stderr boundedBuffer
-	stdout.limit = prerequisiteLimit
-	stderr.limit = prerequisiteLimit
 	cmd := exec.CommandContext(ctx, "tmux", "-V")
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -68,7 +65,7 @@ func checkPrerequisite(ctx context.Context, timeout time.Duration) error {
 	err := cmd.Run()
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		if errors.Is(ctxErr, context.DeadlineExceeded) {
-			if parentErr := parentContextError(parent); parentErr != nil {
+			if parentErr := context.Cause(parent); parentErr != nil {
 				return fmt.Errorf("checking required tmux version: %w", parentErr)
 			}
 			return fmt.Errorf("tmux 3.2 or newer is required; tmux -V did not respond within %s; %s", timeout, prerequisiteRecovery)
@@ -98,13 +95,6 @@ func checkPrerequisite(ctx context.Context, timeout time.Duration) error {
 		return fmt.Errorf("tmux 3.2 or newer is required; found %s; install or upgrade tmux and ensure the supported version is first in PATH", raw)
 	}
 	return nil
-}
-
-func parentContextError(ctx context.Context) error {
-	if cause := context.Cause(ctx); cause != nil {
-		return cause
-	}
-	return ctx.Err()
 }
 
 func parseVersion(raw string) (version, error) {
@@ -143,7 +133,7 @@ func parseVersion(raw string) (version, error) {
 		return version{}, errors.New("major version must be numeric")
 	}
 	minor, err := strconv.Atoi(minorText[:minorDigits])
-	if err != nil || minor < 0 {
+	if err != nil {
 		return version{}, errors.New("minor version must be numeric")
 	}
 	return version{major: major, minor: minor}, nil

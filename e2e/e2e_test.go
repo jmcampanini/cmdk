@@ -84,8 +84,8 @@ func TestE2E_TmuxSentinel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("tmux display-message failed: %v\n%s", err, out)
 	}
-	if strings.TrimSpace(string(out)) != sess {
-		t.Fatalf("tmux session name = %q, want %q", strings.TrimSpace(string(out)), sess)
+	if got := strings.TrimSpace(string(out)); got != sess {
+		t.Fatalf("tmux session name = %q, want %q", got, sess)
 	}
 	fmt.Println("CMDK_E2E_TMUX_SENTINEL=PASS")
 }
