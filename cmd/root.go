@@ -13,7 +13,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/jmcampanini/cmdk/internal/config"
-	"github.com/jmcampanini/cmdk/internal/execute"
 	"github.com/jmcampanini/cmdk/internal/generator"
 	"github.com/jmcampanini/cmdk/internal/item"
 	"github.com/jmcampanini/cmdk/internal/logging"
@@ -264,12 +263,17 @@ func runRootCommand(cmd *cobra.Command, _ []string) error {
 	if !ok {
 		return fmt.Errorf("internal error: unexpected model type %T", finalModel)
 	}
+	launch := m.Launch()
 	sel := m.Selected()
-	if sel == nil {
+	if launch == nil || sel == nil {
 		return nil
 	}
 	log.Info("executing", "item", sel.Display, "cmd", sel.Cmd, "data", sel.Data)
-	return execute.RunWithConfig(m.Accumulated(), *sel, paneID, cfg, syscall.Exec)
+	if err := launch.Execute(syscall.Exec); err != nil {
+		log.Error("launch failed", "item", sel.Display, "error", err)
+		return err
+	}
+	return nil
 }
 
 func resolveConfigPath() (string, error) {

@@ -1121,7 +1121,7 @@ stages = [
 	filterAndExecute(t, sess, "Long")
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "command error")
+		return strings.Contains(s, "picker source failed")
 	}, defaultTimeout)
 
 	sendKeys(t, sess, "Enter")
@@ -1143,7 +1143,7 @@ stages = [
 
 	sendKeys(t, sess, "Escape")
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "command error") && !strings.Contains(s, "Error details")
+		return strings.Contains(s, "picker source failed") && !strings.Contains(s, "Error details")
 	}, defaultTimeout)
 }
 
@@ -1175,6 +1175,79 @@ matches = "root"
 	}
 	if !strings.Contains(string(got), "EXITCODE=42") {
 		t.Errorf("expected EXITCODE=42, got: %s", got)
+	}
+}
+
+// A literal display-popup e2e is not viable here: the detached test server has
+// no attached client and capture-pane cannot see popup overlays. Running cmdk
+// as the pane command has the same lifetime semantics as display-popup -E, so
+// error-screen persistence in the pane plus the post-dismissal exit code is
+// the machine-checkable equivalent of "the popup no longer flashes shut".
+func TestE2E_LaunchPathCmdFailureShowsErrorScreenAndExitsClean(t *testing.T) {
+	home := t.TempDir()
+	marker := filepath.Join(t.TempDir(), "exitcode")
+	xdg := writeConfig(t, `
+[[actions]]
+name = "xq-bad-launch"
+matches = "root"
+cmd = "true"
+launch_path_cmd = "sh -c 'echo out; echo err >&2; exit 23'"
+`)
+
+	sess := "cmdk-test-" + strings.ReplaceAll(t.Name(), "/", "-")
+	shellCmd := fmt.Sprintf("(%s --pane-id=%%0); echo EXITCODE=$? > '%s'", binaryPath, marker)
+	cmd := tmuxCmd("new-session", "-d", "-s", sess, "-x", "120", "-y", "40",
+		"env", "XDG_CONFIG_HOME="+xdg, "HOME="+home, "sh", "-c", shellCmd)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("tmux new-session failed: %v\n%s", err, out)
+	}
+	defer killSession(t, sess)
+
+	waitForReady(t, sess)
+	filterAndExecute(t, sess, "xq-bad-launch")
+
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "Error details") &&
+			strings.Contains(s, "Source: launch") &&
+			strings.Contains(s, "launch_path_cmd failed: exit status 23") &&
+			strings.Contains(s, "Exit code: 23") &&
+			strings.Contains(s, "echo out; echo err >&2; exit 23") &&
+			strings.Contains(s, "\n out") &&
+			strings.Contains(s, "\n err")
+	}, defaultTimeout)
+
+	if !sessionExists(sess) {
+		t.Fatal("session exited while the error screen should be showing")
+	}
+
+	sendKeys(t, sess, "Escape")
+	waitForContent(t, sess, func(s string) bool {
+		return strings.Contains(s, "xq-bad-launch") && !strings.Contains(s, "Error details")
+	}, defaultTimeout)
+
+	exitFilterModeE2E(t, sess)
+	sendKeys(t, sess, "Escape")
+	waitForExit(t, sess)
+
+	got, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatalf("failed to read exitcode marker: %v", err)
+	}
+	if !strings.Contains(string(got), "EXITCODE=0") {
+		t.Errorf("expected EXITCODE=0 after dismissing a launch failure, got: %s", got)
+	}
+
+	logPath := filepath.Join(home, ".local", "state", "cmdk", "cmdk.log")
+	logContent := waitForFile(t, logPath, defaultTimeout)
+	for _, want := range []string{
+		"launch resolution failed",
+		"exit_code=23",
+		"echo out; echo err",
+		"err",
+	} {
+		if !strings.Contains(logContent, want) {
+			t.Errorf("log should contain %q, got:\n%s", want, logContent)
+		}
 	}
 }
 
