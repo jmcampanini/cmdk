@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	cmdktmux "github.com/jmcampanini/cmdk/internal/tmux"
 )
 
 const (
@@ -23,8 +26,12 @@ var (
 	tmuxSocket string
 )
 
+func tmuxCmdForSocket(socket string, args ...string) *exec.Cmd {
+	return exec.Command("tmux", append([]string{"-L", socket, "-f", "/dev/null"}, args...)...)
+}
+
 func tmuxCmd(args ...string) *exec.Cmd {
-	return exec.Command("tmux", append([]string{"-L", tmuxSocket}, args...)...)
+	return tmuxCmdForSocket(tmuxSocket, args...)
 }
 
 func useIsolatedTmuxSocket(t *testing.T) {
@@ -36,15 +43,16 @@ func useIsolatedTmuxSocket(t *testing.T) {
 	socket := fmt.Sprintf("%s-%d", oldSocket, time.Now().UnixNano())
 	tmuxSocket = socket
 	t.Cleanup(func() {
-		_ = exec.Command("tmux", "-L", socket, "kill-server").Run()
+		_ = tmuxCmdForSocket(socket, "kill-server").Run()
 		tmuxSocket = oldSocket
 	})
 }
 
 func TestMain(m *testing.M) {
-	if _, err := exec.LookPath("tmux"); err != nil {
-		fmt.Fprintln(os.Stderr, "SKIP: e2e tests require tmux in PATH")
-		os.Exit(0)
+	tmuxSocket = fmt.Sprintf("cmdk-e2e-%d", os.Getpid())
+	if err := cmdktmux.CheckPrerequisite(context.Background()); err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: e2e tests: %v\n", err)
+		os.Exit(1)
 	}
 
 	tmp, err := os.MkdirTemp("", "cmdk-e2e-*")
@@ -52,7 +60,6 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	binaryPath = tmp + "/cmdk"
-	tmuxSocket = fmt.Sprintf("cmdk-e2e-%d", os.Getpid())
 	build := exec.Command("go", "build", "-o", binaryPath, "..")
 	build.Stderr = os.Stderr
 	if err := build.Run(); err != nil {
@@ -65,6 +72,22 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "warning: failed to clean up %s: %v\n", tmp, err)
 	}
 	os.Exit(code)
+}
+
+func TestE2E_TmuxSentinel(t *testing.T) {
+	useIsolatedTmuxSocket(t)
+	sess := "cmdk-tmux-sentinel"
+	if out, err := tmuxCmd("new-session", "-d", "-s", sess).CombinedOutput(); err != nil {
+		t.Fatalf("tmux new-session failed: %v\n%s", err, out)
+	}
+	out, err := tmuxCmd("display-message", "-p", "-t", sess, "#{session_name}").CombinedOutput()
+	if err != nil {
+		t.Fatalf("tmux display-message failed: %v\n%s", err, out)
+	}
+	if strings.TrimSpace(string(out)) != sess {
+		t.Fatalf("tmux session name = %q, want %q", strings.TrimSpace(string(out)), sess)
+	}
+	fmt.Println("CMDK_E2E_TMUX_SENTINEL=PASS")
 }
 
 func startSession(t *testing.T) string {
@@ -1253,7 +1276,7 @@ launch_path_cmd = "sh -c 'echo out; echo err >&2; exit 23'"
 
 func TestE2E_DisplayPopup(t *testing.T) {
 	sess := "cmdk-test-" + strings.ReplaceAll(t.Name(), "/", "-")
-	shellCmd := fmt.Sprintf("%s --pane-id=$(tmux -L %s display-message -p '#{pane_id}')", binaryPath, tmuxSocket)
+	shellCmd := fmt.Sprintf("%s --pane-id=$(tmux -L %s -f /dev/null display-message -p '#{pane_id}')", binaryPath, tmuxSocket)
 	cmd := tmuxCmd("new-session", "-d", "-s", sess, "-x", "120", "-y", "40", "sh", "-c", shellCmd)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("tmux new-session failed: %v\n%s", err, out)

@@ -17,10 +17,11 @@ func newExitCodesCommand() *cobra.Command {
   1   cmdk error. An invalid config file passed via --config, an
       unrecoverable startup failure, a launch mechanics failure after a
       successful selection (for example tmux window creation or exec
-      failure), or an internal error. Configuration problems discovered in
-      the default config path appear as a failed source row inside the TUI
-      rather than causing a non-zero exit. Logging setup failures produce a
-      stderr warning and do not cause exit 1.
+      failure), a missing tmux executable or unsupported tmux version when
+      invoking tmux-backed functionality, or an internal error. Configuration
+      problems discovered in the default config path appear as a failed source
+      row inside the TUI rather than causing a non-zero exit. Logging setup
+      failures produce a stderr warning and do not cause exit 1.
 
   *   Propagated for shell-mode actions. When a selected action runs in shell
       mode, cmdk replaces its own process with the action's command via an

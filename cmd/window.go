@@ -38,9 +38,10 @@ current context.`,
 
 func newWindowNextCommand(options *windowCommandOptions) *cobra.Command {
 	return &cobra.Command{
-		Use:   "next",
-		Short: "Switch to the next tmux window",
-		Args:  cobra.NoArgs,
+		Use:     "next",
+		Short:   "Switch to the next tmux window",
+		Args:    cobra.NoArgs,
+		PreRunE: requireTmux,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runWindowCommand(cmd, tmux.WindowNext, *options)
 		},
@@ -53,6 +54,7 @@ func newWindowPreviousCommand(options *windowCommandOptions) *cobra.Command {
 		Aliases: []string{"prev"},
 		Short:   "Switch to the previous tmux window",
 		Args:    cobra.NoArgs,
+		PreRunE: requireTmux,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runWindowCommand(cmd, tmux.WindowPrevious, *options)
 		},

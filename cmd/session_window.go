@@ -46,7 +46,8 @@ literal by default; invoke a shell explicitly for shell features, for example:
 
 cmdk creates a fresh window every time, tracks it by the returned tmux window_id,
 and switches the current tmux client to <session_id>:<window_id>.`,
-		Args: cobra.MinimumNArgs(1),
+		Args:    cobra.MinimumNArgs(1),
+		PreRunE: requireTmux,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			options.nameSet = cmd.Flags().Changed("name")
 			options.argsLenAtDash = cmd.Flags().ArgsLenAtDash()

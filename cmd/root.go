@@ -56,10 +56,19 @@ The path determines the managed session and becomes the new window's working
 directory. Repository and worktree paths share their managed repo session;
 ordinary directories use a session for that canonical directory.
 
+Requirements:
+  tmux 3.2 or newer is required for the interactive launcher and tmux-backed
+  commands on Linux or macOS. Install or upgrade it with your platform package
+  manager and ensure the supported executable is first in PATH. Linux is
+  verified in required CI; other Unix-like systems are unverified, and
+  Windows is unsupported. zoxide is optional and provides directory entries.
+  A Nerd Font is optional and enables enhanced icon rendering.
+
 Log file:
   $HOME/.local/state/cmdk/cmdk.log`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		PreRunE:       requireTmux,
 		RunE:          runRootCommand,
 	}
 	cmd.Version = Version

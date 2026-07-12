@@ -20,6 +20,10 @@ func TestRootHelpMakesSessionWindowLaunchingDiscoverable(t *testing.T) {
 		"cmdk session window <path> --new",
 		"cmdk session window <path> -- <command> [args...]",
 		"The path determines the managed session",
+		"tmux 3.2 or newer",
+		"Linux or macOS",
+		"zoxide is optional",
+		"Nerd Font is optional",
 		"Resolve paths and launch windows in managed sessions",
 	} {
 		if !strings.Contains(help, want) {

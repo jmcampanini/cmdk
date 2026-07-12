@@ -12,11 +12,14 @@ func stubWindowSwitcher(t *testing.T, fn func(context.Context, tmux.WindowDirect
 	t.Helper()
 	oldSwitch := switchRelativeWindow
 	oldPaneID := paneID
+	oldCheck := checkTmuxPrerequisite
 	switchRelativeWindow = fn
 	paneID = ""
+	checkTmuxPrerequisite = func(context.Context) error { return nil }
 	t.Cleanup(func() {
 		switchRelativeWindow = oldSwitch
 		paneID = oldPaneID
+		checkTmuxPrerequisite = oldCheck
 	})
 }
 
