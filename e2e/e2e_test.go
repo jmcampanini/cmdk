@@ -639,6 +639,15 @@ func findManagedSessionE2E(t *testing.T, key string) managedSessionE2E {
 	return managedSessionE2E{}
 }
 
+func currentWindowNameE2E(t *testing.T, sessionID string) string {
+	t.Helper()
+	out, err := tmuxCmd("list-windows", "-t", sessionID, "-f", "#{window_active}", "-F", "#{window_name}").Output()
+	if err != nil {
+		t.Fatalf("list active window failed: %v", err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
 func windowNamesE2E(t *testing.T, sessionID string) map[string]string {
 	t.Helper()
 	out, err := tmuxCmd("list-windows", "-t", sessionID, "-F", "#{window_name}\t#{pane_current_path}").Output()
@@ -660,9 +669,6 @@ func windowNamesE2E(t *testing.T, sessionID string) map[string]string {
 	return windows
 }
 
-// Detached e2e panes have no current tmux client, so the final switch-client
-// may exit nonzero. These tests assert the create/metadata/window steps that
-// happen before that switch failure.
 func TestE2E_SessionWindowCreatesNonGitDirectorySession(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "scratch")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -671,8 +677,8 @@ func TestE2E_SessionWindowCreatesNonGitDirectorySession(t *testing.T) {
 	dirReal := realPathE2E(t, dir)
 
 	result := runDetachedSessionWindowNew(t, dir)
-	if !strings.Contains(result, "EXITCODE=") {
-		t.Fatalf("missing window exit marker: %q", result)
+	if result != "EXITCODE=0\n" {
+		t.Fatalf("window exit marker = %q, want EXITCODE=0", result)
 	}
 
 	session := findManagedSessionE2E(t, dirReal)
@@ -705,8 +711,8 @@ func TestE2E_SessionWindowCommandCreatesRunningCommandWindow(t *testing.T) {
 	}
 	t.Cleanup(func() { killSession(t, sess) })
 
-	if result := waitForFile(t, exitMarker, defaultTimeout); !strings.Contains(result, "EXITCODE=") {
-		t.Fatalf("missing window exit marker: %q", result)
+	if result := waitForFile(t, exitMarker, defaultTimeout); result != "EXITCODE=0\n" {
+		t.Fatalf("window exit marker = %q, want EXITCODE=0", result)
 	}
 	if got := waitForFile(t, commandMarker, defaultTimeout); got != "done" {
 		t.Fatalf("command marker = %q, want done", got)
@@ -732,8 +738,8 @@ func TestE2E_SessionWindowCreatesRepoWorktreeSessionAndWindows(t *testing.T) {
 	mainReal := realPathE2E(t, main)
 
 	result := runDetachedSessionWindowNew(t, feature)
-	if !strings.Contains(result, "EXITCODE=") {
-		t.Fatalf("missing window exit marker: %q", result)
+	if result != "EXITCODE=0\n" {
+		t.Fatalf("window exit marker = %q, want EXITCODE=0", result)
 	}
 
 	session := findManagedSessionE2E(t, containerReal)
@@ -744,10 +750,16 @@ func TestE2E_SessionWindowCreatesRepoWorktreeSessionAndWindows(t *testing.T) {
 	if windows["wt-feature"] != featureReal {
 		t.Errorf("wt-feature window cwd = %q, want %q (all windows: %v)", windows["wt-feature"], featureReal, windows)
 	}
+	if active := currentWindowNameE2E(t, session.ID); active != "wt-feature" {
+		t.Fatalf("active window = %q, want wt-feature", active)
+	}
 
 	result = runDetachedSessionWindowNew(t, main)
-	if !strings.Contains(result, "EXITCODE=") {
-		t.Fatalf("missing second window exit marker: %q", result)
+	if result != "EXITCODE=0\n" {
+		t.Fatalf("second window exit marker = %q, want EXITCODE=0", result)
+	}
+	if active := currentWindowNameE2E(t, session.ID); active != "wt-feature" {
+		t.Errorf("active window changed to %q, want wt-feature", active)
 	}
 	windows = windowNamesE2E(t, session.ID)
 	if windows["main"] != mainReal {
