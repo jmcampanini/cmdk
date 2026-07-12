@@ -1,7 +1,6 @@
 package execute
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -9,16 +8,15 @@ import (
 	"maps"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
-	"syscall"
 	"text/template"
 	"time"
 	"unicode"
 
+	"github.com/jmcampanini/cmdk/internal/cmdrun"
 	"github.com/jmcampanini/cmdk/internal/config"
 	"github.com/jmcampanini/cmdk/internal/item"
 	resolver "github.com/jmcampanini/cmdk/internal/session"
@@ -34,19 +32,17 @@ const (
 
 	launchPathCmdMaxStdoutBytes = 8 * 1024
 	launchPathCmdMaxStderrBytes = 32 * 1024
-	launchPathCmdPipeDrainDelay = 100 * time.Millisecond
 
 	launchModeSessionWindow launchMode = config.LaunchModeSessionWindow
 	launchModeShell         launchMode = config.LaunchModeShell
 )
 
 var (
-	resolveSessionPlan            = resolver.Resolve
-	createResolvedSessionWindow   = tmux.CreateResolvedSessionWindow
-	getwd                         = os.Getwd
-	chdir                         = os.Chdir
-	lookPath                      = exec.LookPath
-	launchPathSignalNotifyContext = signal.NotifyContext
+	resolveSessionPlan          = resolver.Resolve
+	createResolvedSessionWindow = tmux.CreateResolvedSessionWindow
+	getwd                       = os.Getwd
+	chdir                       = os.Chdir
+	lookPath                    = exec.LookPath
 )
 
 var tmplFuncs = template.FuncMap{
@@ -100,28 +96,49 @@ func BuildCMDKEnvVarsFromData(data map[string]string, paneID string) []string {
 	return envs
 }
 
-func Run(accumulated []item.Item, selected item.Item, paneID string, execFn ExecFn) error {
-	return RunWithConfig(accumulated, selected, paneID, config.DefaultConfig(), execFn)
-}
-
-func RunWithConfig(accumulated []item.Item, selected item.Item, paneID string, cfg config.Config, execFn ExecFn) error {
-	if selected.Cmd == "" && !selected.NewShell {
-		return fmt.Errorf("selected item has no command to execute (display: %q)", selected.Display)
-	}
-
+// templateData merges FlattenData(accumulated), selected.Data, and pane_id:
+// the exact variable set launch templates see.
+func templateData(accumulated []item.Item, selected item.Item, paneID string) map[string]string {
 	data := FlattenData(accumulated)
 	maps.Copy(data, selected.Data)
 	if paneID != "" {
 		data["pane_id"] = paneID
 	}
+	return data
+}
+
+// Launch is a fully resolved, validated launch plan. ResolveLaunch performs
+// every user-config interpretation that can fail (templates, launch-path
+// resolution, validation); Execute performs only launch mechanics.
+type Launch struct {
+	mode           launchMode
+	path           string
+	windowName     string
+	command        []string
+	newShell       bool
+	argv0          string
+	argv           []string
+	env            []string
+	resolveTimeout time.Duration
+}
+
+// ResolveLaunch also returns the template-data map as of the point resolution
+// stopped, so failure diagnostics show the exact variable set the failing
+// template saw (including launch_path/launch_basename once resolved).
+func ResolveLaunch(accumulated []item.Item, selected item.Item, paneID string, cfg config.Config) (Launch, map[string]string, error) {
+	data := templateData(accumulated, selected, paneID)
+
+	if selected.Cmd == "" && !selected.NewShell {
+		return Launch{}, data, fmt.Errorf("selected item has no command to execute (display: %q)", selected.Display)
+	}
 
 	mode := effectiveLaunchMode(selected)
 	if selected.NewShell && mode != launchModeSessionWindow {
-		return errors.New("new shell action requires session-window launch_mode")
+		return Launch{}, data, errors.New("new shell action requires session-window launch_mode")
 	}
 	launchPath, hasLaunchPath, err := resolveEffectiveLaunchPath(selected, data, mode, cfg.Timeout.Picker, paneID)
 	if err != nil {
-		return err
+		return Launch{}, data, err
 	}
 	if hasLaunchPath {
 		data["launch_path"] = launchPath
@@ -130,11 +147,77 @@ func RunWithConfig(accumulated []item.Item, selected item.Item, paneID string, c
 
 	switch mode {
 	case launchModeSessionWindow:
-		return runSessionWindow(selected, data, launchPath, hasLaunchPath, cfg)
+		if !hasLaunchPath {
+			return Launch{}, data, errors.New("session-window action requires a launch_path")
+		}
+		command, err := sessionWindowCommand(selected, data)
+		if err != nil {
+			return Launch{}, data, err
+		}
+		windowName, err := renderWindowName(selected, data)
+		if err != nil {
+			return Launch{}, data, err
+		}
+		resolveTimeout := cfg.Timeout.Fetch
+		if resolveTimeout <= 0 {
+			resolveTimeout = config.DefaultConfig().Timeout.Fetch
+		}
+		return Launch{
+			mode:           mode,
+			path:           launchPath,
+			windowName:     windowName,
+			command:        command,
+			newShell:       selected.NewShell,
+			resolveTimeout: resolveTimeout,
+		}, data, nil
 	case launchModeShell:
-		return runShell(selected, data, launchPath, hasLaunchPath, paneID, execFn)
+		if selected.WindowName != "" {
+			return Launch{}, data, errors.New("window_name is only valid when effective launch_mode is session-window")
+		}
+		rendered, err := RenderCmd(selected.Cmd, data)
+		if err != nil {
+			return Launch{}, data, fmt.Errorf("cmd template: %w", err)
+		}
+		argv0, err := lookPath("sh")
+		if err != nil {
+			return Launch{}, data, err
+		}
+		return Launch{
+			mode:  mode,
+			path:  launchPath,
+			argv0: argv0,
+			argv:  []string{"sh", "-c", rendered},
+			env:   envWithCMDK(data, paneID),
+		}, data, nil
 	default:
-		return fmt.Errorf("invalid effective launch_mode %q", mode)
+		return Launch{}, data, fmt.Errorf("invalid effective launch_mode %q", mode)
+	}
+}
+
+func (l Launch) Execute(execFn ExecFn) error {
+	switch l.mode {
+	case launchModeSessionWindow:
+		resolveCtx, cancel := context.WithTimeout(context.Background(), l.resolveTimeout)
+		defer cancel()
+		plan, err := resolveSessionPlan(resolveCtx, l.path)
+		if err != nil {
+			return err
+		}
+		return createResolvedSessionWindow(context.Background(), plan, l.path, tmux.SessionWindowOptions{
+			Name:     l.windowName,
+			NewShell: l.newShell,
+			Command:  l.command,
+			Switch:   true,
+		})
+	case launchModeShell:
+		if l.path != "" {
+			if err := chdir(l.path); err != nil {
+				return fmt.Errorf("chdir to launch_path %s: %w", l.path, err)
+			}
+		}
+		return execFn(l.argv0, l.argv, l.env)
+	default:
+		return fmt.Errorf("invalid effective launch_mode %q", l.mode)
 	}
 }
 
@@ -281,191 +364,60 @@ func resolveLaunchPathCmd(cmdTemplate string, data map[string]string, timeout ti
 		return "", fmt.Errorf("launch_path_cmd template: %w", err)
 	}
 
-	ctx, cancel := launchPathCommandContext(timeout)
-	defer cancel()
-
-	stdoutCapture := &launchPathStdoutCapture{limit: launchPathCmdMaxStdoutBytes}
-	stderrCapture := &boundedDiagnosticCapture{limit: launchPathCmdMaxStderrBytes}
-
-	// TODO(#87): Replace this local bounded capture with the shared external-command
-	// output helper once cmdk standardizes stdout/stderr limits repository-wide.
-	cmd := exec.CommandContext(ctx, "sh", "-c", rendered)
-	cmd.Env = envWithCMDK(data, paneID)
-	cmd.Stdout = stdoutCapture
-	cmd.Stderr = stderrCapture
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return killCommandGroup(cmd) }
-	cmd.WaitDelay = launchPathCmdPipeDrainDelay
-	stdoutCapture.onError = func() { _ = killCommandGroup(cmd) }
-
-	// Do not use StdoutPipe/StderrPipe here: os/exec closes those readers from
-	// Wait, so racing Wait against reader goroutines can produce partial output.
-	// Supplying Writers lets os/exec own that synchronization. WaitDelay bounds
-	// the only tolerated local recovery case: the shell exited successfully after
-	// printing a valid path, but an orphaned descendant kept stdout/stderr open.
-	waitErr := cmd.Run()
-	stderrText := formatCommandDiagnostic(stderrCapture.result(), launchPathCmdMaxStderrBytes)
-
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		if errors.Is(ctxErr, context.DeadlineExceeded) {
-			return "", fmt.Errorf("launch_path_cmd timed out after %s", timeout)
-		}
-		return "", fmt.Errorf("launch_path_cmd canceled: %w", ctxErr)
-	}
-	if stdoutErr := stdoutCapture.Err(); stdoutErr != nil {
-		return "", stdoutErr
-	}
-	if waitErr != nil && !errors.Is(waitErr, exec.ErrWaitDelay) {
-		if stderrText != "" {
-			return "", fmt.Errorf("launch_path_cmd failed: %w\nstderr: %s", waitErr, stderrText)
-		}
-		return "", fmt.Errorf("launch_path_cmd failed: %w", waitErr)
-	}
-
-	path, err := parseLaunchPathCmdOutput(stdoutCapture.Bytes())
+	res, err := cmdrun.Run(cmdrun.Spec{
+		Op:         "launch_path_cmd",
+		Rendered:   rendered,
+		Timeout:    timeout,
+		Env:        envWithCMDK(data, paneID),
+		SingleLine: true,
+		MaxStdout:  launchPathCmdMaxStdoutBytes,
+		MaxStderr:  launchPathCmdMaxStderrBytes,
+	})
 	if err != nil {
 		return "", err
 	}
+
+	// The command exited zero, so output-contract violations carry ExitCode 0
+	// alongside the captured streams.
+	outputErr := func(cause error) error {
+		return &cmdrun.CommandError{
+			Op:       "launch_path_cmd",
+			Kind:     cmdrun.KindOutput,
+			Rendered: rendered,
+			Timeout:  timeout,
+			ExitCode: 0,
+			Stdout:   res.AnnotatedStdout(),
+			Stderr:   res.AnnotatedStderr(),
+			Err:      cause,
+		}
+	}
+
+	path, err := parseLaunchPathCmdOutput(res.Stdout)
+	if err != nil {
+		return "", outputErr(err)
+	}
 	if !filepath.IsAbs(path) {
-		return "", errors.New("launch_path_cmd output must be an absolute path")
+		return "", outputErr(errors.New("output must be an absolute path"))
 	}
-	return validateExistingDirectory("launch_path_cmd output", path)
+	abs, err := validateExistingDirectory("output", path)
+	if err != nil {
+		return "", outputErr(err)
+	}
+	return abs, nil
 }
 
-func launchPathCommandContext(timeout time.Duration) (context.Context, context.CancelFunc) {
-	ctx, stopSignals := launchPathSignalNotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	if timeout <= 0 {
-		return ctx, stopSignals
-	}
-
-	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, timeout)
-	return timeoutCtx, func() {
-		timeoutCancel()
-		stopSignals()
-	}
-}
-
-func killCommandGroup(cmd *exec.Cmd) error {
-	if cmd.Process == nil {
-		return nil
-	}
-	err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-	if err != nil && !errors.Is(err, syscall.ESRCH) {
-		return err
-	}
-	return nil
-}
-
-type launchPathStdoutCapture struct {
-	buf         bytes.Buffer
-	limit       int
-	seenNewline bool
-	err         error
-	onError     func()
-}
-
-func (c *launchPathStdoutCapture) Write(p []byte) (int, error) {
-	for i, b := range p {
-		if c.err != nil {
-			return i, c.err
-		}
-		if c.seenNewline {
-			return i, c.fail(errors.New("launch_path_cmd output must contain exactly one line"))
-		}
-		if c.buf.Len() >= c.limit {
-			return i, c.fail(fmt.Errorf("launch_path_cmd output exceeds %d bytes", c.limit))
-		}
-		c.buf.WriteByte(b)
-		if b == '\n' {
-			c.seenNewline = true
-		}
-	}
-	return len(p), nil
-}
-
-func (c *launchPathStdoutCapture) fail(err error) error {
-	if c.err == nil {
-		c.err = err
-		if c.onError != nil {
-			c.onError()
-		}
-	}
-	return c.err
-}
-
-func (c *launchPathStdoutCapture) Bytes() []byte {
-	return c.buf.Bytes()
-}
-
-func (c *launchPathStdoutCapture) Err() error {
-	return c.err
-}
-
-type boundedDiagnosticCapture struct {
-	buf       bytes.Buffer
-	limit     int
-	truncated bool
-}
-
-func (c *boundedDiagnosticCapture) Write(p []byte) (int, error) {
-	written := len(p)
-	if written == 0 {
-		return 0, nil
-	}
-
-	remaining := c.limit - c.buf.Len()
-	if remaining <= 0 {
-		c.truncated = true
-		return written, nil
-	}
-	if written > remaining {
-		p = p[:remaining]
-		c.truncated = true
-	}
-	c.buf.Write(p)
-	return written, nil
-}
-
-func (c *boundedDiagnosticCapture) result() commandOutputResult {
-	return commandOutputResult{data: c.buf.Bytes(), truncated: c.truncated}
-}
-
-type commandOutputResult struct {
-	data      []byte
-	truncated bool
-	err       error
-}
-
-func formatCommandDiagnostic(result commandOutputResult, limit int) string {
-	text := string(result.data)
-	var notes []string
-	if result.truncated {
-		notes = append(notes, fmt.Sprintf("truncated after %d bytes", limit))
-	}
-	if result.err != nil {
-		notes = append(notes, fmt.Sprintf("read error: %v", result.err))
-	}
-	if len(notes) == 0 {
-		return text
-	}
-	if text != "" && !strings.HasSuffix(text, "\n") {
-		text += "\n"
-	}
-	return text + "[stderr " + strings.Join(notes, "; ") + "]"
-}
-
-func parseLaunchPathCmdOutput(out []byte) (string, error) {
-	s := string(out)
+func parseLaunchPathCmdOutput(out string) (string, error) {
+	s := out
 	if strings.HasSuffix(s, "\r\n") {
 		s = strings.TrimSuffix(s, "\r\n")
 	} else if strings.HasSuffix(s, "\n") {
 		s = strings.TrimSuffix(s, "\n")
 	}
 	if s == "" {
-		return "", errors.New("launch_path_cmd output cannot be empty")
+		return "", errors.New("output cannot be empty")
 	}
 	if strings.Contains(s, "\n") || strings.Contains(s, "\r") {
-		return "", errors.New("launch_path_cmd output must contain exactly one line")
+		return "", errors.New("output must contain exactly one line")
 	}
 	return s, nil
 }
@@ -482,6 +434,9 @@ func validateExistingDirectory(field, path string) (string, error) {
 		return "", fmt.Errorf("%s absolute path: %w", field, err)
 	}
 	absPath = filepath.Clean(absPath)
+	if strings.ContainsFunc(absPath, unicode.IsControl) {
+		return "", fmt.Errorf("%s contains control characters", field)
+	}
 	info, err := os.Stat(absPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -495,36 +450,6 @@ func validateExistingDirectory(field, path string) (string, error) {
 	return absPath, nil
 }
 
-func runSessionWindow(selected item.Item, data map[string]string, launchPath string, hasLaunchPath bool, cfg config.Config) error {
-	if !hasLaunchPath {
-		return errors.New("session-window action requires a launch_path")
-	}
-
-	resolveCtx, cancel := sessionResolveContext(cfg)
-	defer cancel()
-	plan, err := resolveSessionPlan(resolveCtx, launchPath)
-	if err != nil {
-		return err
-	}
-
-	command, err := sessionWindowCommand(selected, data)
-	if err != nil {
-		return err
-	}
-
-	windowName, err := renderWindowName(selected, data)
-	if err != nil {
-		return err
-	}
-
-	return createResolvedSessionWindow(context.Background(), plan, launchPath, tmux.SessionWindowOptions{
-		Name:     windowName,
-		NewShell: selected.NewShell,
-		Command:  command,
-		Switch:   true,
-	})
-}
-
 func sessionWindowCommand(selected item.Item, data map[string]string) ([]string, error) {
 	if selected.NewShell {
 		if selected.Cmd != "" {
@@ -535,7 +460,7 @@ func sessionWindowCommand(selected item.Item, data map[string]string) ([]string,
 
 	renderedCmd, err := RenderCmd(selected.Cmd, data)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cmd template: %w", err)
 	}
 	return []string{"sh", "-lc", renderedCmd}, nil
 }
@@ -558,41 +483,9 @@ func renderWindowName(selected item.Item, data map[string]string) (string, error
 	return name, nil
 }
 
-func runShell(selected item.Item, data map[string]string, launchPath string, hasLaunchPath bool, paneID string, execFn ExecFn) error {
-	if selected.WindowName != "" {
-		return errors.New("window_name is only valid when effective launch_mode is session-window")
-	}
-
-	rendered, err := RenderCmd(selected.Cmd, data)
-	if err != nil {
-		return err
-	}
-
-	shPath, err := lookPath("sh")
-	if err != nil {
-		return err
-	}
-
-	envv := envWithCMDK(data, paneID)
-	if hasLaunchPath {
-		if err := chdir(launchPath); err != nil {
-			return fmt.Errorf("chdir to launch_path %s: %w", launchPath, err)
-		}
-	}
-	return execFn(shPath, []string{"sh", "-c", rendered}, envv)
-}
-
 func envWithCMDK(data map[string]string, paneID string) []string {
 	base := slices.DeleteFunc(os.Environ(), func(e string) bool {
 		return strings.HasPrefix(e, "CMDK_")
 	})
 	return slices.Concat(base, BuildCMDKEnvVarsFromData(data, paneID))
-}
-
-func sessionResolveContext(cfg config.Config) (context.Context, context.CancelFunc) {
-	timeout := cfg.Timeout.Fetch
-	if timeout <= 0 {
-		timeout = config.DefaultConfig().Timeout.Fetch
-	}
-	return context.WithTimeout(context.Background(), timeout)
 }

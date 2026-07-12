@@ -2,20 +2,30 @@ package execute
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
+	"github.com/jmcampanini/cmdk/internal/cmdrun"
 	"github.com/jmcampanini/cmdk/internal/config"
 	"github.com/jmcampanini/cmdk/internal/item"
 	resolver "github.com/jmcampanini/cmdk/internal/session"
 	"github.com/jmcampanini/cmdk/internal/tmux"
 )
+
+func resolveAndExecute(t *testing.T, accumulated []item.Item, selected item.Item, paneID string, execFn ExecFn) error {
+	t.Helper()
+	launch, _, err := ResolveLaunch(accumulated, selected, paneID, config.DefaultConfig())
+	if err != nil {
+		return err
+	}
+	return launch.Execute(execFn)
+}
 
 func TestRenderCmd(t *testing.T) {
 	tmpl := "tmux switch-client -t {{sq .session_id}}:{{sq .window_id}}"
@@ -68,7 +78,7 @@ func TestFlattenData_Empty(t *testing.T) {
 	}
 }
 
-func TestRun_PushesSelectedAndCallsExecFn(t *testing.T) {
+func TestLaunchExecute_CallsExecFn(t *testing.T) {
 	selected := item.Item{
 		Cmd:  "tmux switch-client -t {{sq .session_id}}:{{sq .window_id}}",
 		Data: map[string]string{"session_id": "$1", "window_id": "@2"},
@@ -85,7 +95,7 @@ func TestRun_PushesSelectedAndCallsExecFn(t *testing.T) {
 		return nil
 	}
 
-	err := Run(nil, selected, "%1", mockExec)
+	err := resolveAndExecute(t, nil, selected, "%1", mockExec)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -104,7 +114,7 @@ func TestRun_PushesSelectedAndCallsExecFn(t *testing.T) {
 	}
 }
 
-func TestRun_SelectedDataAvailableInTemplate(t *testing.T) {
+func TestResolveLaunch_SelectedDataAvailableInTemplate(t *testing.T) {
 	accumulated := []item.Item{
 		{Data: map[string]string{"dir": "/tmp"}},
 	}
@@ -119,7 +129,7 @@ func TestRun_SelectedDataAvailableInTemplate(t *testing.T) {
 		return nil
 	}
 
-	err := Run(accumulated, selected, "%1", mockExec)
+	err := resolveAndExecute(t, accumulated, selected, "%1", mockExec)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -168,23 +178,23 @@ func TestRenderCmd_TemplateSyntaxInDataIsSafe(t *testing.T) {
 	}
 }
 
-func TestRun_ExecFnError(t *testing.T) {
+func TestLaunchExecute_ExecFnError(t *testing.T) {
 	selected := item.Item{
 		Cmd:  "echo hello",
 		Data: map[string]string{},
 	}
 
 	mockExec := func(argv0 string, argv []string, envv []string) error {
-		return fmt.Errorf("exec failed")
+		return errors.New("exec failed")
 	}
 
-	err := Run(nil, selected, "%1", mockExec)
+	err := resolveAndExecute(t, nil, selected, "%1", mockExec)
 	if err == nil || err.Error() != "exec failed" {
 		t.Errorf("expected exec failed error, got: %v", err)
 	}
 }
 
-func TestRun_MissingKeyDoesNotCallExecFn(t *testing.T) {
+func TestResolveLaunch_MissingKeyDoesNotCallExecFn(t *testing.T) {
 	selected := item.Item{
 		Cmd:  "echo {{.missing}}",
 		Data: map[string]string{},
@@ -196,16 +206,19 @@ func TestRun_MissingKeyDoesNotCallExecFn(t *testing.T) {
 		return nil
 	}
 
-	err := Run(nil, selected, "%1", mockExec)
+	err := resolveAndExecute(t, nil, selected, "%1", mockExec)
 	if err == nil {
 		t.Error("expected error for missing template key")
+	}
+	if !strings.Contains(err.Error(), "cmd template") {
+		t.Errorf("error should name the failing field, got: %v", err)
 	}
 	if called {
 		t.Error("execFn should not be called when template rendering fails")
 	}
 }
 
-func TestRun_EmptyCmd(t *testing.T) {
+func TestResolveLaunch_EmptyCmd(t *testing.T) {
 	selected := item.Item{
 		Display: "test item",
 		Cmd:     "",
@@ -218,7 +231,7 @@ func TestRun_EmptyCmd(t *testing.T) {
 		return nil
 	}
 
-	err := Run(nil, selected, "%1", mockExec)
+	err := resolveAndExecute(t, nil, selected, "%1", mockExec)
 	if err == nil {
 		t.Error("expected error for empty Cmd")
 	}
@@ -338,7 +351,7 @@ func TestBuildCMDKEnvVars_MultipleItems(t *testing.T) {
 	}
 }
 
-func TestRun_EnvVarsContainCMDK(t *testing.T) {
+func TestResolveLaunch_EnvVarsContainCMDK(t *testing.T) {
 	selected := item.Item{
 		Cmd:  "echo hi",
 		Data: map[string]string{"session_name": "main"},
@@ -350,7 +363,7 @@ func TestRun_EnvVarsContainCMDK(t *testing.T) {
 		return nil
 	}
 
-	err := Run(nil, selected, "%3", mockExec)
+	err := resolveAndExecute(t, nil, selected, "%3", mockExec)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -367,7 +380,7 @@ func TestRun_EnvVarsContainCMDK(t *testing.T) {
 	}
 }
 
-func TestRun_StripsExistingCMDKVars(t *testing.T) {
+func TestResolveLaunch_StripsExistingCMDKVars(t *testing.T) {
 	t.Setenv("CMDK_STALE", "leftover")
 
 	selected := item.Item{
@@ -381,7 +394,7 @@ func TestRun_StripsExistingCMDKVars(t *testing.T) {
 		return nil
 	}
 
-	err := Run(nil, selected, "%1", mockExec)
+	err := resolveAndExecute(t, nil, selected, "%1", mockExec)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -401,7 +414,7 @@ func TestRun_StripsExistingCMDKVars(t *testing.T) {
 	}
 }
 
-func TestRun_PaneIDAvailableInTemplate(t *testing.T) {
+func TestResolveLaunch_PaneIDAvailableInTemplate(t *testing.T) {
 	selected := item.Item{
 		Cmd:  "tmux split-window -t {{.pane_id}}",
 		Data: map[string]string{},
@@ -413,7 +426,7 @@ func TestRun_PaneIDAvailableInTemplate(t *testing.T) {
 		return nil
 	}
 
-	err := Run(nil, selected, "%5", mockExec)
+	err := resolveAndExecute(t, nil, selected, "%5", mockExec)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -422,7 +435,7 @@ func TestRun_PaneIDAvailableInTemplate(t *testing.T) {
 	}
 }
 
-func TestRun_PaneIDWithSq(t *testing.T) {
+func TestResolveLaunch_PaneIDWithSq(t *testing.T) {
 	selected := item.Item{
 		Cmd:  "tmux split-window -t {{sq .pane_id}} -c {{sq .path}}",
 		Data: map[string]string{"path": "/home/user"},
@@ -434,7 +447,7 @@ func TestRun_PaneIDWithSq(t *testing.T) {
 		return nil
 	}
 
-	err := Run(nil, selected, "%5", mockExec)
+	err := resolveAndExecute(t, nil, selected, "%5", mockExec)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -444,7 +457,7 @@ func TestRun_PaneIDWithSq(t *testing.T) {
 	}
 }
 
-func TestRun_EmptyPaneIDNotInTemplateData(t *testing.T) {
+func TestResolveLaunch_EmptyPaneIDNotInTemplateData(t *testing.T) {
 	selected := item.Item{
 		Cmd:  "echo {{.pane_id}}",
 		Data: map[string]string{},
@@ -454,7 +467,7 @@ func TestRun_EmptyPaneIDNotInTemplateData(t *testing.T) {
 		return nil
 	}
 
-	err := Run(nil, selected, "", mockExec)
+	err := resolveAndExecute(t, nil, selected, "", mockExec)
 	if err == nil {
 		t.Error("expected error when pane_id is empty and template references it")
 	}
@@ -619,11 +632,15 @@ func TestResolveLaunchPathCmd(t *testing.T) {
 		name string
 		cmd  string
 		want string
+		kind cmdrun.Kind
+		exit int
 	}{
-		{"empty", "printf ''", "cannot be empty"},
-		{"multiple", "printf '/tmp\\n/tmp\\n'", "exactly one line"},
-		{"relative", "printf 'relative\\n'", "absolute path"},
-		{"nonzero", "printf 'bad news' >&2; exit 7", "bad news"},
+		{"empty", "printf ''", "cannot be empty", cmdrun.KindOutput, 0},
+		{"multiple", "printf '/tmp\\n/tmp\\n'", "exactly one line", cmdrun.KindOutput, -1},
+		{"relative", "printf 'relative\\n'", "absolute path", cmdrun.KindOutput, 0},
+		{"nonzero", "printf 'bad news' >&2; exit 7", "bad news", cmdrun.KindExit, 7},
+		{"nonzero-silent", "exit 5", "exit status 5", cmdrun.KindExit, 5},
+		{"control-chars", "printf '/tmp/bad\\aname\\n'", "control characters", cmdrun.KindOutput, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -631,75 +648,32 @@ func TestResolveLaunchPathCmd(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("error = %v, want substring %q", err, tt.want)
 			}
+			var cmdErr *cmdrun.CommandError
+			if !errors.As(err, &cmdErr) {
+				t.Fatalf("error = %v, want *cmdrun.CommandError", err)
+			}
+			if cmdErr.Kind != tt.kind {
+				t.Errorf("Kind = %q, want %q", cmdErr.Kind, tt.kind)
+			}
+			if cmdErr.ExitCode != tt.exit {
+				t.Errorf("ExitCode = %d, want %d", cmdErr.ExitCode, tt.exit)
+			}
 		})
 	}
 }
 
-func TestResolveLaunchPathCmd_DoesNotWaitForGrandchildInheritedPipes(t *testing.T) {
-	dir := t.TempDir()
-	start := time.Now()
-	got, err := resolveLaunchPathCmd("printf '%s\\n' {{sq .target}}; (sleep 1) &", map[string]string{"target": dir}, 0, "")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+func TestResolveLaunchPathCmd_SilentFailureHasEmptyRawStreams(t *testing.T) {
+	_, err := resolveLaunchPathCmd("exit 5", nil, time.Second, "")
+	var cmdErr *cmdrun.CommandError
+	if !errors.As(err, &cmdErr) {
+		t.Fatalf("error = %v, want *cmdrun.CommandError", err)
 	}
-	if got != filepath.Clean(dir) {
-		t.Errorf("got %q, want %q", got, filepath.Clean(dir))
+	if cmdErr.Stdout != "" || cmdErr.Stderr != "" {
+		t.Errorf("Stdout/Stderr = %q/%q, want empty raw streams", cmdErr.Stdout, cmdErr.Stderr)
 	}
-	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
-		t.Fatalf("resolveLaunchPathCmd took %s; likely waited for inherited stdout/stderr FDs", elapsed)
+	if strings.Contains(err.Error(), "stderr:") {
+		t.Errorf("Error() = %q, want no dangling stream labels", err.Error())
 	}
-}
-
-func TestResolveLaunchPathCmd_OversizedStdout(t *testing.T) {
-	cmd := fmt.Sprintf("i=0; while [ $i -le %d ]; do printf x; i=$((i+1)); done", launchPathCmdMaxStdoutBytes)
-	_, err := resolveLaunchPathCmd(cmd, nil, time.Second, "")
-	if err == nil || !strings.Contains(err.Error(), "output exceeds") {
-		t.Fatalf("error = %v, want output limit", err)
-	}
-}
-
-func TestResolveLaunchPathCmd_Timeout(t *testing.T) {
-	_, err := resolveLaunchPathCmd("sleep 1; printf /tmp", nil, 10*time.Millisecond, "")
-	if err == nil || !strings.Contains(err.Error(), "timed out") {
-		t.Fatalf("error = %v, want timeout", err)
-	}
-}
-
-func TestResolveLaunchPathCmd_SignalCancellationKillsCommandGroup(t *testing.T) {
-	oldNotify := launchPathSignalNotifyContext
-	launchPathSignalNotifyContext = func(parent context.Context, signals ...os.Signal) (context.Context, context.CancelFunc) {
-		if !containsSignal(signals, os.Interrupt) {
-			t.Errorf("signals = %#v, want os.Interrupt", signals)
-		}
-		if !containsSignal(signals, syscall.SIGTERM) {
-			t.Errorf("signals = %#v, want SIGTERM", signals)
-		}
-		ctx, cancel := context.WithCancel(parent)
-		go func() {
-			time.Sleep(25 * time.Millisecond)
-			cancel()
-		}()
-		return ctx, cancel
-	}
-	t.Cleanup(func() { launchPathSignalNotifyContext = oldNotify })
-
-	start := time.Now()
-	_, err := resolveLaunchPathCmd("trap '' INT TERM; sleep 5; printf /tmp", nil, 0, "")
-	if err == nil || !strings.Contains(err.Error(), "canceled") {
-		t.Fatalf("error = %v, want canceled", err)
-	}
-	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
-		t.Fatalf("resolveLaunchPathCmd took %s; signal cancellation did not kill the command group", elapsed)
-	}
-}
-
-func containsSignal(signals []os.Signal, want os.Signal) bool {
-	for _, sig := range signals {
-		if sig == want {
-			return true
-		}
-	}
-	return false
 }
 
 func TestRenderWindowName(t *testing.T) {
@@ -729,7 +703,7 @@ func TestRenderWindowName(t *testing.T) {
 	}
 }
 
-func TestRun_ShellLaunchPathChdirsAndSetsEnv(t *testing.T) {
+func TestLaunchExecute_ShellLaunchPathChdirsAndSetsEnv(t *testing.T) {
 	dir := t.TempDir()
 	oldwd, err := os.Getwd()
 	if err != nil {
@@ -752,7 +726,7 @@ func TestRun_ShellLaunchPathChdirsAndSetsEnv(t *testing.T) {
 		return nil
 	}
 
-	if err := RunWithConfig(nil, selected, "%9", config.DefaultConfig(), mockExec); err != nil {
+	if err := resolveAndExecute(t, nil, selected, "%9", mockExec); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if cwd != filepath.Clean(dir) {
@@ -773,7 +747,7 @@ func TestRun_ShellLaunchPathChdirsAndSetsEnv(t *testing.T) {
 	}
 }
 
-func TestRun_ShellWithoutLaunchPathKeepsCwdAndOmitsLaunchEnv(t *testing.T) {
+func TestLaunchExecute_ShellWithoutLaunchPathKeepsCwdAndOmitsLaunchEnv(t *testing.T) {
 	oldwd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -787,7 +761,7 @@ func TestRun_ShellWithoutLaunchPathKeepsCwdAndOmitsLaunchEnv(t *testing.T) {
 		envv = gotEnvv
 		return err
 	}
-	if err := Run(nil, selected, "", mockExec); err != nil {
+	if err := resolveAndExecute(t, nil, selected, "", mockExec); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if cwd != oldwd {
@@ -799,7 +773,7 @@ func TestRun_ShellWithoutLaunchPathKeepsCwdAndOmitsLaunchEnv(t *testing.T) {
 	}
 }
 
-func TestRun_SessionWindowNewShellCreatesInteractiveWindow(t *testing.T) {
+func TestLaunchExecute_SessionWindowNewShellCreatesInteractiveWindow(t *testing.T) {
 	dir := t.TempDir()
 	oldResolve := resolveSessionPlan
 	oldCreate := createResolvedSessionWindow
@@ -822,7 +796,7 @@ func TestRun_SessionWindowNewShellCreatesInteractiveWindow(t *testing.T) {
 
 	selected := item.Item{MatchType: "dir", LaunchMode: "session-window", NewShell: true}
 	accumulated := []item.Item{{Type: "dir", Data: map[string]string{"path": dir}}}
-	if err := RunWithConfig(accumulated, selected, "", config.DefaultConfig(), func(string, []string, []string) error {
+	if err := resolveAndExecute(t, accumulated, selected, "", func(string, []string, []string) error {
 		t.Fatal("execFn should not be called for session-window mode")
 		return nil
 	}); err != nil {
@@ -842,7 +816,7 @@ func TestRun_SessionWindowNewShellCreatesInteractiveWindow(t *testing.T) {
 	}
 }
 
-func TestRun_SessionWindowCreatesManagedWindow(t *testing.T) {
+func TestLaunchExecute_SessionWindowCreatesManagedWindow(t *testing.T) {
 	dir := t.TempDir()
 	oldResolve := resolveSessionPlan
 	oldCreate := createResolvedSessionWindow
@@ -869,7 +843,7 @@ func TestRun_SessionWindowCreatesManagedWindow(t *testing.T) {
 
 	selected := item.Item{Cmd: "echo {{.launch_path}}", MatchType: "dir", WindowName: "x-{{.launch_basename}}"}
 	accumulated := []item.Item{{Type: "dir", Data: map[string]string{"path": dir}}}
-	if err := RunWithConfig(accumulated, selected, "", config.DefaultConfig(), func(string, []string, []string) error {
+	if err := resolveAndExecute(t, accumulated, selected, "", func(string, []string, []string) error {
 		t.Fatal("execFn should not be called for session-window mode")
 		return nil
 	}); err != nil {
@@ -887,6 +861,121 @@ func TestRun_SessionWindowCreatesManagedWindow(t *testing.T) {
 	}
 	if !gotOpts.Switch {
 		t.Error("Switch = false, want true")
+	}
+}
+
+func TestResolveLaunch_LaunchPathCmdFailureIncludesStdoutAndStderr(t *testing.T) {
+	selected := item.Item{
+		Cmd:           "true",
+		MatchType:     "root",
+		LaunchPathCmd: "sh -c 'echo out; echo err >&2; exit 23'",
+	}
+
+	_, _, err := ResolveLaunch(nil, selected, "", config.DefaultConfig())
+	var cmdErr *cmdrun.CommandError
+	if !errors.As(err, &cmdErr) {
+		t.Fatalf("error = %v, want *cmdrun.CommandError", err)
+	}
+	if cmdErr.Kind != cmdrun.KindExit {
+		t.Errorf("Kind = %q, want %q", cmdErr.Kind, cmdrun.KindExit)
+	}
+	if cmdErr.ExitCode != 23 {
+		t.Errorf("ExitCode = %d, want 23", cmdErr.ExitCode)
+	}
+	if cmdErr.Rendered != selected.LaunchPathCmd {
+		t.Errorf("Rendered = %q, want %q", cmdErr.Rendered, selected.LaunchPathCmd)
+	}
+	if !strings.Contains(cmdErr.Stdout, "out") {
+		t.Errorf("Stdout = %q, want to contain %q", cmdErr.Stdout, "out")
+	}
+	if !strings.Contains(cmdErr.Stderr, "err") {
+		t.Errorf("Stderr = %q, want to contain %q", cmdErr.Stderr, "err")
+	}
+	if !strings.Contains(err.Error(), "out") || !strings.Contains(err.Error(), "err") {
+		t.Errorf("Error() = %q, want to contain both streams", err.Error())
+	}
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 23 {
+		t.Errorf("errors.As(*exec.ExitError) = %v (%v), want exit code 23", exitErr, err)
+	}
+}
+
+func TestResolveLaunch_RelativeOutputWrapsAsCommandError(t *testing.T) {
+	selected := item.Item{
+		Cmd:           "true",
+		MatchType:     "root",
+		LaunchPathCmd: "printf 'noise' >&2; printf 'relative\\n'",
+	}
+
+	_, _, err := ResolveLaunch(nil, selected, "", config.DefaultConfig())
+	var cmdErr *cmdrun.CommandError
+	if !errors.As(err, &cmdErr) {
+		t.Fatalf("error = %v, want *cmdrun.CommandError", err)
+	}
+	if cmdErr.Kind != cmdrun.KindOutput {
+		t.Errorf("Kind = %q, want %q", cmdErr.Kind, cmdrun.KindOutput)
+	}
+	if cmdErr.ExitCode != 0 {
+		t.Errorf("ExitCode = %d, want 0 for a succeeded command with invalid output", cmdErr.ExitCode)
+	}
+	if cmdErr.Rendered == "" {
+		t.Error("Rendered is empty, want the rendered command")
+	}
+	if !strings.Contains(cmdErr.Stdout, "relative") {
+		t.Errorf("Stdout = %q, want captured output", cmdErr.Stdout)
+	}
+	if !strings.Contains(cmdErr.Stderr, "noise") {
+		t.Errorf("Stderr = %q, want captured stderr", cmdErr.Stderr)
+	}
+	if !strings.Contains(err.Error(), "absolute path") {
+		t.Errorf("Error() = %q, want absolute path violation", err.Error())
+	}
+}
+
+func TestResolveLaunch_CmdTemplateFailsAtResolveTime(t *testing.T) {
+	dir := t.TempDir()
+
+	shell := item.Item{Cmd: "echo {{.missing}}", MatchType: "root"}
+	if _, _, err := ResolveLaunch(nil, shell, "", config.DefaultConfig()); err == nil || !strings.Contains(err.Error(), "cmd template") {
+		t.Fatalf("shell error = %v, want cmd template", err)
+	}
+
+	sessionWindow := item.Item{Cmd: "echo {{.missing}}", MatchType: "dir"}
+	accumulated := []item.Item{{Type: "dir", Data: map[string]string{"path": dir}}}
+	if _, _, err := ResolveLaunch(accumulated, sessionWindow, "", config.DefaultConfig()); err == nil || !strings.Contains(err.Error(), "cmd template") {
+		t.Fatalf("session-window error = %v, want cmd template", err)
+	}
+}
+
+func TestResolveLaunch_WindowNameTemplateFailsAtResolveTime(t *testing.T) {
+	dir := t.TempDir()
+	selected := item.Item{Cmd: "true", MatchType: "dir", WindowName: "{{.missing}}"}
+	accumulated := []item.Item{{Type: "dir", Data: map[string]string{"path": dir}}}
+	if _, _, err := ResolveLaunch(accumulated, selected, "", config.DefaultConfig()); err == nil || !strings.Contains(err.Error(), "window_name template") {
+		t.Fatalf("error = %v, want window_name template", err)
+	}
+}
+
+func TestResolveLaunch_FailureDataIncludesResolvedLaunchPath(t *testing.T) {
+	dir := t.TempDir()
+	selected := item.Item{Cmd: "true", MatchType: "dir", WindowName: "{{.missing}}"}
+	accumulated := []item.Item{{Type: "dir", Data: map[string]string{"path": dir}}}
+
+	_, data, err := ResolveLaunch(accumulated, selected, "", config.DefaultConfig())
+	if err == nil {
+		t.Fatal("expected window_name template error")
+	}
+	if data["launch_path"] != filepath.Clean(dir) {
+		t.Errorf("data[launch_path] = %q, want %q (failing template saw it)", data["launch_path"], filepath.Clean(dir))
+	}
+	if data["launch_basename"] != filepath.Base(dir) {
+		t.Errorf("data[launch_basename] = %q, want %q", data["launch_basename"], filepath.Base(dir))
+	}
+}
+
+func TestValidateExistingDirectory_RejectsControlCharacters(t *testing.T) {
+	if _, err := validateExistingDirectory("launch_path", "/tmp/bad\aname"); err == nil || !strings.Contains(err.Error(), "control characters") {
+		t.Fatalf("error = %v, want control characters", err)
 	}
 }
 

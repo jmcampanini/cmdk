@@ -1,14 +1,12 @@
 package tui
 
 import (
-	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,6 +17,7 @@ import (
 	log "charm.land/log/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/jmcampanini/cmdk/internal/cmdrun"
 	"github.com/jmcampanini/cmdk/internal/execute"
 	"github.com/jmcampanini/cmdk/internal/generator"
 	"github.com/jmcampanini/cmdk/internal/item"
@@ -39,6 +38,7 @@ type Model struct {
 	paneID            string
 	accumulated       []item.Item
 	selected          *item.Item
+	launch            *execute.Launch
 	registry          *generator.Registry
 	ctx               generator.Context
 	stackStyle        lipgloss.Style
@@ -211,6 +211,10 @@ func (m Model) Selected() *item.Item {
 	return m.selected
 }
 
+func (m Model) Launch() *execute.Launch {
+	return m.launch
+}
+
 func (m Model) Init() tea.Cmd {
 	cmds := make([]tea.Cmd, 0, len(m.asyncSources)+1)
 	if m.autoDetectTheme {
@@ -223,6 +227,14 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Once a launch is committed the program is quitting; keys queued behind
+	// the blocking resolve must not mutate state or re-run user commands.
+	if m.launch != nil {
+		if _, ok := msg.(tea.KeyPressMsg); ok {
+			return m, nil
+		}
+	}
+
 	if ws, ok := msg.(tea.WindowSizeMsg); ok {
 		m.winWidth = ws.Width
 		m.winHeight = ws.Height
@@ -319,22 +331,24 @@ func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		if ok && sel.Type != "loading" {
 			// Reconstruct the accumulated stack as if the user drilled down,
-			// so template variables (e.g. {{.path}}) resolve correctly.
+			// so template variables (e.g. {{.path}}) resolve correctly. The
+			// candidate stays local until the selection commits so a failed
+			// launch resolution leaves the model untouched.
+			candidate := m.accumulated
 			if sel.InlineParent != nil {
-				m.accumulated = append(slices.Clone(m.accumulated), *sel.InlineParent)
+				candidate = append(slices.Clone(m.accumulated), *sel.InlineParent)
 				sel.Display = sel.Value
 				sel.InlineParent = nil
 			}
 
 			switch sel.Action {
 			case item.ActionExecute:
-				m.selected = &sel
-				return m, tea.Quit
+				return m.finalizeSelection(sel, candidate)
 			case item.ActionStaged:
-				m.accumulated = append(slices.Clone(m.accumulated), sel)
+				m.accumulated = append(slices.Clone(candidate), sel)
 				return m.advanceStage(), nil
 			case item.ActionNextList:
-				return m.handleNextList(sel)
+				return m.handleNextList(sel, candidate)
 			default:
 				log.Error("bug: unknown action type", "action", sel.Action)
 				return m, nil
@@ -444,11 +458,15 @@ func (m Model) pushStageResult(key string, display string, value string) (tea.Mo
 	resultItem.Type = "stage-result"
 	resultItem.Display = display
 	resultItem.Data[key] = value
-	m.accumulated = append(slices.Clone(m.accumulated), resultItem)
+	withResult := append(slices.Clone(m.accumulated), resultItem)
 
 	if stageIdx+1 >= len(action.Stages) {
-		return m.completeStages(), tea.Quit
+		// The candidate keeps stage results for FlattenData but drops the
+		// action item itself; it commits only if resolution succeeds.
+		candidate := slices.Delete(slices.Clone(withResult), actionIdx, actionIdx+1)
+		return m.finalizeSelection(action, candidate)
 	}
+	m.accumulated = withResult
 	return m.advanceStage(), nil
 }
 
@@ -550,10 +568,7 @@ func selectedListItem(l list.Model) (item.Item, bool) {
 }
 
 func (m Model) openErrorDetails(it item.Item) Model {
-	m.errorReturnMode = viewList
-	if m.mode == viewPicker {
-		m.errorReturnMode = viewPicker
-	}
+	m.errorReturnMode = m.mode
 	m.errorDetailItem = safeErrorDetailItem(it)
 	m.errorDetailScroll = 0
 	m.mode = viewErrorDetails
@@ -596,11 +611,7 @@ func (m Model) updateErrorDetails(msg tea.Msg) (tea.Model, tea.Cmd) {
 	pageSize := max(m.errorDetailsBodyHeight(), 1)
 	switch key.String() {
 	case "esc":
-		if m.errorReturnMode == viewPicker {
-			m.mode = viewPicker
-		} else {
-			m.mode = viewList
-		}
+		m.mode = m.errorReturnMode
 		return m, nil
 	case "ctrl+c":
 		return m, tea.Quit
@@ -705,28 +716,27 @@ func (m Model) advanceStage() Model {
 		rendered, err := execute.RenderCmd(stage.Source, data)
 		if err != nil {
 			log.Error("failed to render picker source template", "key", stage.Key, "error", err)
-			errItem := pickerErrorItem("template error", stage, data, cwd, cwdErr, pickerFailure{
-				Err: err,
-			})
-			return m.initPickerWithErrorItem(stage.Key, errItem)
+			return m.initPickerWithErrorItem(stage.Key, pickerErrorItem(stage, data, cwd, cwdErr, err))
 		}
 		pickerTimeout := m.ctx.Config.Timeout.Picker
-		result, runErr := runPickerSourceWithDiagnostics(rendered, pickerTimeout, stage)
+		result, runErr := runPickerSource(rendered, pickerTimeout, stage)
 		if runErr != nil {
-			log.Error("picker source command failed", "key", stage.Key, "command", rendered, "error", runErr)
-			errItem := pickerErrorItem("command error", stage, data, cwd, cwdErr, runErr.withRendered(rendered, pickerTimeout))
-			return m.initPickerWithErrorItem(stage.Key, errItem)
+			log.Error("picker source command failed", append([]any{"key", stage.Key}, commandErrorLogFields(runErr)...)...)
+			return m.initPickerWithErrorItem(stage.Key, pickerErrorItem(stage, data, cwd, cwdErr, runErr))
 		}
 		if len(result.Items) == 0 {
-			log.Warn("picker source returned no items", "key", stage.Key, "command", rendered)
-			errItem := pickerErrorItem("no items returned", stage, data, cwd, cwdErr, pickerFailure{
-				Err:      errors.New("picker source returned no items"),
+			noItems := &cmdrun.CommandError{
+				Op:       "picker source",
+				Kind:     cmdrun.KindOutput,
 				Rendered: rendered,
 				Timeout:  pickerTimeout,
+				ExitCode: 0,
 				Stdout:   result.Stdout,
 				Stderr:   result.Stderr,
-			})
-			return m.initPickerWithErrorItem(stage.Key, errItem)
+				Err:      errors.New("returned no items"),
+			}
+			log.Warn("picker source returned no items", append([]any{"key", stage.Key}, commandErrorLogFields(noItems)...)...)
+			return m.initPickerWithErrorItem(stage.Key, pickerErrorItem(stage, data, cwd, cwdErr, noItems))
 		}
 		m = m.initPicker(stage.Key, result.Items)
 
@@ -745,72 +755,46 @@ type pickerRunResult struct {
 	Stderr string
 }
 
-type pickerFailure struct {
-	Err      error
-	Rendered string
-	Timeout  time.Duration
-	Stdout   string
-	Stderr   string
-}
+const (
+	// Picker stdout is parsed into an interactive fuzzy list; 4 MiB is far
+	// beyond a usable list size, so the cap only guards against runaway
+	// producers. Overflow truncates at the last complete line instead of
+	// failing so a huge-but-valid source degrades rather than errors.
+	pickerMaxStdoutBytes = 4 << 20
+	pickerMaxStderrBytes = 64 << 10
+)
 
-func (f *pickerFailure) Error() string {
-	if f == nil || f.Err == nil {
-		return ""
-	}
-	return f.Err.Error()
-}
-
-func (f *pickerFailure) withRendered(rendered string, timeout time.Duration) pickerFailure {
-	if f == nil {
-		return pickerFailure{Rendered: rendered, Timeout: timeout}
-	}
-	copy := *f
-	copy.Rendered = rendered
-	copy.Timeout = timeout
-	return copy
-}
-
-// runPickerSource executes a shell command and returns one item per output line.
-// A zero timeout means no deadline is applied.
-func runPickerSource(rendered string, timeout time.Duration, stage item.Stage) ([]item.Item, error) {
-	result, failure := runPickerSourceWithDiagnostics(rendered, timeout, stage)
-	if failure != nil {
-		return nil, failure
-	}
-	return result.Items, nil
-}
-
-func runPickerSourceWithDiagnostics(rendered string, timeout time.Duration, stage item.Stage) (pickerRunResult, *pickerFailure) {
-	ctx := context.Background()
-	if timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
+// runPickerSource executes a rendered picker source command and parses one
+// item per stdout line. A zero timeout means no deadline is applied.
+func runPickerSource(rendered string, timeout time.Duration, stage item.Stage) (pickerRunResult, error) {
+	res, err := cmdrun.Run(cmdrun.Spec{
+		Op:        "picker source",
+		Rendered:  rendered,
+		Timeout:   timeout,
+		MaxStdout: pickerMaxStdoutBytes,
+		MaxStderr: pickerMaxStderrBytes,
+	})
+	if err != nil {
+		return pickerRunResult{}, err
 	}
 
-	// TODO(#87): Known accepted risk: these stdout/stderr buffers are unbounded
-	// and may retain large command output until #87 replaces them with the shared
-	// bounded external command-output helper.
-	var stdout, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, "sh", "-c", rendered)
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		failure := &pickerFailure{Stdout: stdout.String(), Stderr: stderr.String()}
-		if ctx.Err() == context.DeadlineExceeded {
-			failure.Err = fmt.Errorf("command timed out after %s", timeout)
-		} else {
-			failure.Err = fmt.Errorf("command failed: %w", err)
-		}
-		return pickerRunResult{}, failure
+	stdout := res.Stdout
+	if res.StdoutTruncated {
+		log.Warn("picker source stdout truncated", "limit", pickerMaxStdoutBytes)
+		stdout = trimToLastNewline(stdout)
 	}
-
-	stdoutText := stdout.String()
 	return pickerRunResult{
-		Items:  pickerItemsFromOutput(stdoutText, stage),
-		Stdout: stdoutText,
-		Stderr: stderr.String(),
+		Items:  pickerItemsFromOutput(stdout, stage),
+		Stdout: res.AnnotatedStdout(),
+		Stderr: res.AnnotatedStderr(),
 	}, nil
+}
+
+func trimToLastNewline(s string) string {
+	if i := strings.LastIndexByte(s, '\n'); i >= 0 {
+		return s[:i+1]
+	}
+	return ""
 }
 
 func pickerItemsFromOutput(output string, stage item.Stage) []item.Item {
@@ -878,54 +862,121 @@ func (m Model) initPickerWithErrorItem(key string, errItem item.Item) Model {
 	return m.initPicker(key, []item.Item{errItem})
 }
 
-func pickerErrorItem(kind string, stage item.Stage, data map[string]string, cwd string, cwdErr error, failure pickerFailure) item.Item {
-	errText := failure.Error()
-	display := kind
-	if errText != "" {
-		display = fmt.Sprintf("%s: %s", kind, errText)
-	}
+func pickerErrorItem(stage item.Stage, data map[string]string, cwd string, cwdErr error, err error) item.Item {
+	display := commandFailureDisplay("template error", err)
 
 	it := item.NewItem()
 	it.Type = "error"
 	it.Source = "picker"
 	it.Display = display
-	it.Diagnostics = pickerDiagnostics(display, stage, data, cwd, cwdErr, failure)
+	contextFields := []item.DiagnosticField{
+		{Label: "Stage key", Value: stage.Key},
+		{Label: "Working directory", Value: workingDirectoryValue(cwd, cwdErr)},
+	}
+	it.Diagnostics = commandFailureDiagnostics(display, contextFields, stage.Source, data, err)
 	return it
 }
 
-func pickerDiagnostics(summary string, stage item.Stage, data map[string]string, cwd string, cwdErr error, failure pickerFailure) *item.Diagnostics {
-	workingDirectory := cwd
+func launchErrorItem(action item.Item, data map[string]string, cwd string, cwdErr error, err error) item.Item {
+	display := commandFailureDisplay("launch error", err)
+
+	it := item.NewItem()
+	it.Type = "error"
+	it.Source = "launch"
+	it.Display = display
+	contextFields := []item.DiagnosticField{
+		{Label: "Action", Value: action.Display},
+		{Label: "Working directory", Value: workingDirectoryValue(cwd, cwdErr)},
+	}
+	cmdTemplate := ""
+	var cmdErr *cmdrun.CommandError
+	if errors.As(err, &cmdErr) {
+		cmdTemplate = action.LaunchPathCmd
+	}
+	it.Diagnostics = commandFailureDiagnostics(display, contextFields, cmdTemplate, data, err)
+	return it
+}
+
+func commandFailureDisplay(genericPrefix string, err error) string {
+	var cmdErr *cmdrun.CommandError
+	if errors.As(err, &cmdErr) {
+		return cmdErr.Headline()
+	}
+	return fmt.Sprintf("%s: %s", genericPrefix, err)
+}
+
+func workingDirectoryValue(cwd string, cwdErr error) string {
 	if cwdErr != nil {
-		workingDirectory = fmt.Sprintf("unknown: %s", cwdErr)
+		return fmt.Sprintf("unknown: %s", cwdErr)
 	}
+	return cwd
+}
 
-	timeoutValue := "none"
-	if failure.Timeout > 0 {
-		timeoutValue = failure.Timeout.String()
-	}
-
-	fields := []item.DiagnosticField{
-		{Label: "Stage key", Value: stage.Key},
-		{Label: "Working directory", Value: workingDirectory},
-		{Label: "Timeout", Value: timeoutValue},
-	}
-	if failure.Err != nil {
-		fields = append(fields, item.DiagnosticField{Label: "Error", Value: failure.Err.Error()})
+// commandFailureDiagnostics builds the error-details body shared by picker
+// and launch failures. The Error field carries the headline only; captured
+// stdout/stderr render as their own sections.
+func commandFailureDiagnostics(summary string, contextFields []item.DiagnosticField, cmdTemplate string, data map[string]string, err error) *item.Diagnostics {
+	fields := slices.Clone(contextFields)
+	var cmdErr *cmdrun.CommandError
+	if errors.As(err, &cmdErr) {
+		timeoutValue := "none"
+		if cmdErr.Timeout > 0 {
+			timeoutValue = cmdErr.Timeout.String()
+		}
+		fields = append(fields, item.DiagnosticField{Label: "Timeout", Value: timeoutValue})
+		if cmdErr.ExitCode >= 0 {
+			fields = append(fields, item.DiagnosticField{Label: "Exit code", Value: strconv.Itoa(cmdErr.ExitCode)})
+		}
+		fields = append(fields, item.DiagnosticField{Label: "Error", Value: cmdErr.Headline()})
+	} else if err != nil {
+		fields = append(fields, item.DiagnosticField{Label: "Error", Value: err.Error()})
 	}
 
 	sections := []item.DiagnosticSection{
 		{Title: "Data fields", Body: formatDiagnosticData(data)},
-		{Title: "Command template", Body: stage.Source},
 	}
-	if failure.Rendered != "" {
-		sections = append(sections, item.DiagnosticSection{Title: "Rendered command", Body: failure.Rendered})
+	if cmdTemplate != "" {
+		sections = append(sections, item.DiagnosticSection{Title: "Command template", Body: cmdTemplate})
 	}
-	sections = append(sections,
-		item.DiagnosticSection{Title: "stdout", Body: formatCapturedCommandOutput(failure.Stdout)},
-		item.DiagnosticSection{Title: "stderr", Body: formatCapturedCommandOutput(failure.Stderr)},
-	)
+	if cmdErr != nil {
+		if cmdErr.Rendered != "" {
+			sections = append(sections, item.DiagnosticSection{Title: "Rendered command", Body: cmdErr.Rendered})
+		}
+		sections = append(sections,
+			item.DiagnosticSection{Title: "stdout", Body: formatCapturedCommandOutput(cmdErr.Stdout)},
+			item.DiagnosticSection{Title: "stderr", Body: formatCapturedCommandOutput(cmdErr.Stderr)},
+		)
+	}
 
 	return &item.Diagnostics{Summary: summary, Fields: fields, Sections: sections}
+}
+
+// commandErrorLogFields returns the structured fields both picker and launch
+// failure paths log so command failures are searchable identically.
+func commandErrorLogFields(err error) []any {
+	var cmdErr *cmdrun.CommandError
+	if errors.As(err, &cmdErr) {
+		return []any{
+			"error", cmdErr.Headline(),
+			"rendered", cmdErr.Rendered,
+			"timeout", cmdErr.Timeout,
+			"exit_code", cmdErr.ExitCode,
+			"stdout", logExcerpt(cmdErr.Stdout),
+			"stderr", logExcerpt(cmdErr.Stderr),
+		}
+	}
+	return []any{"error", err}
+}
+
+// logExcerpt caps captured streams in log records; picker captures can reach
+// 4 MiB, which belongs in the on-demand error-details view, not in every
+// appended line of the unrotated log file.
+func logExcerpt(s string) string {
+	const maxBytes = 8 << 10
+	if len(s) <= maxBytes {
+		return s
+	}
+	return fmt.Sprintf("%s[... %d bytes omitted]", s[:maxBytes], len(s)-maxBytes)
 }
 
 func formatDiagnosticData(data map[string]string) string {
@@ -955,28 +1006,34 @@ func formatCapturedCommandOutput(out string) string {
 	return out
 }
 
-// completeStages extracts the action item as selected and removes it from accumulated,
-// leaving stage results in place for FlattenData.
-func (m Model) completeStages() Model {
-	actionIdx := m.findActionIndex()
-	if actionIdx < 0 {
-		return m.recoverFromMissingAction()
+// finalizeSelection resolves the launch for a chosen execute action. It
+// commits candidate state only on success; on failure the model is exactly
+// what it was, so Esc from the error screen restores the prior view and a
+// second Enter retries.
+func (m Model) finalizeSelection(action item.Item, candidate []item.Item) (Model, tea.Cmd) {
+	launch, data, err := execute.ResolveLaunch(candidate, action, m.paneID, m.ctx.Config)
+	if err != nil {
+		log.Error("launch resolution failed", append([]any{"action", action.Display}, commandErrorLogFields(err)...)...)
+		cwd, cwdErr := os.Getwd()
+		if cwdErr != nil {
+			log.Warn("could not determine working directory for launch diagnostics", "action", action.Display, "error", cwdErr)
+		}
+		return m.openErrorDetails(launchErrorItem(action, data, cwd, cwdErr, err)), nil
 	}
-	action := m.accumulated[actionIdx]
+	m.accumulated = candidate
 	m.selected = &action
-	m.accumulated = slices.Delete(slices.Clone(m.accumulated), actionIdx, actionIdx+1)
-	return m
+	m.launch = &launch
+	return m, tea.Quit
 }
 
-func (m Model) handleNextList(sel item.Item) (Model, tea.Cmd) {
-	m = m.navigateTo(append(slices.Clone(m.accumulated), sel))
+func (m Model) handleNextList(sel item.Item, candidate []item.Item) (Model, tea.Cmd) {
+	m = m.navigateTo(append(slices.Clone(candidate), sel))
 
 	if m.autoSelectSingle && len(m.list.Items()) == 1 {
 		if it, ok := m.list.Items()[0].(item.Item); ok && it.Type == "action" {
 			switch it.Action {
 			case item.ActionExecute:
-				m.selected = &it
-				return m, tea.Quit
+				return m.finalizeSelection(it, m.accumulated)
 			case item.ActionStaged:
 				m.accumulated = append(slices.Clone(m.accumulated), it)
 				return m.advanceStage(), nil

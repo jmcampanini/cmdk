@@ -54,7 +54,7 @@ func ConfigDocs() []SectionDoc {
 				{Name: "icon", Type: "string", Description: "Nerdfont icon: alias like :nf-dev-github:, raw glyph, or \\uXXXX escape. Run \"cmdk icons --filter <term>\" to search aliases.", Validation: "if :nf-*: alias, must be in supported set; otherwise must be a single grapheme cluster"},
 				{Name: "launch_mode", Type: "string", Description: "Launch mode: \"detect\" (default), \"session-window\" (create a cmdk-managed tmux window), or \"shell\" (exec in this pane). Detect makes dir actions and actions with launch_path/launch_path_cmd session-window; root/session actions without path fields stay shell.", Validation: "optional; must be \"detect\", \"session-window\", or \"shell\""},
 				{Name: "launch_path", Type: "string", Description: "Path template for the action's effective launch directory. Supports safe leading ~, $VAR, and ${VAR} expansion before Go template rendering; no command substitution, globbing, or word splitting.", Validation: "mutually exclusive with launch_path_cmd; rendered path must resolve to an existing directory"},
-				{Name: "launch_path_cmd", Type: "string", Description: "Shell command template run via sh -c after stages; stdout must be exactly one absolute existing directory path. Use {{sq ...}} around template variables.", Validation: "mutually exclusive with launch_path; output must be one absolute existing directory path"},
+				{Name: "launch_path_cmd", Type: "string", Description: "Shell command template run via sh -c after stages; stdout must be exactly one absolute existing directory path (at most one line of 8 KiB). Use {{sq ...}} around template variables. Runs under timeout.picker. Failures (nonzero exit, timeout, invalid output) open an in-app error screen showing the rendered command, exit code, stdout, and stderr, and write the same details to the log file.", Validation: "mutually exclusive with launch_path; output must be one absolute existing directory path"},
 				{Name: "window_name", Type: "string", Description: "Tmux window name template for session-window actions. Defaults to {{.launch_basename}}.", Validation: "only valid for effective session-window actions; rendered name cannot be empty or contain control characters"},
 				{Name: "stages", Type: "array", Description: "Optional pipeline of data-collection stages to run before executing cmd. See STAGES section."},
 			},
@@ -68,7 +68,7 @@ func ConfigDocs() []SectionDoc {
 				{Name: "key", Type: "string", Description: "Template variable name for the stage's output value.", Validation: reservedStageKeyValidation},
 				{Name: "text", Type: "string", Description: "Prompt label (Go template). Only for type = \"prompt\".", Validation: "required for prompt; forbidden for picker"},
 				{Name: "default", Type: "string", Description: "Default value pre-filled in prompt (Go template). Only for type = \"prompt\"."},
-				{Name: "source", Type: "string", Description: "Shell command run via sh -c that produces newline-separated entries (Go template). Only for type = \"picker\".", Validation: "required for picker; forbidden for prompt"},
+				{Name: "source", Type: "string", Description: "Shell command run via sh -c that produces newline-separated entries (Go template). Only for type = \"picker\". stdout is capped at 4 MiB and stderr at 64 KiB; output beyond the cap is truncated at the last complete line.", Validation: "required for picker; forbidden for prompt"},
 				{Name: "delimiter", Type: "string", Description: "Field delimiter for splitting source lines into parts. Only for type = \"picker\". Defaults to \"|\" when display or pass is set.", Validation: "forbidden for prompt"},
 				{Name: "display", Type: "int", Description: "1-based field index to display and match against. 0 = whole line (default). Only for type = \"picker\".", Validation: "forbidden for prompt; cannot be negative"},
 				{Name: "pass", Type: "int", Description: "1-based field index to pass as the stage result value. 0 = whole line (default). Only for type = \"picker\".", Validation: "forbidden for prompt; cannot be negative"},
@@ -122,7 +122,7 @@ func ConfigDocs() []SectionDoc {
 			Description: "Timeouts for async operations.",
 			Fields: []FieldDoc{
 				{Name: "fetch", Type: "duration", Description: "Max wait for source data. Accepts Go duration strings: ms, s, m, h.", Validation: "cannot be negative; if non-zero, must be >= 1ms"},
-				{Name: "picker", Type: "duration", Description: "Max wait for picker stage source commands. Zero means no timeout.", Validation: "cannot be negative; if non-zero, must be >= 1ms"},
+				{Name: "picker", Type: "duration", Description: "Max wait for picker stage source commands and launch_path_cmd commands. Zero means no timeout; with no timeout, a hanging command holds the launcher until it exits or cmdk is signaled.", Validation: "cannot be negative; if non-zero, must be >= 1ms"},
 			},
 			Example: "[timeout]\nfetch = \"5s\"    # e.g. 500ms, 2s, 1m\npicker = \"2s\"",
 		},
@@ -291,6 +291,11 @@ EXECUTION
 
   Picker source commands and launch_path_cmd commands are also run via sh -c.
   launch_path_cmd must print exactly one absolute existing directory path.
+  When a picker source or launch_path_cmd fails, cmdk stays in the launcher
+  and shows an error screen with the rendered command, exit status, and
+  captured stdout/stderr; the same details are appended to the log file.
+  Captured output is bounded (launch_path_cmd: 8 KiB stdout / 32 KiB stderr;
+  picker: 4 MiB stdout / 64 KiB stderr).
 
   Root/session actions without launch_path or launch_path_cmd default to shell
   mode and inherit the working directory from where cmdk was launched. Relative

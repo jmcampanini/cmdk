@@ -111,8 +111,8 @@ func TestSourceResult_ReplacesPlaceholder(t *testing.T) {
 	result, _ := m.Update(sourceResultMsg{
 		Name: "windows",
 		Items: []item.Item{
-			{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute},
-			{Type: "window", Display: "dev:1 node", Action: item.ActionExecute},
+			{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute, Cmd: "true"},
+			{Type: "window", Display: "dev:1 node", Action: item.ActionExecute, Cmd: "true"},
 		},
 	})
 	m = result.(Model)
@@ -190,7 +190,7 @@ func TestSourceResult_PreservesFilterText(t *testing.T) {
 	result, cmd := m.Update(sourceResultMsg{
 		Name: "windows",
 		Items: []item.Item{
-			{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute},
+			{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute, Cmd: "true"},
 		},
 	})
 	m = result.(Model)
@@ -222,7 +222,7 @@ func TestSourceResult_IncrementalArrival(t *testing.T) {
 
 	result, _ := m.Update(sourceResultMsg{
 		Name:  "windows",
-		Items: []item.Item{{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute}},
+		Items: []item.Item{{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute, Cmd: "true"}},
 	})
 	m = result.(Model)
 
@@ -264,7 +264,7 @@ func TestSourceResult_BaseItemsPreserved(t *testing.T) {
 
 	result, _ := m.Update(sourceResultMsg{
 		Name:  "windows",
-		Items: []item.Item{{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute}},
+		Items: []item.Item{{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute, Cmd: "true"}},
 	})
 	m = result.(Model)
 
@@ -286,7 +286,7 @@ func TestSourceResult_GroupAndOrderApplied(t *testing.T) {
 
 	result, _ := m.Update(sourceResultMsg{
 		Name:  "windows",
-		Items: []item.Item{{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute}},
+		Items: []item.Item{{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute, Cmd: "true"}},
 	})
 	m = result.(Model)
 	result, _ = m.Update(sourceResultMsg{
@@ -325,7 +325,7 @@ func TestSourceResult_ErrorSortedBeforeNormalItems(t *testing.T) {
 
 	result, _ := m.Update(sourceResultMsg{
 		Name:  "windows",
-		Items: []item.Item{{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute}},
+		Items: []item.Item{{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute, Cmd: "true"}},
 	})
 	m = result.(Model)
 	result, _ = m.Update(sourceResultMsg{
@@ -410,7 +410,7 @@ func TestSourceResult_WhileDrilledDown_DoesNotRebuild(t *testing.T) {
 
 	result, _ = m.Update(sourceResultMsg{
 		Name:  "windows",
-		Items: []item.Item{{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute}},
+		Items: []item.Item{{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute, Cmd: "true"}},
 	})
 	m = result.(Model)
 

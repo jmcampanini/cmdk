@@ -2,9 +2,11 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"image/color"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -14,6 +16,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/jmcampanini/cmdk/internal/cmdrun"
 	"github.com/jmcampanini/cmdk/internal/config"
 	"github.com/jmcampanini/cmdk/internal/execute"
 	"github.com/jmcampanini/cmdk/internal/generator"
@@ -25,14 +28,17 @@ func testRegistry() *generator.Registry {
 	reg := generator.NewRegistry()
 	reg.Register("root", func(accumulated []item.Item, ctx generator.Context) []item.Item {
 		return []item.Item{
-			{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute},
-			{Type: "window", Display: "dev:1 node", Action: item.ActionExecute},
+			{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute, Cmd: "true"},
+			{Type: "window", Display: "dev:1 node", Action: item.ActionExecute, Cmd: "true"},
 			{Type: "dir", Display: "~/projects/foo", Action: item.ActionNextList, Data: map[string]string{"path": "~/projects/foo"}},
 		}
 	})
 	reg.Register("dir-actions", func(accumulated []item.Item, ctx generator.Context) []item.Item {
+		// Two actions so drill-down shows a list instead of auto-selecting;
+		// back-navigation tests need a reachable drilled-in state.
 		return []item.Item{
 			{Type: "action", Display: "New window", Action: item.ActionExecute, Cmd: "tmux new-window -c {{sq .path}}"},
+			{Type: "action", Display: "Browse", Action: item.ActionExecute, Cmd: "true"},
 		}
 	})
 	reg.MapType("", "root")
@@ -42,8 +48,8 @@ func testRegistry() *generator.Registry {
 
 func testItems() []list.Item {
 	return []list.Item{
-		item.Item{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute},
-		item.Item{Type: "window", Display: "dev:1 node", Action: item.ActionExecute},
+		item.Item{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute, Cmd: "true"},
+		item.Item{Type: "window", Display: "dev:1 node", Action: item.ActionExecute, Cmd: "true"},
 		item.Item{Type: "dir", Display: "~/projects/foo", Action: item.ActionNextList, Data: map[string]string{"path": "~/projects/foo"}},
 	}
 }
@@ -255,6 +261,9 @@ func TestEnterOnExecuteItem_SetsSelectedAndQuits(t *testing.T) {
 	if model.Selected().Display != "main:1 zsh" {
 		t.Errorf("Selected().Display = %q, want %q", model.Selected().Display, "main:1 zsh")
 	}
+	if model.Launch() == nil {
+		t.Error("Launch() should be set after a successful resolution")
+	}
 	if cmd == nil {
 		t.Error("expected Quit command")
 	}
@@ -284,7 +293,7 @@ func TestEnterDuringFiltering_ZeroItems_NoSelection(t *testing.T) {
 
 func TestEnterDuringFiltering_SingleExecuteItem_AutoSelects(t *testing.T) {
 	items := []list.Item{
-		item.Item{Type: "window", Display: "only-window", Action: item.ActionExecute},
+		item.Item{Type: "window", Display: "only-window", Action: item.ActionExecute, Cmd: "true"},
 	}
 	m := newTestModel(items, testRegistry())
 	m.list.SetSize(80, 40)
@@ -372,8 +381,8 @@ func TestEnterOnNextListItem_DrillsDown(t *testing.T) {
 	}
 
 	items := m.list.Items()
-	if len(items) != 1 {
-		t.Fatalf("list items = %d, want 1", len(items))
+	if len(items) != 2 {
+		t.Fatalf("list items = %d, want 2", len(items))
 	}
 	if it, ok := items[0].(item.Item); ok {
 		if it.Display != "New window" {
@@ -470,7 +479,7 @@ func TestNextListWithUnmappedType_StaysOnCurrentList(t *testing.T) {
 func TestEnterOnErrorItem_OpensDetails(t *testing.T) {
 	errorText := "zoxide error: command not found with long diagnostic details"
 	items := []list.Item{
-		item.Item{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute},
+		item.Item{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute, Cmd: "true"},
 		item.Item{Type: "error", Source: "zoxide", Display: errorText},
 	}
 	reg := generator.NewRegistry()
@@ -581,7 +590,7 @@ func TestEnterOnErrorItemDuringFiltering_OpensDetails(t *testing.T) {
 
 func TestErrorDetailsEscReturnsToRootList(t *testing.T) {
 	items := []list.Item{
-		item.Item{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute},
+		item.Item{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute, Cmd: "true"},
 		item.Item{Type: "error", Display: "zoxide error: command not found"},
 	}
 	m := newTestModel(items, testRegistry())
@@ -969,9 +978,9 @@ func TestDownDuringNonEmptyFilter_StaysInFilterMode(t *testing.T) {
 
 func filterNavigationItems() []list.Item {
 	return []list.Item{
-		item.Item{Type: "window", Display: "alpha", Action: item.ActionExecute},
-		item.Item{Type: "window", Display: "alpine", Action: item.ActionExecute},
-		item.Item{Type: "window", Display: "bravo", Action: item.ActionExecute},
+		item.Item{Type: "window", Display: "alpha", Action: item.ActionExecute, Cmd: "true"},
+		item.Item{Type: "window", Display: "alpine", Action: item.ActionExecute, Cmd: "true"},
+		item.Item{Type: "window", Display: "bravo", Action: item.ActionExecute, Cmd: "true"},
 	}
 }
 
@@ -1844,21 +1853,21 @@ func TestPickerStage_ErrorShowsInList(t *testing.T) {
 	if !ok {
 		t.Fatal("expected item.Item")
 	}
-	if !strings.Contains(it.Display, "command error") {
-		t.Errorf("error item Display = %q, want to contain 'command error'", it.Display)
+	if !strings.Contains(it.Display, "picker source failed") {
+		t.Errorf("error item Display = %q, want to contain 'picker source failed'", it.Display)
 	}
 }
 
 func TestRunPickerSourceReturnsItems(t *testing.T) {
-	items, err := runPickerSource("printf 'alpha\\nbeta\\n'", 0, item.Stage{})
+	result, err := runPickerSource("printf 'alpha\\nbeta\\n'", 0, item.Stage{})
 	if err != nil {
 		t.Fatalf("runPickerSource error: %v", err)
 	}
-	if len(items) != 2 {
-		t.Fatalf("items = %d, want 2", len(items))
+	if len(result.Items) != 2 {
+		t.Fatalf("items = %d, want 2", len(result.Items))
 	}
-	if items[0].Display != "alpha" || items[1].Display != "beta" {
-		t.Fatalf("items = %#v", items)
+	if result.Items[0].Display != "alpha" || result.Items[1].Display != "beta" {
+		t.Fatalf("items = %#v", result.Items)
 	}
 }
 
@@ -1912,11 +1921,12 @@ func TestPickerStage_CommandErrorDetailsIncludeExecutionContext(t *testing.T) {
 	content := ansi.Strip(m.errorDetailsView())
 	for _, want := range []string{
 		"Source: picker",
-		"command error: command failed: exit status 7",
+		"picker source failed: exit status 7",
 		"Stage key: file",
 		"Working directory: " + cwd,
 		"Timeout: 2s",
-		"Error: command failed: exit status 7",
+		"Exit code: 7",
+		"Error: picker source failed: exit status 7",
 		"Data fields:",
 		"pane_id: %1",
 		"path: /tmp/project",
@@ -1933,19 +1943,26 @@ func TestPickerStage_CommandErrorDetailsIncludeExecutionContext(t *testing.T) {
 	}
 }
 
-func TestRunPickerSourceWithDiagnosticsCapturesFailedOutput(t *testing.T) {
-	result, failure := runPickerSourceWithDiagnostics(`printf 'partial stdout\n'; printf 'bad stderr\n' >&2; exit 7`, 0, item.Stage{})
-	if failure == nil {
-		t.Fatal("runPickerSourceWithDiagnostics should fail")
+func TestRunPickerSource_CapturesFailedOutput(t *testing.T) {
+	result, err := runPickerSource(`printf 'partial stdout\n'; printf 'bad stderr\n' >&2; exit 7`, 0, item.Stage{})
+	if err == nil {
+		t.Fatal("runPickerSource should fail")
 	}
 	if len(result.Items) != 0 {
 		t.Fatalf("failed picker should not return parsed items, got %#v", result.Items)
 	}
-	if failure.Stdout != "partial stdout\n" {
-		t.Fatalf("failure stdout = %q, want partial stdout", failure.Stdout)
+	var cmdErr *cmdrun.CommandError
+	if !errors.As(err, &cmdErr) {
+		t.Fatalf("error = %v, want *cmdrun.CommandError", err)
 	}
-	if failure.Stderr != "bad stderr\n" {
-		t.Fatalf("failure stderr = %q, want bad stderr", failure.Stderr)
+	if cmdErr.ExitCode != 7 {
+		t.Fatalf("ExitCode = %d, want 7", cmdErr.ExitCode)
+	}
+	if cmdErr.Stdout != "partial stdout\n" {
+		t.Fatalf("failure stdout = %q, want partial stdout", cmdErr.Stdout)
+	}
+	if cmdErr.Stderr != "bad stderr\n" {
+		t.Fatalf("failure stderr = %q, want bad stderr", cmdErr.Stderr)
 	}
 }
 
@@ -2160,7 +2177,7 @@ func TestPickerStage_EnterOnErrorItem_OpensDetails(t *testing.T) {
 		t.Errorf("errorReturnMode = %d, want viewPicker (%d)", m.errorReturnMode, viewPicker)
 	}
 	content := ansi.Strip(m.errorDetailsView())
-	if !strings.Contains(content, "command error") {
+	if !strings.Contains(content, "picker source failed") {
 		t.Errorf("details view should contain picker command error, got:\n%s", content)
 	}
 
@@ -2225,7 +2242,7 @@ func TestAutoSelectSingle_StagedAction_EntersPrompt(t *testing.T) {
 	}
 }
 
-func TestCompleteStages_RemovesActionFromAccumulated(t *testing.T) {
+func TestFinalizeSelection_RemovesActionFromAccumulated(t *testing.T) {
 	m := newTestModel(stagedItems(), testRegistry())
 	m.list.SetSize(80, 40)
 
@@ -2237,6 +2254,9 @@ func TestCompleteStages_RemovesActionFromAccumulated(t *testing.T) {
 
 	if m.Selected() == nil {
 		t.Fatal("Selected() should be set after completing stages")
+	}
+	if m.Launch() == nil {
+		t.Fatal("Launch() should be set after completing stages")
 	}
 
 	for _, it := range m.Accumulated() {
@@ -2251,11 +2271,335 @@ func TestCompleteStages_RemovesActionFromAccumulated(t *testing.T) {
 	}
 }
 
+func failingLaunchAction() item.Item {
+	return item.Item{
+		Type:          "action",
+		Display:       "Bad Launch",
+		Action:        item.ActionExecute,
+		MatchType:     "root",
+		Cmd:           "true",
+		LaunchPathCmd: "sh -c 'echo out; echo err >&2; exit 23'",
+	}
+}
+
+func TestFinalizeSelection_LaunchFailureShowsErrorDetails(t *testing.T) {
+	m := newTestModel([]list.Item{failingLaunchAction()}, testRegistry())
+	m = setWindowSize(t, m, 120, 40)
+	m = exitFilterMode(t, m)
+
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+
+	if cmd != nil {
+		t.Fatal("launch resolution failure must not quit")
+	}
+	if m.mode != viewErrorDetails {
+		t.Fatalf("mode = %d, want viewErrorDetails (%d)", m.mode, viewErrorDetails)
+	}
+	if m.Selected() != nil || m.Launch() != nil {
+		t.Fatal("Selected()/Launch() should be nil after a failed resolution")
+	}
+
+	content := ansi.Strip(m.errorDetailsView())
+	for _, want := range []string{
+		"Source: launch",
+		"launch_path_cmd failed: exit status 23",
+		"Action: Bad Launch",
+		"Working directory:",
+		"Timeout: 2s",
+		"Exit code: 23",
+		"Command template:",
+		"sh -c 'echo out; echo err >&2; exit 23'",
+		"Rendered command:",
+		"stdout:",
+		"out",
+		"stderr:",
+		"err",
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("details view should contain %q, got:\n%s", want, content)
+		}
+	}
+}
+
+func TestFinalizeSelection_EscRestoresListState(t *testing.T) {
+	m := newTestModel([]list.Item{failingLaunchAction()}, testRegistry())
+	m = setWindowSize(t, m, 120, 40)
+	m = exitFilterMode(t, m)
+
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+	if m.mode != viewErrorDetails {
+		t.Fatalf("mode = %d, want viewErrorDetails (%d)", m.mode, viewErrorDetails)
+	}
+
+	result, cmd := m.Update(escMsg)
+	m = result.(Model)
+	if cmd != nil {
+		t.Fatal("Esc from launch error details should not quit")
+	}
+	if m.mode != viewList {
+		t.Fatalf("mode = %d, want viewList (%d)", m.mode, viewList)
+	}
+	if len(m.Accumulated()) != 0 {
+		t.Fatalf("accumulated len = %d, want 0", len(m.Accumulated()))
+	}
+	if len(m.list.Items()) != 1 {
+		t.Fatalf("list items = %d, want 1", len(m.list.Items()))
+	}
+}
+
+func TestFinalizeSelection_RetryAfterFailureSucceeds(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "target")
+	action := item.Item{
+		Type:          "action",
+		Display:       "Retry Launch",
+		Action:        item.ActionExecute,
+		MatchType:     "root",
+		Cmd:           "true",
+		LaunchPathCmd: fmt.Sprintf("printf '%%s\\n' '%s'", dir),
+	}
+	m := newTestModel([]list.Item{action}, testRegistry())
+	m = setWindowSize(t, m, 120, 40)
+	m = exitFilterMode(t, m)
+
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+	if cmd != nil || m.mode != viewErrorDetails {
+		t.Fatalf("first attempt should fail into error details; cmd = %v, mode = %d", cmd, m.mode)
+	}
+
+	result, _ = m.Update(escMsg)
+	m = result.(Model)
+	if m.mode != viewList {
+		t.Fatalf("mode = %d, want viewList (%d)", m.mode, viewList)
+	}
+
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	result, cmd = m.Update(enterMsg)
+	m = result.(Model)
+	if cmd == nil {
+		t.Fatal("retry after fixing the environment should quit")
+	}
+	if m.Selected() == nil || m.Launch() == nil {
+		t.Fatal("Selected()/Launch() should be set after a successful retry")
+	}
+}
+
+func TestFinalizeSelection_FinalPromptStageFailureReturnsToPrompt(t *testing.T) {
+	action := item.Item{
+		Type:          "action",
+		Display:       "Staged Bad Launch",
+		Action:        item.ActionStaged,
+		MatchType:     "root",
+		Cmd:           "true",
+		LaunchPathCmd: "sh -c 'echo err >&2; exit {{.code}}'",
+		Stages: []item.Stage{
+			{Type: item.StagePrompt, Key: "code", Text: "Code:"},
+		},
+	}
+	m := newTestModel([]list.Item{action}, testRegistry())
+	m = setWindowSize(t, m, 120, 40)
+	m = selectStagedItem(t, m)
+	if m.mode != viewPrompt {
+		t.Fatalf("mode = %d, want viewPrompt (%d)", m.mode, viewPrompt)
+	}
+	m = typeInPrompt(t, m, "23")
+
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+	if cmd != nil {
+		t.Fatal("launch resolution failure must not quit")
+	}
+	if m.mode != viewErrorDetails {
+		t.Fatalf("mode = %d, want viewErrorDetails (%d)", m.mode, viewErrorDetails)
+	}
+	if m.errorReturnMode != viewPrompt {
+		t.Fatalf("errorReturnMode = %d, want viewPrompt (%d)", m.errorReturnMode, viewPrompt)
+	}
+	content := ansi.Strip(m.errorDetailsView())
+	if !strings.Contains(content, "Exit code: 23") {
+		t.Fatalf("details view should contain exit code, got:\n%s", content)
+	}
+
+	result, _ = m.Update(escMsg)
+	m = result.(Model)
+	if m.mode != viewPrompt {
+		t.Fatalf("mode after Esc = %d, want viewPrompt (%d)", m.mode, viewPrompt)
+	}
+	if m.stageInput.Value() != "23" {
+		t.Fatalf("stageInput = %q, want preserved value", m.stageInput.Value())
+	}
+	if got := len(m.Accumulated()); got != 1 {
+		t.Fatalf("accumulated len = %d, want 1 (failed final stage result must not commit)", got)
+	}
+}
+
+func TestFinalizeSelection_CommittedLaunchIgnoresQueuedKeys(t *testing.T) {
+	dir := t.TempDir()
+	counter := filepath.Join(dir, "count")
+	action := item.Item{
+		Type:          "action",
+		Display:       "Once",
+		Action:        item.ActionExecute,
+		MatchType:     "root",
+		Cmd:           "true",
+		LaunchPathCmd: fmt.Sprintf("echo x >> '%s'; printf '%%s\\n' '%s'", counter, dir),
+	}
+	m := newTestModel([]list.Item{action}, testRegistry())
+	m = setWindowSize(t, m, 120, 40)
+	m = exitFilterMode(t, m)
+
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+	if cmd == nil || m.Launch() == nil {
+		t.Fatal("first Enter should commit and quit")
+	}
+	first := m.Launch()
+
+	result, cmd = m.Update(enterMsg)
+	m = result.(Model)
+	if cmd != nil {
+		t.Fatal("keys queued after a committed launch must be ignored")
+	}
+	if m.Launch() != first {
+		t.Fatal("queued key must not change the committed launch")
+	}
+	data, err := os.ReadFile(counter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Count(string(data), "x"); got != 1 {
+		t.Fatalf("launch_path_cmd ran %d times, want 1", got)
+	}
+}
+
+func TestFinalizeSelection_DataFieldsIncludeResolvedLaunchPath(t *testing.T) {
+	dir := t.TempDir()
+	action := item.Item{
+		Type:       "action",
+		Display:    "Bad Window Name",
+		Action:     item.ActionExecute,
+		MatchType:  "root",
+		Cmd:        "true",
+		LaunchPath: dir,
+		WindowName: "{{.missing}}",
+	}
+	m := newTestModel([]list.Item{action}, testRegistry())
+	m = setWindowSize(t, m, 160, 40)
+	m = exitFilterMode(t, m)
+
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+	if m.mode != viewErrorDetails {
+		t.Fatalf("mode = %d, want viewErrorDetails (%d)", m.mode, viewErrorDetails)
+	}
+
+	content := ansi.Strip(m.errorDetailsView())
+	if !strings.Contains(content, "launch_path: "+filepath.Clean(dir)) {
+		t.Fatalf("Data fields should show the resolved launch_path the failing template saw, got:\n%s", content)
+	}
+}
+
+func TestFinalizeSelection_EscapesAdversarialOutput(t *testing.T) {
+	action := item.Item{
+		Type:          "action",
+		Display:       "Evil Launch",
+		Action:        item.ActionExecute,
+		MatchType:     "root",
+		Cmd:           "true",
+		LaunchPathCmd: `printf '\033]0;evil\007payload' >&2; printf '\033[2Jboom' >&2; exit 1`,
+	}
+	m := newTestModel([]list.Item{action}, testRegistry())
+	m = setWindowSize(t, m, 120, 40)
+	m = exitFilterMode(t, m)
+
+	result, _ := m.Update(enterMsg)
+	m = result.(Model)
+	if m.mode != viewErrorDetails {
+		t.Fatalf("mode = %d, want viewErrorDetails (%d)", m.mode, viewErrorDetails)
+	}
+
+	raw := m.errorDetailsView()
+	if strings.Contains(raw, "\x1b]0;") || strings.Contains(raw, "\x1b[2J") {
+		t.Fatal("raw escape sequences leaked into the details view")
+	}
+	content := ansi.Strip(raw)
+	if !strings.Contains(content, "payload") || !strings.Contains(content, "boom") {
+		t.Fatalf("details view should contain the escaped payload text, got:\n%s", content)
+	}
+}
+
+func TestFinalizeSelection_InlineParentNotCommittedOnFailure(t *testing.T) {
+	cfg := testConfig()
+	cfg.Behavior.InlineActions = true
+	cfg.Behavior.StartInFilter = false
+
+	reg := generator.NewRegistry()
+	reg.Register("dir-actions", func(accumulated []item.Item, ctx generator.Context) []item.Item {
+		if len(accumulated) == 0 {
+			return nil
+		}
+		last := accumulated[len(accumulated)-1]
+		return []item.Item{
+			{Type: "action", Display: "Bad Launch", Action: item.ActionExecute,
+				Cmd: "true", LaunchPathCmd: "sh -c 'echo err >&2; exit 23'",
+				Data: map[string]string{"path": last.Data["path"]}},
+		}
+	})
+	reg.MapType("dir", "dir-actions")
+
+	baseItems := []item.Item{
+		{Type: "dir", Display: "~/projects/foo", Action: item.ActionNextList, Data: map[string]string{"path": "/home/user/projects/foo"}},
+	}
+	listItems := item.GroupAndOrder(baseItems, false)
+	m := NewModel(listItems, "%1", nil, reg, generator.Context{Config: cfg}, theme.Default(), nil, baseItems)
+	m = setWindowSize(t, m, 120, 40)
+
+	for i, li := range m.list.Items() {
+		if it, ok := li.(item.Item); ok && strings.Contains(it.Display, "Bad Launch") {
+			m.list.Select(i)
+			break
+		}
+	}
+	rowCount := len(m.list.Items())
+
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+	if cmd != nil {
+		t.Fatal("launch resolution failure must not quit")
+	}
+	if m.mode != viewErrorDetails {
+		t.Fatalf("mode = %d, want viewErrorDetails (%d)", m.mode, viewErrorDetails)
+	}
+	if len(m.Accumulated()) != 0 {
+		t.Fatalf("accumulated len = %d, want 0 (inline parent must not commit on failure)", len(m.Accumulated()))
+	}
+
+	result, _ = m.Update(escMsg)
+	m = result.(Model)
+	if m.mode != viewList {
+		t.Fatalf("mode = %d, want viewList (%d)", m.mode, viewList)
+	}
+	if len(m.list.Items()) != rowCount {
+		t.Fatalf("list items = %d, want %d (unchanged)", len(m.list.Items()), rowCount)
+	}
+
+	result, _ = m.Update(enterMsg)
+	m = result.(Model)
+	if len(m.Accumulated()) != 0 {
+		t.Fatalf("accumulated len = %d after retry, want 0 (no duplicate parent commit)", len(m.Accumulated()))
+	}
+}
+
 func TestFilterWithSpaces_MatchesAcrossSeparators(t *testing.T) {
 	items := []list.Item{
 		item.Item{Type: "dir", Display: "~/dotfiles/main", Action: item.ActionNextList, Data: map[string]string{"path": "~/dotfiles/main"}},
 		item.Item{Type: "dir", Display: "~/projects/foo", Action: item.ActionNextList, Data: map[string]string{"path": "~/projects/foo"}},
-		item.Item{Type: "window", Display: "dev:1 node", Action: item.ActionExecute},
+		item.Item{Type: "window", Display: "dev:1 node", Action: item.ActionExecute, Cmd: "true"},
 	}
 	m := newTestModel(items, testRegistry())
 	m.list.SetSize(80, 40)
@@ -2616,7 +2960,7 @@ func newInlineTestModel(t *testing.T) Model {
 		{Type: "action", Display: "htop", Action: item.ActionExecute, Cmd: "htop"},
 		{Type: "dir", Display: "~/projects/foo", Action: item.ActionNextList, Data: map[string]string{"path": "/home/user/projects/foo"}},
 		{Type: "dir", Display: "~/code/bar", Action: item.ActionNextList, Data: map[string]string{"path": "/home/user/code/bar"}},
-		{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute},
+		{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute, Cmd: "true"},
 	}
 	listItems := item.GroupAndOrder(baseItems, false)
 
