@@ -49,7 +49,7 @@ func TestRunSessionWindowCommandErrorsWithNoMode(t *testing.T) {
 	}
 }
 
-func TestRunSessionWindowCommandNewShellCallsTmuxWindowFunction(t *testing.T) {
+func TestRunSessionWindowCommandNewShellDefaultsToBackground(t *testing.T) {
 	useTempConfigHome(t)
 	dir := filepath.Join(t.TempDir(), "scratch")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -77,8 +77,8 @@ func TestRunSessionWindowCommandNewShellCallsTmuxWindowFunction(t *testing.T) {
 		if len(opts.Command) != 0 {
 			t.Errorf("Command = %q, want empty", opts.Command)
 		}
-		if !opts.Switch {
-			t.Error("Switch = false, want true")
+		if opts.Switch {
+			t.Error("Switch = true, want false")
 		}
 		return nil
 	}
@@ -228,7 +228,7 @@ func TestRunSessionWindowCommandEmptyNameErrors(t *testing.T) {
 	}
 }
 
-func TestSessionWindowCommandAllowsArgsAfterDashDash(t *testing.T) {
+func TestSessionWindowCommandParsesFlagsOnlyBeforeDashDash(t *testing.T) {
 	useTempConfigHome(t)
 	dir := filepath.Join(t.TempDir(), "scratch")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -238,17 +238,36 @@ func TestSessionWindowCommandAllowsArgsAfterDashDash(t *testing.T) {
 	oldCreate := createResolvedSessionWindow
 	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
 
-	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, launchPath string, opts tmux.SessionWindowOptions) error {
-		want := []string{"--flag", "value"}
-		if !slices.Equal(opts.Command, want) {
-			t.Errorf("Command = %q, want %q", opts.Command, want)
-		}
+	var got tmux.SessionWindowOptions
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, _ string, opts tmux.SessionWindowOptions) error {
+		got = opts
 		return nil
 	}
 
-	cmd := newSessionWindowCommand()
-	cmd.SetArgs([]string{dir, "--", "--flag", "value"})
-	if err := cmd.Execute(); err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		name        string
+		args        []string
+		wantSwitch  bool
+		wantCommand []string
+	}{
+		{name: "payload flag", args: []string{dir, "--", "--flag", "value"}, wantCommand: []string{"--flag", "value"}},
+		{name: "switch before delimiter", args: []string{dir, "--switch", "--", "echo", "hello"}, wantSwitch: true, wantCommand: []string{"echo", "hello"}},
+		{name: "switch after delimiter", args: []string{dir, "--", "--switch"}, wantCommand: []string{"--switch"}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got = tmux.SessionWindowOptions{}
+			cmd := newSessionWindowCommand()
+			cmd.SetArgs(test.args)
+			if err := cmd.Execute(); err != nil {
+				t.Fatal(err)
+			}
+			if got.Switch != test.wantSwitch {
+				t.Errorf("Switch = %t, want %t", got.Switch, test.wantSwitch)
+			}
+			if !slices.Equal(got.Command, test.wantCommand) {
+				t.Errorf("Command = %q, want %q", got.Command, test.wantCommand)
+			}
+		})
 	}
 }

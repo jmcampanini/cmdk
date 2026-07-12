@@ -49,12 +49,13 @@ func newRootCommand() *cobra.Command {
 
 Launch a shell or command in the cmdk-managed session for a directory:
 
-  cmdk session window <path> --new
-  cmdk session window <path> -- <command> [args...]
+  cmdk session window <path> [--switch] --new
+  cmdk session window <path> [--switch] -- <command> [args...]
 
-The path determines the managed session and becomes the new window's working
-directory. Repository and worktree paths share their managed repo session;
-ordinary directories use a session for that canonical directory.
+Windows are created in the background by default; --switch selects the new
+window. The path determines the managed session and becomes the new window's
+working directory. Repository and worktree paths share their managed repo
+session; ordinary directories use a session for that canonical directory.
 
 Log file:
   $HOME/.local/state/cmdk/cmdk.log`,
