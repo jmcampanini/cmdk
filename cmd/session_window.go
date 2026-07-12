@@ -12,6 +12,7 @@ import (
 type sessionWindowOptions struct {
 	newShell      bool
 	name          string
+	switchWindow  bool
 	nameSet       bool
 	dashSeen      bool
 	argsLenAtDash int
@@ -22,7 +23,7 @@ var createResolvedSessionWindow = tmux.CreateResolvedSessionWindow
 func newSessionWindowCommand() *cobra.Command {
 	options := sessionWindowOptions{}
 	cmd := &cobra.Command{
-		Use:   "window <path> [--name <name>] (--new | -- <command> [args...])",
+		Use:   "window <path> [--name <name>] [--switch] (--new | -- <command> [args...])",
 		Short: "Create a new tmux window in a cmdk-managed session for a path",
 		Long: `Create a fresh tmux window in the cmdk-managed session for a path.
 
@@ -37,15 +38,21 @@ Exactly one mode is required:
 
 The new window's cwd is the validated path. The default window name is the base
 name of that path; --name overrides it for either mode and must not be empty.
+By default, cmdk creates the window in the background without changing the
+current tmux window. --switch switches the current client to the new window.
 
 Command args after -- are treated as argv-style input and are shell-quoted before
 being passed to tmux as its shell-command string. Shell metacharacters are
 literal by default; invoke a shell explicitly for shell features, for example:
 
   cmdk session window . --name tests -- sh -lc 'npm test | tee test.log'
+  cmdk session window . --switch --new
+  cmdk session window . --switch -- make test
 
-cmdk creates a fresh window every time, tracks it by the returned tmux window_id,
-and switches the current tmux client to <session_id>:<window_id>.`,
+--switch must appear before --. Arguments after -- are always part of the window
+command. cmdk creates a fresh window every time and tracks it by the returned
+tmux window_id.`,
+
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			options.nameSet = cmd.Flags().Changed("name")
@@ -56,6 +63,7 @@ and switches the current tmux client to <session_id>:<window_id>.`,
 	}
 	cmd.Flags().BoolVar(&options.newShell, "new", false, "create a fresh interactive shell window")
 	cmd.Flags().StringVar(&options.name, "name", "", "override the tmux window name")
+	cmd.Flags().BoolVar(&options.switchWindow, "switch", false, "switch the current tmux client to the new window")
 	return cmd
 }
 
@@ -98,7 +106,7 @@ func runSessionWindowCommand(cmd *cobra.Command, args []string, options sessionW
 		Name:     windowName,
 		NewShell: options.newShell,
 		Command:  commandArgs,
-		Switch:   true,
+		Switch:   options.switchWindow,
 	})
 }
 

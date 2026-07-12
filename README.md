@@ -42,7 +42,7 @@ For the full command reference, run `cmdk --help`. See also:
 - `cmdk config --provenance` — effective configuration and source provenance
 - `cmdk attach [path]` — from outside tmux, attach to a configured or explicit cmdk-managed session
 - `cmdk session resolve <path>` — inspect the planned session for a path
-- `cmdk session window <path> --new` — create a new window in the cmdk-managed tmux session for a path
+- `cmdk session window <path> --new` - create a background window in the cmdk-managed tmux session; add `--switch` to select it
 - `cmdk window next` / `cmdk window previous` — cycle through tmux windows across sessions
 - `cmdk docs` — configuration reference
 - `cmdk icons` — supported icon aliases

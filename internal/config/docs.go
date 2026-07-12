@@ -246,17 +246,20 @@ ATTACH
   @cmdk_session_key, then attaches to the new session.
 
 SESSION WINDOWS
-  cmdk session window <path> --new resolves an existing directory, finds or
-  creates the cmdk-managed tmux session for that path, creates a fresh shell
-  window in that session, and switches the current tmux client to it.
+  cmdk session window <path> [--switch] --new resolves an existing directory,
+  finds or creates the cmdk-managed tmux session for that path, and creates a
+  fresh shell window in that session. The new window stays in the background by
+  default; --switch switches the current tmux client to it.
 
-  cmdk session window <path> [--name <name>] -- <command> [args...] creates a
-  fresh command window. Command args after -- are treated as argv-style input;
+  cmdk session window <path> [--name <name>] [--switch] -- <command> [args...]
+  creates a fresh command window. --switch must appear before --. Command args
+  after -- are treated as argv-style input;
   cmdk shell-quotes each arg before passing one shell-command string to tmux.
   Metacharacters such as $, |, >, and ; are literal by default. Use an explicit
   shell for shell behavior, e.g.:
 
       cmdk session window . --name tests -- sh -lc 'npm test | tee test.log'
+      cmdk session window . --switch -- make test
 
   Command-window lifecycle is direct tmux behavior: when the command exits,
   cmdk does not hold the window, set remain-on-exit, or drop into a shell.
@@ -269,8 +272,10 @@ SESSION WINDOWS
   cmdk creates a session it sets only @cmdk_session_kind and @cmdk_session_key.
   Managed sessions are found by exact key match.
 
-  session window requires a current tmux client for switch-client. It does not
-  attach from outside tmux and does not fall back to attach-session.
+  Background session-window creation does not require a current tmux client when
+  a tmux server is available. --switch requires a current client for
+  switch-client. The command does not attach from outside tmux or fall back to
+  attach-session.
 
   In the TUI, tmux windows sort above sessions, directories, and actions. When
   selecting a tmux session, windows in that session sort above the built-in

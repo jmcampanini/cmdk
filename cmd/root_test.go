@@ -17,8 +17,9 @@ func TestRootHelpMakesSessionWindowLaunchingDiscoverable(t *testing.T) {
 
 	help := out.String()
 	for _, want := range []string{
-		"cmdk session window <path> --new",
-		"cmdk session window <path> -- <command> [args...]",
+		"cmdk session window <path> [--switch] --new",
+		"cmdk session window <path> [--switch] -- <command> [args...]",
+		"Windows are created in the background by default",
 		"The path determines the managed session",
 		"Resolve paths and launch windows in managed sessions",
 	} {

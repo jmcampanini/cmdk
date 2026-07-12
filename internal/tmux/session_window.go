@@ -79,7 +79,7 @@ func (m sessionWindowManager) createResolvedWindow(ctx context.Context, plan res
 	if sessionID == "" {
 		sessionID, windowID, err = m.createManagedSession(ctx, plan, launchPath, windowName, shellCommand)
 	} else {
-		windowID, err = m.createWindow(ctx, sessionID, launchPath, windowName, shellCommand)
+		windowID, err = m.createWindow(ctx, sessionID, launchPath, windowName, shellCommand, !opts.Switch)
 	}
 	if err != nil {
 		return err
@@ -317,13 +317,17 @@ func (m sessionWindowManager) setSessionMetadata(ctx context.Context, sessionID 
 	return nil
 }
 
-func (m sessionWindowManager) createWindow(ctx context.Context, sessionID, launchPath, windowName, shellCommand string) (string, error) {
-	args := []string{
-		"new-window", "-P", "-F", "#{window_id}",
-		"-t", sessionID + ":",
+func (m sessionWindowManager) createWindow(ctx context.Context, sessionID, launchPath, windowName, shellCommand string, detached bool) (string, error) {
+	args := []string{"new-window"}
+	if detached {
+		args = append(args, "-d")
+	}
+	args = append(args,
+		"-P", "-F", "#{window_id}",
+		"-t", sessionID+":",
 		"-n", windowName,
 		"-c", launchPath,
-	}
+	)
 	if shellCommand != "" {
 		args = append(args, shellCommand)
 	}

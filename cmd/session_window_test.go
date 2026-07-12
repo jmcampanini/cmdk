@@ -49,7 +49,7 @@ func TestRunSessionWindowCommandErrorsWithNoMode(t *testing.T) {
 	}
 }
 
-func TestRunSessionWindowCommandNewShellCallsTmuxWindowFunction(t *testing.T) {
+func TestRunSessionWindowCommandNewShellDefaultsToBackground(t *testing.T) {
 	useTempConfigHome(t)
 	dir := filepath.Join(t.TempDir(), "scratch")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -77,8 +77,8 @@ func TestRunSessionWindowCommandNewShellCallsTmuxWindowFunction(t *testing.T) {
 		if len(opts.Command) != 0 {
 			t.Errorf("Command = %q, want empty", opts.Command)
 		}
-		if !opts.Switch {
-			t.Error("Switch = false, want true")
+		if opts.Switch {
+			t.Error("Switch = true, want false")
 		}
 		return nil
 	}
@@ -248,6 +248,62 @@ func TestSessionWindowCommandAllowsArgsAfterDashDash(t *testing.T) {
 
 	cmd := newSessionWindowCommand()
 	cmd.SetArgs([]string{dir, "--", "--flag", "value"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSessionWindowCommandSwitchFlagBeforeDashDash(t *testing.T) {
+	useTempConfigHome(t)
+	dir := filepath.Join(t.TempDir(), "scratch")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	oldCreate := createResolvedSessionWindow
+	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
+
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, _ string, opts tmux.SessionWindowOptions) error {
+		if !opts.Switch {
+			t.Error("Switch = false, want true")
+		}
+		want := []string{"echo", "hello"}
+		if !slices.Equal(opts.Command, want) {
+			t.Errorf("Command = %q, want %q", opts.Command, want)
+		}
+		return nil
+	}
+
+	cmd := newSessionWindowCommand()
+	cmd.SetArgs([]string{dir, "--switch", "--", "echo", "hello"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSessionWindowCommandSwitchAfterDashDashIsPayload(t *testing.T) {
+	useTempConfigHome(t)
+	dir := filepath.Join(t.TempDir(), "scratch")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	oldCreate := createResolvedSessionWindow
+	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
+
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, _ string, opts tmux.SessionWindowOptions) error {
+		if opts.Switch {
+			t.Error("Switch = true, want false")
+		}
+		want := []string{"--switch"}
+		if !slices.Equal(opts.Command, want) {
+			t.Errorf("Command = %q, want %q", opts.Command, want)
+		}
+		return nil
+	}
+
+	cmd := newSessionWindowCommand()
+	cmd.SetArgs([]string{dir, "--", "--switch"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
