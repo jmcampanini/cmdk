@@ -111,7 +111,7 @@ func createWindowWithRunner(t *testing.T, runner *scriptedTmuxRunner, plan resol
 
 func attachWithRunner(t *testing.T, runner *scriptedTmuxRunner, plan resolver.Plan) error {
 	t.Helper()
-	err := sessionWindowManager{runner: runner}.attachResolvedSession(context.Background(), plan, launchPathForPlan(plan), defaultWindowNameForPlan(plan))
+	err := sessionWindowManager{runner: runner}.attachResolvedSession(context.Background(), plan, launchPathForPlan(plan), defaultWindowNameForPlan(plan), 0)
 	runner.done()
 	return err
 }
@@ -536,5 +536,70 @@ func TestTmuxOutputIncludesStderrOnNonTimeoutErrors(t *testing.T) {
 	var exitErr *exec.ExitError
 	if !errors.As(err, &exitErr) {
 		t.Fatalf("error = %T %[1]v, want wrapped *exec.ExitError", err)
+	}
+}
+
+func TestTruncateWindowName(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		max  int
+		want string
+	}{
+		{name: "zero disables truncation", in: "issue-117-window-name-maximum-limit", max: 0, want: "issue-117-window-name-maximum-limit"},
+		{name: "shorter than max unchanged", in: "scratch", max: 20, want: "scratch"},
+		{name: "exactly max unchanged", in: "12345678901234567890", max: 20, want: "12345678901234567890"},
+		{name: "longer than max end-truncated", in: "issue-117-window-name-maximum-limit", max: 20, want: "issue-117-window-na…"},
+		{name: "multibyte runes counted as one", in: "héllo-wörld-ünïcödé-name", max: 10, want: "héllo-wör…"},
+		{name: "max one keeps only ellipsis", in: "ab", max: 1, want: "…"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := truncateWindowName(tt.in, tt.max)
+			if got != tt.want {
+				t.Errorf("truncateWindowName(%q, %d) = %q, want %q", tt.in, tt.max, got, tt.want)
+			}
+			if tt.max > 0 {
+				if n := len([]rune(got)); n > tt.max {
+					t.Errorf("rune length = %d, want <= %d", n, tt.max)
+				}
+			}
+		})
+	}
+}
+
+func TestCreateResolvedSessionWindowTruncatesLongWindowName(t *testing.T) {
+	plan := repoSessionWindowPlan()
+	runner := newScriptedTmuxRunner(t,
+		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$2\t" + plan.SessionKey + "\n"},
+		scriptedTmuxCall{args: []string{"new-window", "-P", "-F", "#{window_id}", "-t", "$2:", "-n", "issue-117-window-na…", "-c", launchPathForPlan(plan)}, output: "@5\n"},
+		scriptedTmuxCall{args: []string{"switch-client", "-t", "$2:@5"}},
+	)
+
+	err := createWindowWithRunner(t, runner, plan, SessionWindowOptions{
+		Name:          "issue-117-window-name-maximum-limit",
+		NewShell:      true,
+		Switch:        true,
+		MaxNameLength: 20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAttachResolvedSessionTruncatesLongWindowName(t *testing.T) {
+	plan := repoSessionWindowPlan()
+	runner := newScriptedTmuxRunner(t,
+		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$9\t/other\n"},
+		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionIDsFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", "issue-117-window-na…", "-c", launchPathForPlan(plan)}, output: "$1\t@1\n"},
+		scriptedTmuxCall{args: []string{"set-option", "-t", "$1", cmdkSessionKindOption, plan.SessionKind}},
+		scriptedTmuxCall{args: []string{"set-option", "-t", "$1", cmdkSessionKeyOption, plan.SessionKey}},
+		scriptedTmuxCall{args: []string{"attach-session", "-t", "$1"}, useRun: true},
+	)
+
+	err := sessionWindowManager{runner: runner}.attachResolvedSession(context.Background(), plan, launchPathForPlan(plan), "issue-117-window-name-maximum-limit", 20)
+	runner.done()
+	if err != nil {
+		t.Fatal(err)
 	}
 }

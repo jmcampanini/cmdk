@@ -55,7 +55,7 @@ func ConfigDocs() []SectionDoc {
 				{Name: "launch_mode", Type: "string", Description: "Launch mode: \"detect\" (default), \"session-window\" (create a cmdk-managed tmux window), or \"shell\" (exec in this pane). Detect makes dir actions and actions with launch_path/launch_path_cmd session-window; root/session actions without path fields stay shell.", Validation: "optional; must be \"detect\", \"session-window\", or \"shell\""},
 				{Name: "launch_path", Type: "string", Description: "Path template for the action's effective launch directory. Supports safe leading ~, $VAR, and ${VAR} expansion before Go template rendering; no command substitution, globbing, or word splitting.", Validation: "mutually exclusive with launch_path_cmd; rendered path must resolve to an existing directory"},
 				{Name: "launch_path_cmd", Type: "string", Description: "Shell command template run via sh -c after stages; stdout must be exactly one absolute existing directory path (at most one line of 8 KiB). Use {{sq ...}} around template variables. Runs under timeout.picker. Failures (nonzero exit, timeout, invalid output) open an in-app error screen showing the rendered command, exit code, stdout, and stderr, and write the same details to the log file.", Validation: "mutually exclusive with launch_path; output must be one absolute existing directory path"},
-				{Name: "window_name", Type: "string", Description: "Tmux window name template for session-window actions. Defaults to {{.launch_basename}}.", Validation: "only valid for effective session-window actions; rendered name cannot be empty or contain control characters"},
+				{Name: "window_name", Type: "string", Description: "Tmux window name template for session-window actions. Defaults to {{.launch_basename}}. Rendered names longer than behavior.window_name_max_length are end-truncated with a trailing ….", Validation: "only valid for effective session-window actions; rendered name cannot be empty or contain control characters"},
 				{Name: "stages", Type: "array", Description: "Optional pipeline of data-collection stages to run before executing cmd. See STAGES section."},
 			},
 			Example: "[[actions]]\nname = \"Yazi\"\nmatches = \"root\"\nlaunch_mode = \"shell\"\ncmd = \"tmux split-window -h yazi\"\nicon = \":nf-cod-folder:\"\n\n[[actions]]\nname = \"Claude\"\nmatches = \"dir\"\ncmd = \"direnv exec {{sq .launch_path}} claude\"\n\n[[actions]]\nname = \"Dotfiles pi\"\nmatches = \"root\"\nlaunch_path = \"$HOME/Code/github.com/me/dotfiles/main\"\ncmd = \"pi\"\n\n[[actions]]\nname = \"Rename Session\"\nmatches = \"session\"\ncmd = \"tmux rename-session -t {{sq .session_id}} {{sq .new_name}}\"\nstages = [\n  { type = \"prompt\", text = \"New name for {{.session_name}}:\", key = \"new_name\" },\n]",
@@ -85,8 +85,9 @@ func ConfigDocs() []SectionDoc {
 				{Name: "wrap_list", Type: "bool", Description: "Wrap cursor to the opposite end when navigating past the first or last item. Default: true."},
 				{Name: "start_in_filter", Type: "bool", Description: "Open lists in filter mode, ready for typing. When false, lists open in browse mode; press / to filter. Default: true."},
 				{Name: "inline_actions", Type: "bool", Description: "Expand directory actions inline in the root list instead of requiring drill-down. Each directory gets one entry per action, displayed as \"path » action\". Default: false."},
+				{Name: "window_name_max_length", Type: "int", Description: "Maximum length in characters for tmux window names created by cmdk; longer names are end-truncated with a trailing …, which counts toward the limit. Applies to default names, --name values, and rendered window_name templates. 0 disables truncation. Default: 20.", Validation: "cannot be negative"},
 			},
-			Example: "[behavior]\nauto_select_single = false\nbell_to_top = true\nwrap_list = false\nstart_in_filter = true\ninline_actions = false",
+			Example: "[behavior]\nauto_select_single = false\nbell_to_top = true\nwrap_list = false\nstart_in_filter = true\ninline_actions = false\nwindow_name_max_length = 20",
 		},
 		{
 			Name:        "theme",
@@ -329,6 +330,8 @@ func defaultValue(cfg Config, section, field string) string {
 			return fmt.Sprintf("%t", cfg.Behavior.StartInFilter)
 		case "inline_actions":
 			return fmt.Sprintf("%t", cfg.Behavior.InlineActions)
+		case "window_name_max_length":
+			return fmt.Sprintf("%d", cfg.Behavior.WindowNameMaxLength)
 		}
 	case "timeout":
 		switch field {

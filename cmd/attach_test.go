@@ -13,15 +13,15 @@ import (
 	resolver "github.com/jmcampanini/cmdk/internal/session"
 )
 
-func useAttachTestHooks(t *testing.T, check func(context.Context, resolver.Plan, string, string) error) func() bool {
+func useAttachTestHooks(t *testing.T, check func(context.Context, resolver.Plan, string, string, int) error) func() bool {
 	t.Helper()
 	oldAttach := attachResolvedSession
 	oldInside := isInsideTmux
 	called := false
-	attachResolvedSession = func(ctx context.Context, plan resolver.Plan, launchPath, windowName string) error {
+	attachResolvedSession = func(ctx context.Context, plan resolver.Plan, launchPath, windowName string, maxNameLength int) error {
 		called = true
 		if check != nil {
-			return check(ctx, plan, launchPath, windowName)
+			return check(ctx, plan, launchPath, windowName, maxNameLength)
 		}
 		return nil
 	}
@@ -106,7 +106,7 @@ func TestRunAttachCommandUsesConfiguredStartupPath(t *testing.T) {
 	}
 	writeStartupConfig(t, xdg, dir)
 
-	called := useAttachTestHooks(t, func(ctx context.Context, plan resolver.Plan, launchPath, windowName string) error {
+	called := useAttachTestHooks(t, func(ctx context.Context, plan resolver.Plan, launchPath, windowName string, maxNameLength int) error {
 		if _, ok := ctx.Deadline(); ok {
 			t.Fatal("attach context unexpectedly inherited resolve timeout")
 		}
@@ -119,6 +119,9 @@ func TestRunAttachCommandUsesConfiguredStartupPath(t *testing.T) {
 		}
 		if windowName != filepath.Base(dir) {
 			t.Errorf("windowName = %q, want %q", windowName, filepath.Base(dir))
+		}
+		if maxNameLength != 20 {
+			t.Errorf("maxNameLength = %d, want default 20", maxNameLength)
 		}
 		return nil
 	})
@@ -142,7 +145,7 @@ func TestRunAttachCommandPathArgOverridesConfiguredStartupPath(t *testing.T) {
 	}
 	writeStartupConfig(t, xdg, configured)
 
-	called := useAttachTestHooks(t, func(_ context.Context, plan resolver.Plan, launchPath, windowName string) error {
+	called := useAttachTestHooks(t, func(_ context.Context, plan resolver.Plan, launchPath, windowName string, _ int) error {
 		want := realAttachPath(t, explicit)
 		if plan.SessionKey != want {
 			t.Errorf("SessionKey = %q, want explicit path %q", plan.SessionKey, want)
@@ -174,7 +177,7 @@ func TestRunAttachCommandExpandsHomeInConfiguredStartupPath(t *testing.T) {
 	t.Setenv("HOME", home)
 	writeStartupConfig(t, xdg, "~/project")
 
-	called := useAttachTestHooks(t, func(_ context.Context, plan resolver.Plan, launchPath, windowName string) error {
+	called := useAttachTestHooks(t, func(_ context.Context, plan resolver.Plan, launchPath, windowName string, _ int) error {
 		want := realAttachPath(t, dir)
 		if plan.SessionKey != want {
 			t.Errorf("SessionKey = %q, want expanded home path %q", plan.SessionKey, want)
@@ -184,6 +187,36 @@ func TestRunAttachCommandExpandsHomeInConfiguredStartupPath(t *testing.T) {
 		}
 		if windowName != filepath.Base(dir) {
 			t.Errorf("windowName = %q, want %q", windowName, filepath.Base(dir))
+		}
+		return nil
+	})
+
+	if err := runAttachCommand(&cobra.Command{}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !called() {
+		t.Fatal("attach was not called")
+	}
+}
+
+func TestRunAttachCommandThreadsConfiguredWindowNameMaxLength(t *testing.T) {
+	xdg := useTempConfigHome(t)
+	dir := filepath.Join(t.TempDir(), "project")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfgDir := filepath.Join(xdg, "cmdk")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := fmt.Sprintf("[startup]\npath = %q\n\n[behavior]\nwindow_name_max_length = 7\n", dir)
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.toml"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	called := useAttachTestHooks(t, func(_ context.Context, _ resolver.Plan, _, _ string, maxNameLength int) error {
+		if maxNameLength != 7 {
+			t.Errorf("maxNameLength = %d, want configured 7", maxNameLength)
 		}
 		return nil
 	})

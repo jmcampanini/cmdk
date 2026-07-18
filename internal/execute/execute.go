@@ -111,15 +111,16 @@ func templateData(accumulated []item.Item, selected item.Item, paneID string) ma
 // every user-config interpretation that can fail (templates, launch-path
 // resolution, validation); Execute performs only launch mechanics.
 type Launch struct {
-	mode           launchMode
-	path           string
-	windowName     string
-	command        []string
-	newShell       bool
-	argv0          string
-	argv           []string
-	env            []string
-	resolveTimeout time.Duration
+	mode             launchMode
+	path             string
+	windowName       string
+	windowNameMaxLen int
+	command          []string
+	newShell         bool
+	argv0            string
+	argv             []string
+	env              []string
+	resolveTimeout   time.Duration
 }
 
 // ResolveLaunch also returns the template-data map as of the point resolution
@@ -163,12 +164,13 @@ func ResolveLaunch(accumulated []item.Item, selected item.Item, paneID string, c
 			resolveTimeout = config.DefaultConfig().Timeout.Fetch
 		}
 		return Launch{
-			mode:           mode,
-			path:           launchPath,
-			windowName:     windowName,
-			command:        command,
-			newShell:       selected.NewShell,
-			resolveTimeout: resolveTimeout,
+			mode:             mode,
+			path:             launchPath,
+			windowName:       windowName,
+			windowNameMaxLen: cfg.Behavior.WindowNameMaxLength,
+			command:          command,
+			newShell:         selected.NewShell,
+			resolveTimeout:   resolveTimeout,
 		}, data, nil
 	case launchModeShell:
 		if selected.WindowName != "" {
@@ -204,10 +206,11 @@ func (l Launch) Execute(execFn ExecFn) error {
 			return err
 		}
 		return createResolvedSessionWindow(context.Background(), plan, l.path, tmux.SessionWindowOptions{
-			Name:     l.windowName,
-			NewShell: l.newShell,
-			Command:  l.command,
-			Switch:   true,
+			Name:          l.windowName,
+			NewShell:      l.newShell,
+			Command:       l.command,
+			Switch:        true,
+			MaxNameLength: l.windowNameMaxLen,
 		})
 	case launchModeShell:
 		if l.path != "" {

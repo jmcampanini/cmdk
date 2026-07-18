@@ -862,6 +862,9 @@ func TestLaunchExecute_SessionWindowCreatesManagedWindow(t *testing.T) {
 	if !gotOpts.Switch {
 		t.Error("Switch = false, want true")
 	}
+	if gotOpts.MaxNameLength != 20 {
+		t.Errorf("MaxNameLength = %d, want default 20", gotOpts.MaxNameLength)
+	}
 }
 
 func TestResolveLaunch_LaunchPathCmdFailureIncludesStdoutAndStderr(t *testing.T) {
@@ -988,4 +991,43 @@ func envSliceToMap(envs []string) map[string]string {
 		}
 	}
 	return m
+}
+
+func TestLaunchExecute_SessionWindowThreadsConfiguredWindowNameMaxLength(t *testing.T) {
+	dir := t.TempDir()
+	oldResolve := resolveSessionPlan
+	oldCreate := createResolvedSessionWindow
+	t.Cleanup(func() {
+		resolveSessionPlan = oldResolve
+		createResolvedSessionWindow = oldCreate
+	})
+
+	resolveSessionPlan = func(_ context.Context, path string) (resolver.Plan, error) {
+		return resolver.Plan{SessionKind: resolver.KindDirectory, SessionKey: path}, nil
+	}
+	var gotOpts tmux.SessionWindowOptions
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, _ string, opts tmux.SessionWindowOptions) error {
+		gotOpts = opts
+		return nil
+	}
+
+	selected := item.Item{MatchType: "dir", LaunchMode: "session-window", NewShell: true}
+	accumulated := []item.Item{{Type: "dir", Data: map[string]string{"path": dir}}}
+	for _, max := range []int{7, 0} {
+		cfg := config.DefaultConfig()
+		cfg.Behavior.WindowNameMaxLength = max
+		launch, _, err := ResolveLaunch(accumulated, selected, "", cfg)
+		if err != nil {
+			t.Fatalf("ResolveLaunch(max=%d): %v", max, err)
+		}
+		if err := launch.Execute(func(string, []string, []string) error {
+			t.Fatal("execFn should not be called for session-window mode")
+			return nil
+		}); err != nil {
+			t.Fatalf("Execute(max=%d): %v", max, err)
+		}
+		if gotOpts.MaxNameLength != max {
+			t.Errorf("MaxNameLength = %d, want configured %d", gotOpts.MaxNameLength, max)
+		}
+	}
 }
