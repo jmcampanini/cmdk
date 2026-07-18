@@ -3,9 +3,11 @@ package cmd
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/spf13/cobra"
 
+	"github.com/jmcampanini/cmdk/internal/config"
 	"github.com/jmcampanini/cmdk/internal/tmux"
 )
 
@@ -38,6 +40,8 @@ Exactly one mode is required:
 
 The new window's cwd is the validated path. The default window name is the base
 name of that path; --name overrides it for either mode and must not be empty.
+Names longer than [behavior].window_name_max_length (default 20) are shortened
+to that many characters ending in …; set it to 0 to keep full names.
 By default, cmdk creates the window in the background without changing the
 current tmux window. --switch switches the current client to the new window.
 
@@ -93,7 +97,15 @@ func runSessionWindowCommand(cmd *cobra.Command, args []string, options sessionW
 	if err != nil {
 		return err
 	}
-	plan, err := resolveSessionPlanForCommand(cmd, launchPath)
+	cfgPath, err := resolveConfigPath()
+	if err != nil {
+		return err
+	}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+	plan, err := resolveSessionPlanWithConfig(cmd, launchPath, cfg)
 	if err != nil {
 		return err
 	}
@@ -103,10 +115,11 @@ func runSessionWindowCommand(cmd *cobra.Command, args []string, options sessionW
 	}
 
 	return createResolvedSessionWindow(sessionMutationContext(cmd), plan, launchPath, tmux.SessionWindowOptions{
-		Name:     windowName,
-		NewShell: options.newShell,
-		Command:  commandArgs,
-		Switch:   options.switchWindow,
+		Name:          windowName,
+		NewShell:      options.newShell,
+		Command:       commandArgs,
+		Switch:        options.switchWindow,
+		MaxNameLength: cfg.Behavior.WindowNameMaxLength,
 	})
 }
 

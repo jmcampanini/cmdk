@@ -47,6 +47,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Behavior.InlineActions {
 		t.Error("Behavior.InlineActions = true, want false")
 	}
+	if cfg.Behavior.WindowNameMaxLength != 20 {
+		t.Errorf("Behavior.WindowNameMaxLength = %d, want 20", cfg.Behavior.WindowNameMaxLength)
+	}
 	if cfg.Startup.Path != "" {
 		t.Errorf("Startup.Path = %q, want empty", cfg.Startup.Path)
 	}
@@ -108,6 +111,22 @@ func TestValidate_NegativeMinScore(t *testing.T) {
 	cfg.Sources["zoxide"] = SourceConfig{MinScore: -1.0}
 	if err := cfg.Validate(); err == nil {
 		t.Error("expected error for negative min_score")
+	}
+}
+
+func TestValidate_NegativeWindowNameMaxLength(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Behavior.WindowNameMaxLength = -1
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for negative window_name_max_length")
+	}
+}
+
+func TestValidate_ZeroWindowNameMaxLength(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Behavior.WindowNameMaxLength = 0
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("zero window_name_max_length should be valid: %v", err)
 	}
 }
 

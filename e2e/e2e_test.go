@@ -597,7 +597,12 @@ func shellQuoteE2E(s string) string {
 
 func runDetachedSessionWindowNew(t *testing.T, path string) string {
 	t.Helper()
-	xdg := writeConfig(t, "")
+	return runDetachedSessionWindowNewWithConfig(t, path, "")
+}
+
+func runDetachedSessionWindowNewWithConfig(t *testing.T, path, configContent string) string {
+	t.Helper()
+	xdg := writeConfig(t, configContent)
 	marker := filepath.Join(t.TempDir(), "window-exit")
 	sess := "cmdk-window-" + strings.ReplaceAll(t.Name(), "/", "-") + fmt.Sprintf("-%d", time.Now().UnixNano())
 	shellCmd := fmt.Sprintf("%s session window %s --new; echo EXITCODE=$? > %s; sleep 1",
@@ -688,6 +693,47 @@ func TestE2E_SessionWindowCreatesNonGitDirectorySession(t *testing.T) {
 	windows := windowNamesE2E(t, session.ID)
 	if windows["scratch"] != dirReal {
 		t.Errorf("scratch window cwd = %q, want %q (all windows: %v)", windows["scratch"], dirReal, windows)
+	}
+}
+
+func TestE2E_SessionWindowTruncatesLongDefaultWindowName(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "issue-117-window-name-maximum-limit")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dirReal := realPathE2E(t, dir)
+
+	result := runDetachedSessionWindowNew(t, dir)
+	if result != "EXITCODE=0\n" {
+		t.Fatalf("window exit marker = %q, want EXITCODE=0", result)
+	}
+
+	session := findManagedSessionE2E(t, dirReal)
+	windows := windowNamesE2E(t, session.ID)
+	if windows["issue-117-window-na…"] != dirReal {
+		t.Errorf("truncated window cwd = %q, want %q (all windows: %v)", windows["issue-117-window-na…"], dirReal, windows)
+	}
+	if _, ok := windows["issue-117-window-name-maximum-limit"]; ok {
+		t.Error("window kept its full-length name; expected truncation to 20 runes")
+	}
+}
+
+func TestE2E_SessionWindowZeroMaxLengthKeepsFullName(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "issue-117-window-name-maximum-limit")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dirReal := realPathE2E(t, dir)
+
+	result := runDetachedSessionWindowNewWithConfig(t, dir, "[behavior]\nwindow_name_max_length = 0\n")
+	if result != "EXITCODE=0\n" {
+		t.Fatalf("window exit marker = %q, want EXITCODE=0", result)
+	}
+
+	session := findManagedSessionE2E(t, dirReal)
+	windows := windowNamesE2E(t, session.ID)
+	if windows["issue-117-window-name-maximum-limit"] != dirReal {
+		t.Errorf("full-name window cwd = %q, want %q (all windows: %v)", windows["issue-117-window-name-maximum-limit"], dirReal, windows)
 	}
 }
 

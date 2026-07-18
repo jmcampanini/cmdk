@@ -74,7 +74,7 @@ func runAttachCommand(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	return attachResolvedSession(sessionMutationContext(cmd), plan, launchPath, defaultWindowNameForLaunchPath(launchPath))
+	return attachResolvedSession(sessionMutationContext(cmd), plan, launchPath, defaultWindowNameForLaunchPath(launchPath), cfg.Behavior.WindowNameMaxLength)
 }
 
 func attachPath(args []string, cfg config.Config, cfgPath string) (string, error) {

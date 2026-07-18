@@ -31,10 +31,11 @@ var (
 // SessionWindowOptions controls creation of a new tmux window inside the
 // cmdk-managed session described by a resolved session plan.
 type SessionWindowOptions struct {
-	Name     string
-	NewShell bool
-	Command  []string
-	Switch   bool
+	Name          string
+	NewShell      bool
+	Command       []string
+	Switch        bool
+	MaxNameLength int
 }
 
 type sessionWindowManager struct {
@@ -51,8 +52,8 @@ func CreateResolvedSessionWindow(ctx context.Context, plan resolver.Plan, launch
 
 // AttachResolvedSession attaches the current terminal to the cmdk-managed tmux
 // session described by plan, creating that managed session when it is missing.
-func AttachResolvedSession(ctx context.Context, plan resolver.Plan, launchPath, windowName string) error {
-	return sessionWindowManager{runner: execTmuxRunner{}}.attachResolvedSession(ctx, plan, launchPath, windowName)
+func AttachResolvedSession(ctx context.Context, plan resolver.Plan, launchPath, windowName string, maxNameLength int) error {
+	return sessionWindowManager{runner: execTmuxRunner{}}.attachResolvedSession(ctx, plan, launchPath, windowName, maxNameLength)
 }
 
 func (m sessionWindowManager) createResolvedWindow(ctx context.Context, plan resolver.Plan, launchPath string, opts SessionWindowOptions) error {
@@ -68,6 +69,7 @@ func (m sessionWindowManager) createResolvedWindow(ctx context.Context, plan res
 	if err := validateSessionWindowOptions(windowName, opts); err != nil {
 		return err
 	}
+	windowName = truncateWindowName(windowName, opts.MaxNameLength)
 
 	sessionID, err := m.findManagedSession(ctx, plan.SessionKey)
 	if err != nil {
@@ -91,7 +93,7 @@ func (m sessionWindowManager) createResolvedWindow(ctx context.Context, plan res
 	return nil
 }
 
-func (m sessionWindowManager) attachResolvedSession(ctx context.Context, plan resolver.Plan, launchPath, windowName string) error {
+func (m sessionWindowManager) attachResolvedSession(ctx context.Context, plan resolver.Plan, launchPath, windowName string, maxNameLength int) error {
 	ctx = m.ensureDefaults(ctx)
 
 	if err := validateSessionPlan(plan); err != nil {
@@ -103,6 +105,7 @@ func (m sessionWindowManager) attachResolvedSession(ctx context.Context, plan re
 	if err := validateWindowName(windowName); err != nil {
 		return err
 	}
+	windowName = truncateWindowName(windowName, maxNameLength)
 
 	sessionID, err := m.findAttachTargetSession(ctx, plan.SessionKey)
 	if err != nil {
@@ -174,6 +177,21 @@ func validateWindowName(windowName string) error {
 		return errors.New("window name contains control characters")
 	}
 	return nil
+}
+
+const windowNameEllipsis = "…"
+
+// truncateWindowName end-truncates windowName to at most max runes, with the
+// appended ellipsis counting toward the limit. max <= 0 disables truncation.
+func truncateWindowName(windowName string, max int) string {
+	if max <= 0 {
+		return windowName
+	}
+	runes := []rune(windowName)
+	if len(runes) <= max {
+		return windowName
+	}
+	return string(runes[:max-1]) + windowNameEllipsis
 }
 
 func validateLaunchPath(launchPath string) error {

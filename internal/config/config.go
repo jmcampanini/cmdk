@@ -44,11 +44,12 @@ type Action struct {
 }
 
 type Behavior struct {
-	AutoSelectSingle bool `toml:"auto_select_single"`
-	BellToTop        bool `toml:"bell_to_top"`
-	WrapList         bool `toml:"wrap_list"`
-	StartInFilter    bool `toml:"start_in_filter"`
-	InlineActions    bool `toml:"inline_actions"`
+	AutoSelectSingle    bool `toml:"auto_select_single"`
+	BellToTop           bool `toml:"bell_to_top"`
+	WrapList            bool `toml:"wrap_list"`
+	StartInFilter       bool `toml:"start_in_filter"`
+	InlineActions       bool `toml:"inline_actions"`
+	WindowNameMaxLength int  `toml:"window_name_max_length"`
 }
 
 type Timeout struct {
@@ -132,10 +133,11 @@ var validStageKey = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 func DefaultConfig() Config {
 	return Config{
 		Behavior: Behavior{
-			AutoSelectSingle: true,
-			BellToTop:        true,
-			WrapList:         true,
-			StartInFilter:    true,
+			AutoSelectSingle:    true,
+			BellToTop:           true,
+			WrapList:            true,
+			StartInFilter:       true,
+			WindowNameMaxLength: 20,
 		},
 		Timeout: Timeout{Fetch: 2 * time.Second, Picker: 2 * time.Second},
 		Sources: map[string]SourceConfig{"zoxide": {Limit: 0}},
@@ -160,6 +162,9 @@ func (c Config) Validate() error {
 		if sc.MinScore < 0 {
 			return fmt.Errorf("sources.%s.min_score cannot be negative", name)
 		}
+	}
+	if c.Behavior.WindowNameMaxLength < 0 {
+		return errors.New("behavior.window_name_max_length cannot be negative")
 	}
 	if err := validateActions(c.Actions); err != nil {
 		return err

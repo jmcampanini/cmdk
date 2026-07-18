@@ -272,3 +272,69 @@ func TestSessionWindowCommandParsesFlagsOnlyBeforeDashDash(t *testing.T) {
 		})
 	}
 }
+
+func TestRunSessionWindowCommandThreadsConfiguredWindowNameMaxLength(t *testing.T) {
+	xdg := useTempConfigHome(t)
+	cfgDir := filepath.Join(xdg, "cmdk")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.toml"), []byte("[behavior]\nwindow_name_max_length = 7\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(t.TempDir(), "a-very-long-directory-name")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	oldCreate := createResolvedSessionWindow
+	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
+
+	called := false
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, _ string, opts tmux.SessionWindowOptions) error {
+		called = true
+		if opts.Name != "a-very-long-directory-name" {
+			t.Errorf("Name = %q, want untruncated basename", opts.Name)
+		}
+		if opts.MaxNameLength != 7 {
+			t.Errorf("MaxNameLength = %d, want configured 7", opts.MaxNameLength)
+		}
+		return nil
+	}
+
+	cmd := &cobra.Command{}
+	if err := runSessionWindowCommand(cmd, []string{dir}, sessionWindowOptions{newShell: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("createResolvedSessionWindow was not called")
+	}
+}
+
+func TestRunSessionWindowCommandDefaultsWindowNameMaxLength(t *testing.T) {
+	useTempConfigHome(t)
+	dir := filepath.Join(t.TempDir(), "scratch")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	oldCreate := createResolvedSessionWindow
+	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
+
+	called := false
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, _ string, opts tmux.SessionWindowOptions) error {
+		called = true
+		if opts.MaxNameLength != 20 {
+			t.Errorf("MaxNameLength = %d, want default 20", opts.MaxNameLength)
+		}
+		return nil
+	}
+
+	cmd := &cobra.Command{}
+	if err := runSessionWindowCommand(cmd, []string{dir}, sessionWindowOptions{newShell: true}); err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("createResolvedSessionWindow was not called")
+	}
+}
