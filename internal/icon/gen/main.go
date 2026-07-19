@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf16"
 )
 
 const (
@@ -33,7 +34,7 @@ type glyphEntry struct {
 
 type entry struct {
 	Alias       string
-	Code        uint64
+	Code        rune
 	Description string
 }
 
@@ -50,42 +51,14 @@ func run() error {
 		return fmt.Errorf("download: %w", err)
 	}
 
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return fmt.Errorf("parse json: %w", err)
-	}
-
-	var entries []entry
-	for key, val := range raw {
-		if key == "METADATA" || !hasAllowedPrefix(key) {
-			continue
-		}
-
-		var g glyphEntry
-		if err := json.Unmarshal(val, &g); err != nil {
-			return fmt.Errorf("parse entry %q: %w", key, err)
-		}
-
-		code, err := strconv.ParseUint(g.Code, 16, 32)
-		if err != nil {
-			return fmt.Errorf("parse code for %q (%s): %w", key, g.Code, err)
-		}
-
-		entries = append(entries, entry{
-			Alias:       "nf-" + key,
-			Code:        code,
-			Description: descriptionFromAlias(key),
-		})
-	}
-
-	slices.SortFunc(entries, func(a, b entry) int {
-		return strings.Compare(a.Alias, b.Alias)
-	})
-
-	src := generate(entries)
-	formatted, err := format.Source(src)
+	entries, err := buildEntries(data)
 	if err != nil {
-		return fmt.Errorf("gofmt: %w", err)
+		return err
+	}
+
+	formatted, err := render(entries)
+	if err != nil {
+		return err
 	}
 
 	pkgDir, err := packageDir()
@@ -99,6 +72,67 @@ func run() error {
 
 	fmt.Printf("wrote %d entries to %s\n", len(entries), outPath)
 	return nil
+}
+
+func buildEntries(data []byte) ([]entry, error) {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("parse json: %w", err)
+	}
+
+	var entries []entry
+	for key, val := range raw {
+		if key == "METADATA" || !hasAllowedPrefix(key) {
+			continue
+		}
+
+		var g glyphEntry
+		if err := json.Unmarshal(val, &g); err != nil {
+			return nil, fmt.Errorf("parse entry %q: %w", key, err)
+		}
+
+		code, err := parseGlyphCode(key, g.Code)
+		if err != nil {
+			return nil, err
+		}
+
+		entries = append(entries, entry{
+			Alias:       "nf-" + key,
+			Code:        code,
+			Description: descriptionFromAlias(key),
+		})
+	}
+
+	slices.SortFunc(entries, func(a, b entry) int {
+		return strings.Compare(a.Alias, b.Alias)
+	})
+	return entries, nil
+}
+
+// parseGlyphCode accepts only Unicode scalar values: anything above
+// unicode.MaxRune or in the surrogate range would encode as U+FFFD
+// replacement characters in the generated source.
+func parseGlyphCode(key, code string) (rune, error) {
+	v, err := strconv.ParseUint(code, 16, 32)
+	if err != nil {
+		return 0, fmt.Errorf("parse code for %q (%s): %w", key, code, err)
+	}
+	if v > unicode.MaxRune {
+		return 0, fmt.Errorf("code for %q (%s): exceeds max Unicode code point U+10FFFF", key, code)
+	}
+	r := rune(v)
+	if utf16.IsSurrogate(r) {
+		return 0, fmt.Errorf("code for %q (%s): surrogate code point is not a Unicode scalar value", key, code)
+	}
+	return r, nil
+}
+
+func render(entries []entry) ([]byte, error) {
+	formatted, err := format.Source(generate(entries))
+	if err != nil {
+		return nil, fmt.Errorf("gofmt: %w", err)
+	}
+	return formatted, nil
 }
 
 func download(url string) ([]byte, error) {
@@ -141,8 +175,7 @@ func generate(entries []entry) []byte {
 	b.WriteString("var entries = []Entry{\n")
 
 	for _, e := range entries {
-		icon := string(rune(e.Code))
-		fmt.Fprintf(&b, "\t{%q, %q, %q},\n", e.Alias, icon, e.Description)
+		fmt.Fprintf(&b, "\t{%q, %q, %q},\n", e.Alias, string(e.Code), e.Description)
 	}
 
 	b.WriteString("}\n")

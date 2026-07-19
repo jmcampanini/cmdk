@@ -1,4 +1,4 @@
-.PHONY: help build test test-unit test-e2e lint lint-fix fmt fmt-check tidy tidy-check check clean gen-icons
+.PHONY: help build test test-unit test-e2e test-gen-icons lint lint-fix fmt fmt-check tidy tidy-check check clean gen-icons
 
 BUILD_DIR   := build
 BINARY      := $(BUILD_DIR)/cmdk
@@ -102,3 +102,6 @@ clean: ## Remove build artifacts, coverage files, and test cache.
 
 gen-icons: ## Regenerate icon entries from Nerd Fonts glyphnames.json.
 	go run ./internal/icon/gen
+
+test-gen-icons: ## Run the icon generator tests.
+	go test -race ./internal/icon/gen
