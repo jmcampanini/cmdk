@@ -68,7 +68,7 @@ func ConfigDocs() []SectionDoc {
 				{Name: "key", Type: "string", Description: "Template variable name for the stage's output value.", Validation: reservedStageKeyValidation},
 				{Name: "text", Type: "string", Description: "Prompt label (Go template). Only for type = \"prompt\".", Validation: "required for prompt; forbidden for picker"},
 				{Name: "default", Type: "string", Description: "Default value pre-filled in prompt (Go template). Only for type = \"prompt\"."},
-				{Name: "source", Type: "string", Description: "Shell command run via sh -c that produces newline-separated entries (Go template). Only for type = \"picker\". stdout is capped at 4 MiB and stderr at 64 KiB; output beyond the cap is truncated at the last complete line.", Validation: "required for picker; forbidden for prompt"},
+				{Name: "source", Type: "string", Description: "Shell command run via sh -c that produces newline-separated entries (Go template). Only for type = \"picker\". stdout is capped at 4 MiB and stderr at 64 KiB; stdout beyond the cap fails the source with an error screen instead of showing a partial list.", Validation: "required for picker; forbidden for prompt"},
 				{Name: "delimiter", Type: "string", Description: "Field delimiter for splitting source lines into parts. Only for type = \"picker\". Defaults to \"|\" when display or pass is set.", Validation: "forbidden for prompt"},
 				{Name: "display", Type: "int", Description: "1-based field index to display and match against. 0 = whole line (default). Only for type = \"picker\".", Validation: "forbidden for prompt; cannot be negative"},
 				{Name: "pass", Type: "int", Description: "1-based field index to pass as the stage result value. 0 = whole line (default). Only for type = \"picker\".", Validation: "forbidden for prompt; cannot be negative"},
@@ -120,12 +120,13 @@ func ConfigDocs() []SectionDoc {
 		},
 		{
 			Name:        "timeout",
-			Description: "Timeouts for async operations.",
+			Description: "Timeouts for external commands cmdk runs.",
 			Fields: []FieldDoc{
-				{Name: "fetch", Type: "duration", Description: "Max wait for source data. Accepts Go duration strings: ms, s, m, h.", Validation: "cannot be negative; if non-zero, must be >= 1ms"},
+				{Name: "fetch", Type: "duration", Description: "Max wait for read-only queries that populate lists (tmux list commands, git probes, zoxide). Zero uses the default of 2s; queries always run under a deadline. Accepts Go duration strings: ms, s, m, h.", Validation: "cannot be negative; if non-zero, must be >= 1ms"},
 				{Name: "picker", Type: "duration", Description: "Max wait for picker stage source commands and launch_path_cmd commands. Zero means no timeout; with no timeout, a hanging command holds the launcher until it exits or cmdk is signaled.", Validation: "cannot be negative; if non-zero, must be >= 1ms"},
+				{Name: "mutation", Type: "duration", Description: "Max wait for state-changing tmux commands (new-session, new-window, set-option, switch-client). Zero uses the default of 5s; mutations always run under a deadline so a wedged tmux server cannot hang cmdk. Attaching to a session is not a mutation and never times out.", Validation: "cannot be negative; if non-zero, must be >= 1ms"},
 			},
-			Example: "[timeout]\nfetch = \"5s\"    # e.g. 500ms, 2s, 1m\npicker = \"2s\"",
+			Example: "[timeout]\nfetch = \"5s\"    # e.g. 500ms, 2s, 1m\npicker = \"2s\"\nmutation = \"5s\"",
 		},
 		{
 			Name:        "sources",
@@ -290,8 +291,8 @@ EXECUTION
   cmdk does not pass CMDK_* action/stage data to tmux with -e or set it in the
   managed session environment; use template variables in cmd.
 
-  In shell mode, commands are passed to sh -c via syscall.Exec, replacing the
-  cmdk process in the current pane. If an effective launch path exists, cmdk
+  In shell mode, commands are passed to sh -c via the exec(2) syscall,
+  replacing the cmdk process in the current pane. If an effective launch path exists, cmdk
   chdirs there first; shell mode means "do not create a session window", not
   "ignore the directory context".
 
@@ -301,7 +302,9 @@ EXECUTION
   and shows an error screen with the rendered command, exit status, and
   captured stdout/stderr; the same details are appended to the log file.
   Captured output is bounded (launch_path_cmd: 8 KiB stdout / 32 KiB stderr;
-  picker: 4 MiB stdout / 64 KiB stderr).
+  picker: 4 MiB stdout / 64 KiB stderr). stdout beyond its cap fails the
+  command rather than being parsed partially; stderr beyond its cap is
+  truncated with an annotation.
 
   Root/session actions without launch_path or launch_path_cmd default to shell
   mode and inherit the working directory from where cmdk was launched. Relative
@@ -339,6 +342,8 @@ func defaultValue(cfg Config, section, field string) string {
 			return fmt.Sprintf("%q", cfg.Timeout.Fetch.String())
 		case "picker":
 			return fmt.Sprintf("%q", cfg.Timeout.Picker.String())
+		case "mutation":
+			return fmt.Sprintf("%q", cfg.Timeout.Mutation.String())
 		}
 	case "sources":
 		zoxide := cfg.Sources["zoxide"]

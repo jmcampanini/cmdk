@@ -123,8 +123,19 @@ func TestCheckPrerequisiteRejectsMalformedVersion(t *testing.T) {
 func TestCheckPrerequisiteRejectsOversizedOutput(t *testing.T) {
 	writeFakeTmux(t, "i=0\nwhile [ \"$i\" -le 5000 ]; do printf x; i=$((i + 1)); done")
 	err := checkPrerequisite(context.Background(), time.Second)
-	if err == nil || !strings.Contains(err.Error(), "oversized output") {
-		t.Fatalf("error = %v, want oversized output error", err)
+	if err == nil || !strings.Contains(err.Error(), "output exceeds") {
+		t.Fatalf("error = %v, want output-limit error", err)
+	}
+	if !strings.Contains(err.Error(), "tmux 3.2 or newer is required") {
+		t.Fatalf("error = %v, want prerequisite framing", err)
+	}
+}
+
+func TestCheckPrerequisiteRejectsMultilineOutput(t *testing.T) {
+	writeFakeTmux(t, "printf 'tmux 3.2\\nsecond line\\n'")
+	err := checkPrerequisite(context.Background(), time.Second)
+	if err == nil || !strings.Contains(err.Error(), "exactly one line") {
+		t.Fatalf("error = %v, want one-line violation", err)
 	}
 }
 
@@ -150,11 +161,13 @@ func TestCheckPrerequisiteReportsParentDeadline(t *testing.T) {
 }
 
 func TestCheckPrerequisiteBoundsInheritedOutputDescriptors(t *testing.T) {
+	// The version answer arrived and tmux -V exited cleanly; a stray
+	// descendant holding the inherited output descriptors must neither fail
+	// the check nor delay it beyond the bounded pipe drain.
 	writeFakeTmux(t, "/bin/sleep 1 &\nprintf '%s\\n' 'tmux 3.2'")
 	start := time.Now()
-	err := checkPrerequisite(context.Background(), time.Second)
-	if err == nil || !strings.Contains(err.Error(), "tmux -V failed") {
-		t.Fatalf("error = %v, want inherited output descriptor failure", err)
+	if err := checkPrerequisite(context.Background(), time.Second); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
 		t.Fatalf("check took %s, want bounded wait", elapsed)

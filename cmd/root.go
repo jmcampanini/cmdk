@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"syscall"
 
 	tea "charm.land/bubbletea/v2"
 	log "charm.land/log/v2"
 	"github.com/spf13/cobra"
 
+	"github.com/jmcampanini/cmdk/internal/cmdrun"
 	"github.com/jmcampanini/cmdk/internal/config"
 	"github.com/jmcampanini/cmdk/internal/generator"
 	"github.com/jmcampanini/cmdk/internal/item"
@@ -141,15 +141,16 @@ func runRootCommand(cmd *cobra.Command, _ []string) error {
 		Rules:             rules,
 		SessionTruncation: tmuxTrunc,
 	}
+	fetchTimeout := cfg.Timeout.EffectiveFetch()
 	sources := []generator.Source{
 		traceSource(tr, "source/windows", generator.Source{Name: "windows", Async: true, Fetch: func(ctx context.Context) ([]item.Item, error) {
-			return tmux.ListWindowsWithDisplay(ctx, tmuxDisplay)
+			return tmux.ListWindowsWithDisplay(ctx, fetchTimeout, tmuxDisplay)
 		}}),
 		traceSource(tr, "source/sessions", generator.Source{Name: "sessions", Async: true, Fetch: func(ctx context.Context) ([]item.Item, error) {
-			return tmux.ListSessionsWithDisplay(ctx, tmuxDisplay)
+			return tmux.ListSessionsWithDisplay(ctx, fetchTimeout, tmuxDisplay)
 		}}),
 		traceSource(tr, "source/zoxide", generator.Source{Name: "zoxide", Limit: zoxideCfg.Limit, Async: true, Fetch: func(ctx context.Context) ([]item.Item, error) {
-			return zoxide.ListDirs(ctx, zoxideCfg.MinScore, home, shortenHome, rules, trunc)
+			return zoxide.ListDirs(ctx, fetchTimeout, zoxideCfg.MinScore, home, shortenHome, rules, trunc)
 		}}),
 	}
 	if cfgErr != nil {
@@ -162,7 +163,7 @@ func runRootCommand(cmd *cobra.Command, _ []string) error {
 	reg := generator.NewRegistry()
 	reg.Register("dir-actions", generator.NewActionsGenerator())
 	reg.Register("session-children", generator.NewSessionGenerator(func(ctx context.Context, session item.Item) ([]item.Item, error) {
-		return tmux.ListWindowsForSessionWithDisplay(ctx, session, tmuxDisplay)
+		return tmux.ListWindowsForSessionWithDisplay(ctx, fetchTimeout, session, tmuxDisplay)
 	}))
 	reg.MapType("dir", "dir-actions")
 	reg.MapType("session", "session-children")
@@ -170,7 +171,7 @@ func runRootCommand(cmd *cobra.Command, _ []string) error {
 	ctx := generator.Context{PaneID: paneID, Config: cfg}
 
 	if timingsFlag {
-		reg.Register("root", generator.NewRootGenerator(cfg.Timeout.Fetch, sources...))
+		reg.Register("root", generator.NewRootGenerator(fetchTimeout, sources...))
 		reg.MapType("", "root")
 		gen, err := reg.Resolve(nil)
 		if err != nil {
@@ -218,7 +219,7 @@ func runRootCommand(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	reg.Register("root", generator.NewRootGenerator(cfg.Timeout.Fetch, syncSources...))
+	reg.Register("root", generator.NewRootGenerator(fetchTimeout, syncSources...))
 	reg.MapType("", "root")
 	gen, err := reg.Resolve(nil)
 	if err != nil {
@@ -248,7 +249,7 @@ func runRootCommand(cmd *cobra.Command, _ []string) error {
 		tuiAsync[i] = tui.AsyncSource{
 			Name:    src.Name,
 			Limit:   src.Limit,
-			Timeout: cfg.Timeout.Fetch,
+			Timeout: fetchTimeout,
 			Fetch:   src.Fetch,
 		}
 	}
@@ -279,7 +280,7 @@ func runRootCommand(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 	log.Info("executing", "item", sel.Display, "cmd", sel.Cmd, "data", sel.Data)
-	if err := launch.Execute(syscall.Exec); err != nil {
+	if err := launch.Execute(cmdrun.Replace); err != nil {
 		log.Error("launch failed", "item", sel.Display, "error", err)
 		return err
 	}

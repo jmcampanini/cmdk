@@ -1,1 +1,22 @@
 version: "2"
+
+linters:
+  enable:
+    - depguard
+  settings:
+    depguard:
+      rules:
+        # internal/cmdrun owns every way cmdk starts another process
+        # (issue #87). Production code anywhere else must go through its
+        # Query/Run/Stream/Replace entry points instead of os/exec or
+        # process-control syscalls. Tests are exempt: fakes and adversarial
+        # helpers legitimately build processes and inspect exec error types.
+        subprocess-boundary:
+          files:
+            - "!$test"
+            - "!**/internal/cmdrun/**"
+          deny:
+            - pkg: "os/exec"
+              desc: "subprocess execution is owned by internal/cmdrun; use cmdrun.Query/Run/Stream/Replace"
+            - pkg: "syscall"
+              desc: "process-control syscalls are owned by internal/cmdrun"

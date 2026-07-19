@@ -3,15 +3,24 @@ package zoxide
 import (
 	"cmp"
 	"context"
-	"fmt"
-	"os/exec"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	log "charm.land/log/v2"
+	"github.com/jmcampanini/cmdk/internal/cmdrun"
 	"github.com/jmcampanini/cmdk/internal/item"
 	"github.com/jmcampanini/cmdk/internal/pathfmt"
+)
+
+const (
+	// A mature zoxide database legitimately produces thousands of
+	// "score path" lines (tens of KiB to low MiB); the cap sits far above
+	// that, and exceeding it fails the source rather than showing a
+	// silently shortened list.
+	zoxideMaxStdout = 4 << 20
+	zoxideMaxStderr = 64 << 10
 )
 
 func splitScorePath(line string) (float64, string, bool) {
@@ -84,14 +93,19 @@ func ParseDirs(output string, minScore float64, home, shortenHome string, rules 
 	return items
 }
 
-func ListDirs(ctx context.Context, minScore float64, home, shortenHome string, rules []pathfmt.Rule, trunc pathfmt.Truncation) ([]item.Item, error) {
-	// TODO(#87): use a shared bounded stdout/stderr runner for zoxide output.
-	out, err := exec.CommandContext(ctx, "zoxide", "query", "--list", "--score").Output()
+// ListDirs lists zoxide's scored directories. timeout bounds the zoxide
+// invocation (callers pass the configured fetch timeout).
+func ListDirs(ctx context.Context, timeout time.Duration, minScore float64, home, shortenHome string, rules []pathfmt.Rule, trunc pathfmt.Truncation) ([]item.Item, error) {
+	res, err := cmdrun.Query(ctx, cmdrun.QuerySpec{
+		Op:        "zoxide query",
+		Argv:      []string{"zoxide", "query", "--list", "--score"},
+		Timeout:   timeout,
+		Shape:     cmdrun.ShapeLines,
+		MaxStdout: zoxideMaxStdout,
+		MaxStderr: zoxideMaxStderr,
+	})
 	if err != nil {
-		if ctx.Err() != nil {
-			return nil, fmt.Errorf("zoxide did not respond within the configured timeout: %w", err)
-		}
 		return nil, err
 	}
-	return ParseDirs(string(out), minScore, home, shortenHome, rules, trunc), nil
+	return ParseDirs(res.Stdout, minScore, home, shortenHome, rules, trunc), nil
 }

@@ -98,6 +98,52 @@ func TestValidate_NegativeTimeout(t *testing.T) {
 	}
 }
 
+func TestValidate_MutationTimeout(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Timeout.Mutation = -1 * time.Second
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for negative mutation timeout")
+	}
+
+	cfg = DefaultConfig()
+	cfg.Timeout.Mutation = 500 * time.Microsecond
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for sub-millisecond mutation timeout")
+	}
+
+	cfg = DefaultConfig()
+	cfg.Timeout.Mutation = 0
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("zero mutation timeout should be valid (means default): %v", err)
+	}
+}
+
+func TestTimeout_EffectiveDefaults(t *testing.T) {
+	var zero Timeout
+	if got := zero.EffectiveFetch(); got != 2*time.Second {
+		t.Errorf("EffectiveFetch() = %s for zero value, want 2s default", got)
+	}
+	if got := zero.EffectiveMutation(); got != 5*time.Second {
+		t.Errorf("EffectiveMutation() = %s for zero value, want 5s default", got)
+	}
+
+	set := Timeout{Fetch: 7 * time.Second, Mutation: 9 * time.Second}
+	if got := set.EffectiveFetch(); got != 7*time.Second {
+		t.Errorf("EffectiveFetch() = %s, want configured 7s", got)
+	}
+	if got := set.EffectiveMutation(); got != 9*time.Second {
+		t.Errorf("EffectiveMutation() = %s, want configured 9s", got)
+	}
+
+	negative := Timeout{Fetch: -time.Second, Mutation: -time.Second}
+	if got := negative.EffectiveFetch(); got != 2*time.Second {
+		t.Errorf("EffectiveFetch() = %s for negative value, want 2s default", got)
+	}
+	if got := negative.EffectiveMutation(); got != 5*time.Second {
+		t.Errorf("EffectiveMutation() = %s for negative value, want 5s default", got)
+	}
+}
+
 func TestValidate_NegativeLimit(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Sources["zoxide"] = SourceConfig{Limit: -1}
@@ -688,6 +734,28 @@ func TestValidate_StagePickerForbidsAllowEmpty(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "allow_empty") {
 		t.Errorf("error = %q, want to contain 'allow_empty'", err.Error())
+	}
+}
+
+func TestLoad_MutationTimeoutFromTOML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte(`
+[timeout]
+mutation = "7s"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Timeout.Mutation != 7*time.Second {
+		t.Errorf("Timeout.Mutation = %s, want configured 7s", cfg.Timeout.Mutation)
+	}
+	if cfg.Timeout.EffectiveMutation() != 7*time.Second {
+		t.Errorf("EffectiveMutation() = %s, want configured 7s", cfg.Timeout.EffectiveMutation())
 	}
 }
 

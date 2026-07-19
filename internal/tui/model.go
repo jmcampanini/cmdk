@@ -728,7 +728,7 @@ func (m Model) advanceStage() Model {
 			noItems := &cmdrun.CommandError{
 				Op:       "picker source",
 				Kind:     cmdrun.KindOutput,
-				Rendered: rendered,
+				Command:  rendered,
 				Timeout:  pickerTimeout,
 				ExitCode: 0,
 				Stdout:   result.Stdout,
@@ -758,8 +758,8 @@ type pickerRunResult struct {
 const (
 	// Picker stdout is parsed into an interactive fuzzy list; 4 MiB is far
 	// beyond a usable list size, so the cap only guards against runaway
-	// producers. Overflow truncates at the last complete line instead of
-	// failing so a huge-but-valid source degrades rather than errors.
+	// producers. Exceeding it fails the source rather than parsing a
+	// silently shortened list.
 	pickerMaxStdoutBytes = 4 << 20
 	pickerMaxStderrBytes = 64 << 10
 )
@@ -778,23 +778,11 @@ func runPickerSource(rendered string, timeout time.Duration, stage item.Stage) (
 		return pickerRunResult{}, err
 	}
 
-	stdout := res.Stdout
-	if res.StdoutTruncated {
-		log.Warn("picker source stdout truncated", "limit", pickerMaxStdoutBytes)
-		stdout = trimToLastNewline(stdout)
-	}
 	return pickerRunResult{
-		Items:  pickerItemsFromOutput(stdout, stage),
-		Stdout: res.AnnotatedStdout(),
+		Items:  pickerItemsFromOutput(res.Stdout, stage),
+		Stdout: res.Stdout,
 		Stderr: res.AnnotatedStderr(),
 	}, nil
-}
-
-func trimToLastNewline(s string) string {
-	if i := strings.LastIndexByte(s, '\n'); i >= 0 {
-		return s[:i+1]
-	}
-	return ""
 }
 
 func pickerItemsFromOutput(output string, stage item.Stage) []item.Item {
@@ -939,8 +927,8 @@ func commandFailureDiagnostics(summary string, contextFields []item.DiagnosticFi
 		sections = append(sections, item.DiagnosticSection{Title: "Command template", Body: cmdTemplate})
 	}
 	if cmdErr != nil {
-		if cmdErr.Rendered != "" {
-			sections = append(sections, item.DiagnosticSection{Title: "Rendered command", Body: cmdErr.Rendered})
+		if cmdErr.Command != "" {
+			sections = append(sections, item.DiagnosticSection{Title: "Rendered command", Body: cmdErr.Command})
 		}
 		sections = append(sections,
 			item.DiagnosticSection{Title: "stdout", Body: formatCapturedCommandOutput(cmdErr.Stdout)},
@@ -958,7 +946,7 @@ func commandErrorLogFields(err error) []any {
 	if errors.As(err, &cmdErr) {
 		return []any{
 			"error", cmdErr.Headline(),
-			"rendered", cmdErr.Rendered,
+			"command", cmdErr.Command,
 			"timeout", cmdErr.Timeout,
 			"exit_code", cmdErr.ExitCode,
 			"stdout", logExcerpt(cmdErr.Stdout),

@@ -31,12 +31,14 @@ func fetchSourceCmd(src AsyncSource) tea.Cmd {
 			return sourceResultMsg{Name: src.Name, Err: fmt.Errorf("no fetch function")}
 		}
 
-		timeout := src.Timeout
-		if timeout <= 0 {
-			timeout = 2 * time.Second
+		// Timeout <= 0 skips the outer fetch deadline; every external
+		// command a source runs still carries its own per-command bound.
+		ctx := context.Background()
+		if src.Timeout > 0 {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, src.Timeout)
+			defer cancel()
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
 
 		items, err := func() (result []item.Item, retErr error) {
 			defer func() {

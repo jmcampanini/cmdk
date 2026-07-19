@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func requireGit(t *testing.T) {
@@ -56,7 +57,7 @@ func initRepo(t *testing.T, path string) {
 
 func resolveForTest(t *testing.T, path string) Plan {
 	t.Helper()
-	plan, err := Resolve(context.Background(), path)
+	plan, err := Resolve(context.Background(), path, time.Second)
 	if err != nil {
 		t.Fatalf("Resolve(%q) returned error: %v", path, err)
 	}
@@ -88,7 +89,7 @@ func assertPlan(t *testing.T, got Plan, want Plan) {
 
 func TestResolve_PathDoesNotExist(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
-	_, err := Resolve(context.Background(), missing)
+	_, err := Resolve(context.Background(), missing, time.Second)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -102,7 +103,7 @@ func TestResolve_PathIsNotDirectory(t *testing.T) {
 	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Resolve(context.Background(), path)
+	_, err := Resolve(context.Background(), path, time.Second)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -112,7 +113,7 @@ func TestResolve_PathIsNotDirectory(t *testing.T) {
 }
 
 func TestResolve_EmptyPathIsRequired(t *testing.T) {
-	_, err := Resolve(context.Background(), "")
+	_, err := Resolve(context.Background(), "", time.Second)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -122,7 +123,7 @@ func TestResolve_EmptyPathIsRequired(t *testing.T) {
 }
 
 func TestTrimCommandLinePreservesPathTrailingNewlines(t *testing.T) {
-	got := trimCommandLine([]byte("/tmp/repo\n\n"))
+	got := trimCommandLine("/tmp/repo\n\n")
 	want := "/tmp/repo\n"
 	if got != want {
 		t.Errorf("trimCommandLine() = %q, want %q", got, want)
@@ -137,7 +138,7 @@ func TestResolve_PropagatesCanceledGitProbe(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := Resolve(ctx, dir)
+	_, err := Resolve(ctx, dir, time.Second)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -153,7 +154,7 @@ func TestResolve_PropagatesGitExecFailure(t *testing.T) {
 	}
 	t.Setenv("PATH", "")
 
-	_, err := Resolve(context.Background(), dir)
+	_, err := Resolve(context.Background(), dir, time.Second)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -203,7 +204,7 @@ func TestResolve_PropagatesCorruptGitMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := Resolve(context.Background(), dir)
+	_, err := Resolve(context.Background(), dir, time.Second)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -350,7 +351,7 @@ func TestResolve_GroveProbeReturnsStatErrorWhenNoValidChild(t *testing.T) {
 	}
 	symlinkOrSkip(t, "main", filepath.Join(container, "main"))
 
-	_, err := Resolve(context.Background(), container)
+	_, err := Resolve(context.Background(), container, time.Second)
 	if err == nil {
 		t.Fatal("expected error")
 	}

@@ -53,8 +53,36 @@ type Behavior struct {
 }
 
 type Timeout struct {
-	Fetch  time.Duration `toml:"fetch"`
-	Picker time.Duration `toml:"picker"`
+	Fetch    time.Duration `toml:"fetch"`
+	Picker   time.Duration `toml:"picker"`
+	Mutation time.Duration `toml:"mutation"`
+}
+
+const (
+	defaultFetchTimeout = 2 * time.Second
+	// Mutations are local tmux-server IPC that normally completes in
+	// milliseconds; the generous default only bounds a wedged server.
+	defaultMutationTimeout = 5 * time.Second
+)
+
+// EffectiveFetch is the per-command deadline for read-only external queries
+// (tmux list commands, git probes, zoxide). Zero or unset means the default;
+// external queries always run under a deadline.
+func (t Timeout) EffectiveFetch() time.Duration {
+	if t.Fetch > 0 {
+		return t.Fetch
+	}
+	return defaultFetchTimeout
+}
+
+// EffectiveMutation is the per-command deadline for state-changing tmux
+// commands (new-session, new-window, set-option, switch-client). Zero or
+// unset means the default; mutations always run under a deadline.
+func (t Timeout) EffectiveMutation() time.Duration {
+	if t.Mutation > 0 {
+		return t.Mutation
+	}
+	return defaultMutationTimeout
 }
 
 type SourceConfig struct {
@@ -139,7 +167,7 @@ func DefaultConfig() Config {
 			StartInFilter:       true,
 			WindowNameMaxLength: 20,
 		},
-		Timeout: Timeout{Fetch: 2 * time.Second, Picker: 2 * time.Second},
+		Timeout: Timeout{Fetch: defaultFetchTimeout, Picker: 2 * time.Second, Mutation: defaultMutationTimeout},
 		Sources: map[string]SourceConfig{"zoxide": {Limit: 0}},
 		Display: Display{ShortenHome: "~", TmuxSessionTruncationLength: 2},
 	}
@@ -153,6 +181,9 @@ func (c Config) Validate() error {
 		return err
 	}
 	if err := validateTimeout("picker", c.Timeout.Picker); err != nil {
+		return err
+	}
+	if err := validateTimeout("mutation", c.Timeout.Mutation); err != nil {
 		return err
 	}
 	for name, sc := range c.Sources {

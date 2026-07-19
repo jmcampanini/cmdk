@@ -8,7 +8,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/jmcampanini/cmdk/internal/cmdrun"
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
@@ -291,16 +293,14 @@ func ParseWindowsWithDisplay(output string, display DisplayOptions) ([]item.Item
 	return items, nil
 }
 
-func ListWindows(ctx context.Context) ([]item.Item, error) {
-	return ListWindowsWithDisplay(ctx, DisplayOptions{})
-}
-
-func ListWindowsWithDisplay(ctx context.Context, display DisplayOptions) ([]item.Item, error) {
-	out, err := tmuxOutput(ctx, "list-windows", "-a", "-F", tmuxListWindowsFormat)
+// ListWindowsWithDisplay lists every window across all tmux sessions. timeout
+// bounds the tmux invocation (callers pass the configured fetch timeout).
+func ListWindowsWithDisplay(ctx context.Context, timeout time.Duration, display DisplayOptions) ([]item.Item, error) {
+	res, err := tmuxQuery(ctx, tmuxQuerySpec(cmdrun.ShapeLines, timeout, "list-windows", "-a", "-F", tmuxListWindowsFormat))
 	if err != nil {
 		return nil, err
 	}
-	return ParseWindowsWithDisplay(string(out), display)
+	return ParseWindowsWithDisplay(res.Stdout, display)
 }
 
 const (
@@ -453,21 +453,19 @@ func tmuxWindowDisplay(windowName, sessionDisplay string) string {
 	return display
 }
 
-func ListWindowsForSession(ctx context.Context, session item.Item) ([]item.Item, error) {
-	return ListWindowsForSessionWithDisplay(ctx, session, DisplayOptions{})
-}
-
-func ListWindowsForSessionWithDisplay(ctx context.Context, session item.Item, display DisplayOptions) ([]item.Item, error) {
+// ListWindowsForSessionWithDisplay lists the windows of one session. timeout
+// bounds the tmux invocation (callers pass the configured fetch timeout).
+func ListWindowsForSessionWithDisplay(ctx context.Context, timeout time.Duration, session item.Item, display DisplayOptions) ([]item.Item, error) {
 	target, err := sessionTarget(session)
 	if err != nil {
 		return nil, err
 	}
 
-	out, err := tmuxOutput(ctx, "list-windows", "-t", target, "-F", windowsForSessionFormat)
+	res, err := tmuxQuery(ctx, tmuxQuerySpec(cmdrun.ShapeLines, timeout, "list-windows", "-t", target, "-F", windowsForSessionFormat))
 	if err != nil {
 		return nil, err
 	}
-	return ParseWindowsForSessionWithDisplay(string(out), session, display)
+	return ParseWindowsForSessionWithDisplay(res.Stdout, session, display)
 }
 
 func sessionTarget(session item.Item) (string, error) {
