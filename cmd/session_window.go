@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"errors"
 	"fmt"
 
@@ -114,12 +113,13 @@ func runSessionWindowCommand(cmd *cobra.Command, args []string, options sessionW
 		windowName = defaultWindowNameForLaunchPath(launchPath)
 	}
 
-	return createResolvedSessionWindow(sessionMutationContext(cmd), plan, launchPath, tmux.SessionWindowOptions{
+	return createResolvedSessionWindow(commandContext(cmd), plan, launchPath, tmux.SessionWindowOptions{
 		Name:          windowName,
 		NewShell:      options.newShell,
 		Command:       commandArgs,
 		Switch:        options.switchWindow,
 		MaxNameLength: cfg.Behavior.WindowNameMaxLength,
+		Timeouts:      tmuxTimeouts(cfg),
 	})
 }
 
@@ -145,15 +145,4 @@ func splitSessionWindowArgs(args []string, options sessionWindowOptions) (string
 	}
 
 	return args[0], args[1:], false, nil
-}
-
-func sessionMutationContext(cmd *cobra.Command) context.Context {
-	// Do not reuse sessionResolveContext here. tmux mutations must not inherit the
-	// [timeout].fetch deadline that may already have been mostly consumed by
-	// git/config resolution.
-	ctx := cmd.Context()
-	if ctx == nil {
-		return context.Background()
-	}
-	return ctx
 }

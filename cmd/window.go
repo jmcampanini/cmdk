@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/jmcampanini/cmdk/internal/config"
 	"github.com/jmcampanini/cmdk/internal/tmux"
 )
 
@@ -68,5 +69,14 @@ func runWindowCommand(cmd *cobra.Command, direction tmux.WindowDirection, option
 		// but keep this subcommand usable as: cmdk window next --pane-id=%1.
 		pane = paneID
 	}
-	return switchRelativeWindow(sessionMutationContext(cmd), direction, tmux.WindowSwitchOptions{PaneID: pane})
+
+	cfgPath, err := resolveConfigPath()
+	if err != nil {
+		return err
+	}
+	// Window navigation runs from tmux key bindings; a broken config file must
+	// not break navigation, so use the defaults Load returns alongside its
+	// error, like the root TUI does.
+	cfg, _ := config.Load(cfgPath)
+	return switchRelativeWindow(commandContext(cmd), direction, tmux.WindowSwitchOptions{PaneID: pane, Timeouts: tmuxTimeouts(cfg)})
 }

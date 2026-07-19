@@ -126,7 +126,13 @@ func TestRunSessionResolveCommandUsesCanonicalSessionKey(t *testing.T) {
 	if err := json.Unmarshal(buf.Bytes(), &plan); err != nil {
 		t.Fatalf("invalid JSON %q: %v", buf.String(), err)
 	}
-	want := filepath.Clean(dir)
+	// The resolver canonicalizes through every symlink, including the one
+	// Darwin puts under t.TempDir() (/var -> /private/var), so the expected
+	// key must be canonicalized the same way.
+	want, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if plan.SessionKey != want {
 		t.Errorf("SessionKey = %q, want %q", plan.SessionKey, want)
 	}

@@ -3,7 +3,6 @@ package generator
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/jmcampanini/cmdk/internal/item"
 )
@@ -12,10 +11,7 @@ import (
 // so NewSessionGenerator stays unit-testable without shelling out to tmux.
 type SessionWindowsFunc func(context.Context, item.Item) ([]item.Item, error)
 
-const (
-	sessionSwitchCommand       = `tmux switch-client -t {{sq .session_id}}`
-	defaultSessionFetchTimeout = 2 * time.Second
-)
+const sessionSwitchCommand = `tmux switch-client -t {{sq .session_id}}`
 
 // NewSessionGenerator builds the child list shown after selecting a tmux
 // session: built-in Switch to session, user-defined session actions, and windows
@@ -64,15 +60,12 @@ func fetchSessionWindows(session item.Item, ctx Context, fetchWindows SessionWin
 		return []item.Item{ErrorItem(Source{Name: "windows"}, errors.New("no fetch function"))}
 	}
 
-	timeout := ctx.Config.Timeout.Fetch
-	if timeout <= 0 {
-		timeout = defaultSessionFetchTimeout
-	}
-	fetchCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	fetchCtx, cancel := context.WithTimeout(context.Background(), ctx.Config.Timeout.EffectiveFetch())
 	defer cancel()
 
 	windows, err := fetchWindows(fetchCtx, session)
 	if err != nil {
+		logSourceError("windows", err)
 		return []item.Item{ErrorItem(Source{Name: "windows"}, err)}
 	}
 	return windows

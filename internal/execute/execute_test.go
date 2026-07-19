@@ -729,8 +729,15 @@ func TestLaunchExecute_ShellLaunchPathChdirsAndSetsEnv(t *testing.T) {
 	if err := resolveAndExecute(t, nil, selected, "%9", mockExec); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cwd != filepath.Clean(dir) {
-		t.Errorf("cwd = %q, want %q", cwd, filepath.Clean(dir))
+	// Getwd returns the symlink-resolved directory (on Darwin, t.TempDir()
+	// lives under the /var -> /private/var symlink), so canonicalize the
+	// expectation the same way.
+	wantCwd, err := filepath.EvalSymlinks(filepath.Clean(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cwd != wantCwd {
+		t.Errorf("cwd = %q, want %q", cwd, wantCwd)
 	}
 	if argv[2] != "echo "+filepath.Base(dir) {
 		t.Errorf("rendered = %q", argv[2])
@@ -782,7 +789,7 @@ func TestLaunchExecute_SessionWindowNewShellCreatesInteractiveWindow(t *testing.
 		createResolvedSessionWindow = oldCreate
 	})
 
-	resolveSessionPlan = func(_ context.Context, path string) (resolver.Plan, error) {
+	resolveSessionPlan = func(_ context.Context, path string, _ time.Duration) (resolver.Plan, error) {
 		return resolver.Plan{SessionKind: resolver.KindDirectory, SessionKey: path}, nil
 	}
 
@@ -826,7 +833,7 @@ func TestLaunchExecute_SessionWindowCreatesManagedWindow(t *testing.T) {
 	})
 
 	var resolvedPath string
-	resolveSessionPlan = func(_ context.Context, path string) (resolver.Plan, error) {
+	resolveSessionPlan = func(_ context.Context, path string, _ time.Duration) (resolver.Plan, error) {
 		resolvedPath = path
 		return resolver.Plan{SessionKind: resolver.KindDirectory, SessionKey: path}, nil
 	}
@@ -885,8 +892,8 @@ func TestResolveLaunch_LaunchPathCmdFailureIncludesStdoutAndStderr(t *testing.T)
 	if cmdErr.ExitCode != 23 {
 		t.Errorf("ExitCode = %d, want 23", cmdErr.ExitCode)
 	}
-	if cmdErr.Rendered != selected.LaunchPathCmd {
-		t.Errorf("Rendered = %q, want %q", cmdErr.Rendered, selected.LaunchPathCmd)
+	if cmdErr.Command != selected.LaunchPathCmd {
+		t.Errorf("Command = %q, want %q", cmdErr.Command, selected.LaunchPathCmd)
 	}
 	if !strings.Contains(cmdErr.Stdout, "out") {
 		t.Errorf("Stdout = %q, want to contain %q", cmdErr.Stdout, "out")
@@ -921,8 +928,8 @@ func TestResolveLaunch_RelativeOutputWrapsAsCommandError(t *testing.T) {
 	if cmdErr.ExitCode != 0 {
 		t.Errorf("ExitCode = %d, want 0 for a succeeded command with invalid output", cmdErr.ExitCode)
 	}
-	if cmdErr.Rendered == "" {
-		t.Error("Rendered is empty, want the rendered command")
+	if cmdErr.Command == "" {
+		t.Error("Command is empty, want the rendered command")
 	}
 	if !strings.Contains(cmdErr.Stdout, "relative") {
 		t.Errorf("Stdout = %q, want captured output", cmdErr.Stdout)
@@ -1002,7 +1009,7 @@ func TestLaunchExecute_SessionWindowThreadsConfiguredWindowNameMaxLength(t *test
 		createResolvedSessionWindow = oldCreate
 	})
 
-	resolveSessionPlan = func(_ context.Context, path string) (resolver.Plan, error) {
+	resolveSessionPlan = func(_ context.Context, path string, _ time.Duration) (resolver.Plan, error) {
 		return resolver.Plan{SessionKind: resolver.KindDirectory, SessionKey: path}, nil
 	}
 	var gotOpts tmux.SessionWindowOptions

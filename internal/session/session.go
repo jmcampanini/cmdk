@@ -1,20 +1,27 @@
 package session
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/jmcampanini/cmdk/internal/cmdrun"
 )
 
 const (
 	KindRepo      = "repo"
 	KindDirectory = "directory"
+)
+
+const (
+	// Probe output is at most one filesystem path.
+	gitProbeMaxStdout = 4 << 10
+	gitProbeMaxStderr = 32 << 10
 )
 
 var primaryBranchDirs = [...]string{"main", "develop", "master"}
@@ -24,7 +31,11 @@ type Plan struct {
 	SessionKey  string `json:"session_key"`
 }
 
-func Resolve(ctx context.Context, inputPath string) (Plan, error) {
+// Resolve turns an existing directory into a session plan. probeTimeout is
+// the required per-command deadline for each git probe (callers pass the
+// configured fetch timeout); the caller's ctx additionally bounds the
+// overall resolve budget across every probe one Resolve may spawn.
+func Resolve(ctx context.Context, inputPath string, probeTimeout time.Duration) (Plan, error) {
 	if inputPath == "" {
 		return Plan{}, errors.New("path is required")
 	}
@@ -40,19 +51,20 @@ func Resolve(ctx context.Context, inputPath string) (Plan, error) {
 		return Plan{}, err
 	}
 
-	worktree, ok, err := gitWorktreeTop(ctx, absPath)
+	p := prober{timeout: probeTimeout}
+	worktree, ok, err := p.gitWorktreeTop(ctx, absPath)
 	if err != nil {
 		return Plan{}, err
 	}
 	if ok {
-		sessionKey, err := sessionKeyForWorktree(ctx, worktree)
+		sessionKey, err := p.sessionKeyForWorktree(ctx, worktree)
 		if err != nil {
 			return Plan{}, err
 		}
 		return newRepoPlan(sessionKey), nil
 	}
 
-	hasAnchor, err := hasGroveAnchor(ctx, absPath)
+	hasAnchor, err := p.hasGroveAnchor(ctx, absPath)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -61,6 +73,12 @@ func Resolve(ctx context.Context, inputPath string) (Plan, error) {
 	}
 
 	return newDirectoryPlan(absPath), nil
+}
+
+// prober runs git rev-parse probes with a caller-chosen per-command
+// deadline.
+type prober struct {
+	timeout time.Duration
 }
 
 func resolveExistingDirectory(inputPath string) (string, error) {
@@ -83,8 +101,8 @@ func resolveExistingDirectory(inputPath string) (string, error) {
 	return absPath, nil
 }
 
-func sessionKeyForWorktree(ctx context.Context, worktree string) (string, error) {
-	container, ok, err := groveContainerForWorktree(ctx, worktree)
+func (p prober) sessionKeyForWorktree(ctx context.Context, worktree string) (string, error) {
+	container, ok, err := p.groveContainerForWorktree(ctx, worktree)
 	if err != nil {
 		return "", err
 	}
@@ -102,11 +120,11 @@ func newDirectoryPlan(path string) Plan {
 	return Plan{SessionKind: KindDirectory, SessionKey: canonicalPath(path)}
 }
 
-func hasGroveAnchor(ctx context.Context, dir string) (bool, error) {
+func (p prober) hasGroveAnchor(ctx context.Context, dir string) (bool, error) {
 	var firstStatErr error
 	for _, name := range primaryBranchDirs {
 		child := filepath.Join(dir, name)
-		valid, err := validGitWorktreeRoot(ctx, child)
+		valid, err := p.validGitWorktreeRoot(ctx, child)
 		if err != nil {
 			if rememberWorktreeStatError(err, &firstStatErr) {
 				continue
@@ -120,16 +138,16 @@ func hasGroveAnchor(ctx context.Context, dir string) (bool, error) {
 	return false, firstStatErr
 }
 
-func groveContainerForWorktree(ctx context.Context, worktree string) (string, bool, error) {
+func (p prober) groveContainerForWorktree(ctx context.Context, worktree string) (string, bool, error) {
 	parent := filepath.Dir(worktree)
-	worktreeCommonDir, haveWorktreeCommonDir, err := gitCommonDir(ctx, worktree)
+	worktreeCommonDir, haveWorktreeCommonDir, err := p.gitCommonDir(ctx, worktree)
 	if err != nil {
 		return "", false, err
 	}
 
 	for _, name := range primaryBranchDirs {
 		child := filepath.Join(parent, name)
-		valid, err := validGitWorktreeRoot(ctx, child)
+		valid, err := p.validGitWorktreeRoot(ctx, child)
 		if err != nil {
 			if isContextError(err) {
 				return "", false, err
@@ -145,7 +163,7 @@ func groveContainerForWorktree(ctx context.Context, worktree string) (string, bo
 		if !haveWorktreeCommonDir {
 			continue
 		}
-		childCommonDir, ok, err := gitCommonDir(ctx, child)
+		childCommonDir, ok, err := p.gitCommonDir(ctx, child)
 		if err != nil {
 			if isContextError(err) {
 				return "", false, err
@@ -159,7 +177,7 @@ func groveContainerForWorktree(ctx context.Context, worktree string) (string, bo
 	return "", false, nil
 }
 
-func validGitWorktreeRoot(ctx context.Context, dir string) (bool, error) {
+func (p prober) validGitWorktreeRoot(ctx context.Context, dir string) (bool, error) {
 	info, err := os.Stat(dir)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -170,7 +188,7 @@ func validGitWorktreeRoot(ctx context.Context, dir string) (bool, error) {
 	if !info.IsDir() {
 		return false, nil
 	}
-	top, ok, err := gitWorktreeTop(ctx, dir)
+	top, ok, err := p.gitWorktreeTop(ctx, dir)
 	if err != nil {
 		return false, err
 	}
@@ -205,7 +223,7 @@ func (e *worktreeStatError) Unwrap() error {
 	return e.err
 }
 
-func gitWorktreeTop(ctx context.Context, dir string) (string, bool, error) {
+func (p prober) gitWorktreeTop(ctx context.Context, dir string) (string, bool, error) {
 	hasMarker, err := hasGitMarker(dir)
 	if err != nil {
 		return "", false, err
@@ -214,7 +232,7 @@ func gitWorktreeTop(ctx context.Context, dir string) (string, bool, error) {
 		return "", false, nil
 	}
 
-	out, err := gitOutput(ctx, dir, "rev-parse", "--show-toplevel")
+	out, err := p.gitOutput(ctx, dir, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return "", false, err
 	}
@@ -229,8 +247,8 @@ func gitWorktreeTop(ctx context.Context, dir string) (string, bool, error) {
 	return canonicalPath(absTop), true, nil
 }
 
-func gitCommonDir(ctx context.Context, worktree string) (string, bool, error) {
-	out, err := gitOutput(ctx, worktree, "rev-parse", "--git-common-dir")
+func (p prober) gitCommonDir(ctx context.Context, worktree string) (string, bool, error) {
+	out, err := p.gitOutput(ctx, worktree, "rev-parse", "--git-common-dir")
 	if err != nil {
 		return "", false, err
 	}
@@ -244,21 +262,20 @@ func gitCommonDir(ctx context.Context, worktree string) (string, bool, error) {
 	return canonicalPath(commonDir), true, nil
 }
 
-func gitOutput(ctx context.Context, dir string, args ...string) ([]byte, error) {
-	cmdArgs := append([]string{"-C", dir}, args...)
-	cmd := exec.CommandContext(ctx, "git", cmdArgs...)
-	cmd.Env = withoutGitEnv(os.Environ())
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	// TODO(#87): use a shared bounded stdout/stderr runner for git probes.
-	out, err := cmd.Output()
-	if err == nil {
-		return out, nil
+func (p prober) gitOutput(ctx context.Context, dir string, args ...string) (string, error) {
+	res, err := cmdrun.Query(ctx, cmdrun.QuerySpec{
+		Op:        fmt.Sprintf("git -C %s %s", dir, strings.Join(args, " ")),
+		Argv:      append([]string{"git", "-C", dir}, args...),
+		Env:       withoutGitEnv(os.Environ()),
+		Timeout:   p.timeout,
+		Shape:     cmdrun.ShapeSingleLine,
+		MaxStdout: gitProbeMaxStdout,
+		MaxStderr: gitProbeMaxStderr,
+	})
+	if err != nil {
+		return "", err
 	}
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		return nil, fmt.Errorf("git -C %s %s: %w", dir, strings.Join(args, " "), ctxErr)
-	}
-	return nil, gitCommandError(dir, args, err, stderr.String())
+	return res.Stdout, nil
 }
 
 func hasGitMarker(path string) (bool, error) {
@@ -302,14 +319,6 @@ func hasGitMarkerInAncestors(path string) (bool, error) {
 	}
 }
 
-func gitCommandError(dir string, args []string, err error, stderr string) error {
-	argString := strings.Join(args, " ")
-	if stderr == "" {
-		return fmt.Errorf("git -C %s %s: %w", dir, argString, err)
-	}
-	return fmt.Errorf("git -C %s %s: %w: %s", dir, argString, err, strings.TrimSpace(stderr))
-}
-
 func withoutGitEnv(env []string) []string {
 	// Keep Git diagnostics stable and prevent caller GIT_* variables from changing discovery.
 	filtered := make([]string, 0, len(env)+1)
@@ -322,9 +331,8 @@ func withoutGitEnv(env []string) []string {
 	return append(filtered, "LC_ALL=C")
 }
 
-func trimCommandLine(out []byte) string {
-	line := string(out)
-	return strings.TrimSuffix(line, "\n")
+func trimCommandLine(out string) string {
+	return strings.TrimSuffix(out, "\n")
 }
 
 func samePath(a, b string) bool {

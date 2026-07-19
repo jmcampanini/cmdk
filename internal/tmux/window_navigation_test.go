@@ -16,7 +16,7 @@ func TestSwitchRelativeWindowNextUsesPaneAndSessionIDWindowIndexOrder(t *testing
 		scriptedTmuxCall{args: []string{"switch-client", "-t", "$10:@10"}},
 	)
 
-	err := windowNavigator{runner: runner, lookupEnv: noTmuxPaneEnv}.switchRelativeWindow(context.Background(), WindowNext, WindowSwitchOptions{PaneID: "%5"})
+	err := windowNavigator{runner: runner, lookupEnv: noTmuxPaneEnv, timeouts: testTmuxTimeouts}.switchRelativeWindow(context.Background(), WindowNext, WindowSwitchOptions{PaneID: "%5"})
 	runner.done()
 	if err != nil {
 		t.Fatal(err)
@@ -30,7 +30,7 @@ func TestSwitchRelativeWindowPreviousMovesWithinSession(t *testing.T) {
 		scriptedTmuxCall{args: []string{"switch-client", "-t", "$2:@3"}},
 	)
 
-	err := windowNavigator{runner: runner, lookupEnv: noTmuxPaneEnv}.switchRelativeWindow(context.Background(), WindowPrevious, WindowSwitchOptions{PaneID: "%5"})
+	err := windowNavigator{runner: runner, lookupEnv: noTmuxPaneEnv, timeouts: testTmuxTimeouts}.switchRelativeWindow(context.Background(), WindowPrevious, WindowSwitchOptions{PaneID: "%5"})
 	runner.done()
 	if err != nil {
 		t.Fatal(err)
@@ -44,7 +44,7 @@ func TestSwitchRelativeWindowPreviousWrapsToLastWindow(t *testing.T) {
 		scriptedTmuxCall{args: []string{"switch-client", "-t", "$10:@10"}},
 	)
 
-	err := windowNavigator{runner: runner, lookupEnv: noTmuxPaneEnv}.switchRelativeWindow(context.Background(), WindowPrevious, WindowSwitchOptions{PaneID: "%1"})
+	err := windowNavigator{runner: runner, lookupEnv: noTmuxPaneEnv, timeouts: testTmuxTimeouts}.switchRelativeWindow(context.Background(), WindowPrevious, WindowSwitchOptions{PaneID: "%1"})
 	runner.done()
 	if err != nil {
 		t.Fatal(err)
@@ -58,7 +58,7 @@ func TestSwitchRelativeWindowNextWrapsToFirstWindow(t *testing.T) {
 		scriptedTmuxCall{args: []string{"switch-client", "-t", "$1:@1"}},
 	)
 
-	err := windowNavigator{runner: runner, lookupEnv: noTmuxPaneEnv}.switchRelativeWindow(context.Background(), WindowNext, WindowSwitchOptions{PaneID: "%10"})
+	err := windowNavigator{runner: runner, lookupEnv: noTmuxPaneEnv, timeouts: testTmuxTimeouts}.switchRelativeWindow(context.Background(), WindowNext, WindowSwitchOptions{PaneID: "%10"})
 	runner.done()
 	if err != nil {
 		t.Fatal(err)
@@ -72,7 +72,7 @@ func TestSwitchRelativeWindowSingleWindowSwitchesToItself(t *testing.T) {
 		scriptedTmuxCall{args: []string{"switch-client", "-t", "$1:@1"}},
 	)
 
-	err := windowNavigator{runner: runner, lookupEnv: noTmuxPaneEnv}.switchRelativeWindow(context.Background(), WindowNext, WindowSwitchOptions{PaneID: "%1"})
+	err := windowNavigator{runner: runner, lookupEnv: noTmuxPaneEnv, timeouts: testTmuxTimeouts}.switchRelativeWindow(context.Background(), WindowNext, WindowSwitchOptions{PaneID: "%1"})
 	runner.done()
 	if err != nil {
 		t.Fatal(err)
@@ -92,7 +92,7 @@ func TestSwitchRelativeWindowFallsBackToTMUXPane(t *testing.T) {
 		return "", false
 	}
 
-	err := windowNavigator{runner: runner, lookupEnv: lookupEnv}.switchRelativeWindow(context.Background(), WindowNext, WindowSwitchOptions{})
+	err := windowNavigator{runner: runner, lookupEnv: lookupEnv, timeouts: testTmuxTimeouts}.switchRelativeWindow(context.Background(), WindowNext, WindowSwitchOptions{})
 	runner.done()
 	if err != nil {
 		t.Fatal(err)
@@ -106,7 +106,7 @@ func TestSwitchRelativeWindowFallsBackToDefaultTmuxContext(t *testing.T) {
 		scriptedTmuxCall{args: []string{"switch-client", "-t", "$1:@2"}},
 	)
 
-	err := windowNavigator{runner: runner, lookupEnv: noTmuxPaneEnv}.switchRelativeWindow(context.Background(), WindowNext, WindowSwitchOptions{})
+	err := windowNavigator{runner: runner, lookupEnv: noTmuxPaneEnv, timeouts: testTmuxTimeouts}.switchRelativeWindow(context.Background(), WindowNext, WindowSwitchOptions{})
 	runner.done()
 	if err != nil {
 		t.Fatal(err)
@@ -116,7 +116,7 @@ func TestSwitchRelativeWindowFallsBackToDefaultTmuxContext(t *testing.T) {
 func TestSwitchRelativeWindowRejectsInvalidExplicitPaneID(t *testing.T) {
 	runner := newScriptedTmuxRunner(t)
 
-	err := windowNavigator{runner: runner, lookupEnv: noTmuxPaneEnv}.switchRelativeWindow(context.Background(), WindowNext, WindowSwitchOptions{PaneID: "not-a-pane"})
+	err := windowNavigator{runner: runner, lookupEnv: noTmuxPaneEnv, timeouts: testTmuxTimeouts}.switchRelativeWindow(context.Background(), WindowNext, WindowSwitchOptions{PaneID: "not-a-pane"})
 	runner.done()
 	if err == nil || !strings.Contains(err.Error(), "--pane-id") {
 		t.Fatalf("error = %v, want --pane-id validation", err)
@@ -132,7 +132,7 @@ func TestSwitchRelativeWindowRejectsInvalidTMUXPane(t *testing.T) {
 		return "", false
 	}
 
-	err := windowNavigator{runner: runner, lookupEnv: lookupEnv}.switchRelativeWindow(context.Background(), WindowNext, WindowSwitchOptions{})
+	err := windowNavigator{runner: runner, lookupEnv: lookupEnv, timeouts: testTmuxTimeouts}.switchRelativeWindow(context.Background(), WindowNext, WindowSwitchOptions{})
 	runner.done()
 	if err == nil || !strings.Contains(err.Error(), "TMUX_PANE") {
 		t.Fatalf("error = %v, want TMUX_PANE validation", err)
@@ -145,7 +145,7 @@ func TestSwitchRelativeWindowMalformedListWindowsRowErrors(t *testing.T) {
 		scriptedTmuxCall{args: []string{"list-windows", "-a", "-F", windowNavigationListFormat}, output: "bad\n"},
 	)
 
-	err := windowNavigator{runner: runner, lookupEnv: noTmuxPaneEnv}.switchRelativeWindow(context.Background(), WindowNext, WindowSwitchOptions{PaneID: "%1"})
+	err := windowNavigator{runner: runner, lookupEnv: noTmuxPaneEnv, timeouts: testTmuxTimeouts}.switchRelativeWindow(context.Background(), WindowNext, WindowSwitchOptions{PaneID: "%1"})
 	runner.done()
 	if err == nil || !strings.Contains(err.Error(), "list-windows row 1") {
 		t.Fatalf("error = %v, want row parse error", err)
@@ -158,7 +158,7 @@ func TestSwitchRelativeWindowCurrentWindowMissingErrors(t *testing.T) {
 		scriptedTmuxCall{args: []string{"list-windows", "-a", "-F", windowNavigationListFormat}, output: "$1\t1\t@1\n"},
 	)
 
-	err := windowNavigator{runner: runner, lookupEnv: noTmuxPaneEnv}.switchRelativeWindow(context.Background(), WindowNext, WindowSwitchOptions{PaneID: "%1"})
+	err := windowNavigator{runner: runner, lookupEnv: noTmuxPaneEnv, timeouts: testTmuxTimeouts}.switchRelativeWindow(context.Background(), WindowNext, WindowSwitchOptions{PaneID: "%1"})
 	runner.done()
 	if !errors.Is(err, errCurrentWindowNotInWindow) {
 		t.Fatalf("error = %v, want current-window-missing error", err)

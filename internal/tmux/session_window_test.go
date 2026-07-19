@@ -10,15 +10,38 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/jmcampanini/cmdk/internal/cmdrun"
 	resolver "github.com/jmcampanini/cmdk/internal/session"
 )
 
+// Distinct values so the fake can detect a call site using the wrong
+// deadline class.
+var testTmuxTimeouts = Timeouts{Query: time.Second, Mutation: 2 * time.Second}
+
+// tmuxCommandClass declares, per tmux subcommand, the shape and deadline
+// class every call site must use — the contract the runner seam exists to
+// pin. The fake fails any query that deviates.
+var tmuxCommandClass = map[string]struct {
+	shape    cmdrun.Shape
+	mutation bool
+}{
+	"list-sessions":   {shape: cmdrun.ShapeLines},
+	"list-windows":    {shape: cmdrun.ShapeLines},
+	"display-message": {shape: cmdrun.ShapeSingleLine},
+	"new-session":     {shape: cmdrun.ShapeSingleLine, mutation: true},
+	"new-window":      {shape: cmdrun.ShapeSingleLine, mutation: true},
+	"set-option":      {shape: cmdrun.ShapeEmpty, mutation: true},
+	"switch-client":   {shape: cmdrun.ShapeEmpty, mutation: true},
+}
+
 type scriptedTmuxCall struct {
-	args   []string
-	output string
-	err    error
-	useRun bool
+	// args are the tmux arguments without the leading "tmux" argv element.
+	args      []string
+	output    string
+	err       error
+	useStream bool
 }
 
 type scriptedTmuxRunner struct {
@@ -31,33 +54,50 @@ func newScriptedTmuxRunner(t *testing.T, calls ...scriptedTmuxCall) *scriptedTmu
 	return &scriptedTmuxRunner{t: t, calls: calls}
 }
 
-func (r *scriptedTmuxRunner) Output(_ context.Context, args ...string) ([]byte, error) {
+func (r *scriptedTmuxRunner) query(_ context.Context, spec cmdrun.QuerySpec) (cmdrun.Result, error) {
 	r.t.Helper()
-	call := r.nextCall("Output", args)
-	if call.useRun {
-		r.t.Fatalf("tmux call %q used Output, want Run", args)
+	call := r.nextCall("query", spec.Argv)
+	if call.useStream {
+		r.t.Fatalf("tmux call %q used query, want stream", spec.Argv)
 	}
-	return []byte(call.output), call.err
+
+	class, ok := tmuxCommandClass[spec.Argv[1]]
+	if !ok {
+		r.t.Fatalf("tmux %s has no declared class in tmuxCommandClass", spec.Argv[1])
+	}
+	if spec.Shape != class.shape {
+		r.t.Fatalf("tmux %s declared shape %v, want %v", spec.Argv[1], spec.Shape, class.shape)
+	}
+	wantTimeout := testTmuxTimeouts.Query
+	if class.mutation {
+		wantTimeout = testTmuxTimeouts.Mutation
+	}
+	if spec.Timeout != wantTimeout {
+		r.t.Fatalf("tmux %s ran with timeout %s, want the %s-class deadline %s",
+			spec.Argv[1], spec.Timeout, map[bool]string{true: "mutation", false: "query"}[class.mutation], wantTimeout)
+	}
+	return cmdrun.Result{Stdout: call.output}, call.err
 }
 
-func (r *scriptedTmuxRunner) Run(_ context.Context, args ...string) error {
+func (r *scriptedTmuxRunner) stream(_ context.Context, spec cmdrun.StreamSpec) error {
 	r.t.Helper()
-	call := r.nextCall("Run", args)
-	if !call.useRun {
-		r.t.Fatalf("tmux call %q used Run, want Output", args)
+	call := r.nextCall("stream", spec.Argv)
+	if !call.useStream {
+		r.t.Fatalf("tmux call %q used stream, want query", spec.Argv)
 	}
 	return call.err
 }
 
-func (r *scriptedTmuxRunner) nextCall(method string, args []string) scriptedTmuxCall {
+func (r *scriptedTmuxRunner) nextCall(method string, argv []string) scriptedTmuxCall {
 	r.t.Helper()
 	if len(r.calls) == 0 {
-		r.t.Fatalf("unexpected tmux %s call: %q", method, args)
+		r.t.Fatalf("unexpected tmux %s call: %q", method, argv)
 	}
 	call := r.calls[0]
 	r.calls = r.calls[1:]
-	if !slices.Equal(args, call.args) {
-		r.t.Fatalf("tmux args mismatch\ngot:  %q\nwant: %q", args, call.args)
+	want := append([]string{"tmux"}, call.args...)
+	if !slices.Equal(argv, want) {
+		r.t.Fatalf("tmux argv mismatch\ngot:  %q\nwant: %q", argv, want)
 	}
 	return call
 }
@@ -104,14 +144,19 @@ func createWindowWithRunner(t *testing.T, runner *scriptedTmuxRunner, plan resol
 	if opts.Name == "" {
 		opts.Name = defaultWindowNameForPlan(plan)
 	}
-	err := sessionWindowManager{runner: runner}.createResolvedWindow(context.Background(), plan, launchPathForPlan(plan), opts)
+	m := sessionWindowManager{runner: runner, timeouts: testTmuxTimeouts}
+	err := m.createResolvedWindow(context.Background(), plan, launchPathForPlan(plan), opts)
 	runner.done()
 	return err
 }
 
 func attachWithRunner(t *testing.T, runner *scriptedTmuxRunner, plan resolver.Plan) error {
 	t.Helper()
-	err := sessionWindowManager{runner: runner}.attachResolvedSession(context.Background(), plan, launchPathForPlan(plan), defaultWindowNameForPlan(plan), 0)
+	m := sessionWindowManager{runner: runner, timeouts: testTmuxTimeouts}
+	err := m.attachResolvedSession(context.Background(), plan, launchPathForPlan(plan), AttachOptions{
+		WindowName: defaultWindowNameForPlan(plan),
+		Timeouts:   testTmuxTimeouts,
+	})
 	runner.done()
 	return err
 }
@@ -130,14 +175,21 @@ func tmuxListSessionsExitStatusError(t *testing.T, status int, stderr string) er
 	if exitErr.ExitCode() != status {
 		t.Fatalf("exit code = %d, want %d", exitErr.ExitCode(), status)
 	}
-	return tmuxCommandError([]string{"list-sessions", "-F", cmdkSessionKeyListFormat}, exitErr, stderr)
+	return &cmdrun.CommandError{
+		Op:       "tmux list-sessions",
+		Kind:     cmdrun.KindExit,
+		Command:  "tmux list-sessions -F " + cmdkSessionKeyListFormat,
+		ExitCode: status,
+		Stderr:   stderr,
+		Err:      exitErr,
+	}
 }
 
 func TestAttachResolvedSessionAttachesExistingManagedSession(t *testing.T) {
 	plan := repoSessionWindowPlan()
 	runner := newScriptedTmuxRunner(t,
 		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$2\t" + plan.SessionKey + "\n$3\t/other\n"},
-		scriptedTmuxCall{args: []string{"attach-session", "-t", "$2"}, useRun: true},
+		scriptedTmuxCall{args: []string{"attach-session", "-t", "$2"}, useStream: true},
 	)
 
 	if err := attachWithRunner(t, runner, plan); err != nil {
@@ -152,7 +204,7 @@ func TestAttachResolvedSessionCreatesMissingSessionThenAttaches(t *testing.T) {
 		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionIDsFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", defaultWindowNameForPlan(plan), "-c", launchPathForPlan(plan)}, output: "$1\t@1\n"},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$1", cmdkSessionKindOption, plan.SessionKind}},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$1", cmdkSessionKeyOption, plan.SessionKey}},
-		scriptedTmuxCall{args: []string{"attach-session", "-t", "$1"}, useRun: true},
+		scriptedTmuxCall{args: []string{"attach-session", "-t", "$1"}, useStream: true},
 	)
 
 	if err := attachWithRunner(t, runner, plan); err != nil {
@@ -167,7 +219,7 @@ func TestAttachResolvedSessionTreatsNoServerAsMissing(t *testing.T) {
 		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionIDsFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", defaultWindowNameForPlan(plan), "-c", launchPathForPlan(plan)}, output: "$4\t@8\n"},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionKindOption, plan.SessionKind}},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionKeyOption, plan.SessionKey}},
-		scriptedTmuxCall{args: []string{"attach-session", "-t", "$4"}, useRun: true},
+		scriptedTmuxCall{args: []string{"attach-session", "-t", "$4"}, useStream: true},
 	)
 
 	if err := attachWithRunner(t, runner, plan); err != nil {
@@ -182,7 +234,7 @@ func TestAttachResolvedSessionTreatsMissingSocketAsMissing(t *testing.T) {
 		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionIDsFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", defaultWindowNameForPlan(plan), "-c", launchPathForPlan(plan)}, output: "$4\t@8\n"},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionKindOption, plan.SessionKind}},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionKeyOption, plan.SessionKey}},
-		scriptedTmuxCall{args: []string{"attach-session", "-t", "$4"}, useRun: true},
+		scriptedTmuxCall{args: []string{"attach-session", "-t", "$4"}, useStream: true},
 	)
 
 	if err := attachWithRunner(t, runner, plan); err != nil {
@@ -518,7 +570,7 @@ func TestTmuxSafeSessionNameEmptyFallback(t *testing.T) {
 	}
 }
 
-func TestTmuxOutputIncludesStderrOnNonTimeoutErrors(t *testing.T) {
+func TestTmuxQueryIncludesStderrOnFailure(t *testing.T) {
 	bin := t.TempDir()
 	tmuxPath := filepath.Join(bin, "tmux")
 	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\necho 'boom stderr' >&2\nexit 42\n"), 0o755); err != nil {
@@ -526,12 +578,16 @@ func TestTmuxOutputIncludesStderrOnNonTimeoutErrors(t *testing.T) {
 	}
 	t.Setenv("PATH", bin)
 
-	_, err := tmuxOutput(context.Background(), "new-session")
+	_, err := tmuxQuery(context.Background(), tmuxQuerySpec(cmdrun.ShapeSingleLine, time.Second, "new-session"))
 	if err == nil {
 		t.Fatal("expected tmux error")
 	}
 	if !strings.Contains(err.Error(), "boom stderr") {
 		t.Errorf("error = %q, want stderr", err.Error())
+	}
+	var cmdErr *cmdrun.CommandError
+	if !errors.As(err, &cmdErr) || cmdErr.Kind != cmdrun.KindExit || cmdErr.ExitCode != 42 {
+		t.Fatalf("error = %T %[1]v, want KindExit CommandError with code 42", err)
 	}
 	var exitErr *exec.ExitError
 	if !errors.As(err, &exitErr) {
@@ -594,10 +650,15 @@ func TestAttachResolvedSessionTruncatesLongWindowName(t *testing.T) {
 		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionIDsFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", "issue-117-window-na…", "-c", launchPathForPlan(plan)}, output: "$1\t@1\n"},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$1", cmdkSessionKindOption, plan.SessionKind}},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$1", cmdkSessionKeyOption, plan.SessionKey}},
-		scriptedTmuxCall{args: []string{"attach-session", "-t", "$1"}, useRun: true},
+		scriptedTmuxCall{args: []string{"attach-session", "-t", "$1"}, useStream: true},
 	)
 
-	err := sessionWindowManager{runner: runner}.attachResolvedSession(context.Background(), plan, launchPathForPlan(plan), "issue-117-window-name-maximum-limit", 20)
+	m := sessionWindowManager{runner: runner, timeouts: testTmuxTimeouts}
+	err := m.attachResolvedSession(context.Background(), plan, launchPathForPlan(plan), AttachOptions{
+		WindowName:    "issue-117-window-name-maximum-limit",
+		MaxNameLength: 20,
+		Timeouts:      testTmuxTimeouts,
+	})
 	runner.done()
 	if err != nil {
 		t.Fatal(err)

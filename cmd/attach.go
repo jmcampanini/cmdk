@@ -74,7 +74,12 @@ func runAttachCommand(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	return attachResolvedSession(sessionMutationContext(cmd), plan, launchPath, defaultWindowNameForLaunchPath(launchPath), cfg.Behavior.WindowNameMaxLength)
+	return attachResolvedSession(commandContext(cmd), plan, launchPath, tmux.AttachOptions{
+		WindowName:    defaultWindowNameForLaunchPath(launchPath),
+		MaxNameLength: cfg.Behavior.WindowNameMaxLength,
+		Timeouts:      tmuxTimeouts(cfg),
+		Terminal:      tmux.TerminalIO{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr},
+	})
 }
 
 func attachPath(args []string, cfg config.Config, cfgPath string) (string, error) {

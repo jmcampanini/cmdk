@@ -12,6 +12,7 @@ import (
 
 	"github.com/jmcampanini/cmdk/internal/config"
 	resolver "github.com/jmcampanini/cmdk/internal/session"
+	"github.com/jmcampanini/cmdk/internal/tmux"
 )
 
 func newSessionCommand() *cobra.Command {
@@ -43,7 +44,7 @@ func resolveSessionPlanWithConfig(cmd *cobra.Command, path string, cfg config.Co
 	ctx, cancel := sessionResolveContext(cmd, cfg)
 	defer cancel()
 
-	plan, err := resolver.Resolve(ctx, path)
+	plan, err := resolver.Resolve(ctx, path, cfg.Timeout.EffectiveFetch())
 	if err != nil {
 		return resolver.Plan{}, err
 	}
@@ -77,13 +78,23 @@ func defaultWindowNameForLaunchPath(path string) string {
 }
 
 func sessionResolveContext(cmd *cobra.Command, cfg config.Config) (context.Context, context.CancelFunc) {
-	ctx := cmd.Context()
-	if ctx == nil {
-		ctx = context.Background()
+	return context.WithTimeout(commandContext(cmd), cfg.Timeout.EffectiveFetch())
+}
+
+// commandContext returns the command's context, which cobra only populates
+// during Execute; direct callers (tests) get a background context.
+func commandContext(cmd *cobra.Command) context.Context {
+	if ctx := cmd.Context(); ctx != nil {
+		return ctx
 	}
-	resolveTimeout := cfg.Timeout.Fetch
-	if resolveTimeout <= 0 {
-		resolveTimeout = config.DefaultConfig().Timeout.Fetch
+	return context.Background()
+}
+
+// tmuxTimeouts maps the configured timeouts onto the tmux package's
+// per-command deadlines.
+func tmuxTimeouts(cfg config.Config) tmux.Timeouts {
+	return tmux.Timeouts{
+		Query:    cfg.Timeout.EffectiveFetch(),
+		Mutation: cfg.Timeout.EffectiveMutation(),
 	}
-	return context.WithTimeout(ctx, resolveTimeout)
 }

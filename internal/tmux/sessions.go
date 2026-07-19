@@ -4,7 +4,9 @@ import (
 	"context"
 	"sort"
 	"strconv"
+	"time"
 
+	"github.com/jmcampanini/cmdk/internal/cmdrun"
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
@@ -129,14 +131,12 @@ func newSessionItem(sessionID, sessionName, sessionKey, sessionWindows, sessionA
 	return it
 }
 
-func ListSessions(ctx context.Context) ([]item.Item, error) {
-	return ListSessionsWithDisplay(ctx, DisplayOptions{})
-}
-
-func ListSessionsWithDisplay(ctx context.Context, display DisplayOptions) ([]item.Item, error) {
-	out, err := tmuxOutput(ctx, "list-sessions", "-F", sessionListFormat)
+// ListSessionsWithDisplay lists every tmux session. timeout bounds the tmux
+// invocation (callers pass the configured fetch timeout).
+func ListSessionsWithDisplay(ctx context.Context, timeout time.Duration, display DisplayOptions) ([]item.Item, error) {
+	res, err := tmuxQuery(ctx, tmuxQuerySpec(cmdrun.ShapeLines, timeout, "list-sessions", "-F", sessionListFormat))
 	if err != nil {
 		return nil, err
 	}
-	return ParseSessionsWithDisplay(string(out), display)
+	return ParseSessionsWithDisplay(res.Stdout, display)
 }

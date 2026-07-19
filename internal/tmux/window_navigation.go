@@ -8,6 +8,9 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"time"
+
+	"github.com/jmcampanini/cmdk/internal/cmdrun"
 )
 
 // WindowDirection identifies which adjacent window in the deterministic tmux
@@ -23,7 +26,8 @@ const (
 type WindowSwitchOptions struct {
 	// PaneID anchors the current window lookup. When empty, SwitchRelativeWindow
 	// falls back to TMUX_PANE and then tmux's default current context.
-	PaneID string
+	PaneID   string
+	Timeouts Timeouts
 }
 
 var (
@@ -39,12 +43,14 @@ var (
 // window in a deterministic circular order. Sessions are ordered by numeric
 // session_id. Windows within each session are ordered by numeric window_index.
 func SwitchRelativeWindow(ctx context.Context, direction WindowDirection, opts WindowSwitchOptions) error {
-	return windowNavigator{runner: execTmuxRunner{}, lookupEnv: os.LookupEnv}.switchRelativeWindow(ctx, direction, opts)
+	n := windowNavigator{runner: execTmuxRunner{}, lookupEnv: os.LookupEnv, timeouts: opts.Timeouts}
+	return n.switchRelativeWindow(ctx, direction, opts)
 }
 
 type windowNavigator struct {
 	runner    tmuxRunner
 	lookupEnv func(string) (string, bool)
+	timeouts  Timeouts
 }
 
 type windowIdentity struct {
@@ -82,7 +88,7 @@ func (n windowNavigator) switchRelativeWindow(ctx context.Context, direction Win
 		return err
 	}
 
-	_, err = n.output(ctx, "switch-client", "-t", target.sessionID+":"+target.windowID)
+	_, err = n.query(ctx, cmdrun.ShapeEmpty, n.timeouts.Mutation, "switch-client", "-t", target.sessionID+":"+target.windowID)
 	return err
 }
 
@@ -99,8 +105,8 @@ func (n *windowNavigator) ensureDefaults(ctx context.Context) context.Context {
 	return ctx
 }
 
-func (n windowNavigator) output(ctx context.Context, args ...string) ([]byte, error) {
-	return n.runner.Output(ctx, args...)
+func (n windowNavigator) query(ctx context.Context, shape cmdrun.Shape, timeout time.Duration, args ...string) (cmdrun.Result, error) {
+	return n.runner.query(ctx, tmuxQuerySpec(shape, timeout, args...))
 }
 
 func (n windowNavigator) currentPaneID(explicit string) (string, error) {
@@ -128,11 +134,11 @@ func (n windowNavigator) currentWindow(ctx context.Context, paneID string) (wind
 	}
 	args = append(args, currentWindowFormat)
 
-	out, err := n.output(ctx, args...)
+	res, err := n.query(ctx, cmdrun.ShapeSingleLine, n.timeouts.Query, args...)
 	if err != nil {
 		return windowIdentity{}, err
 	}
-	return parseCurrentWindow(string(out))
+	return parseCurrentWindow(res.Stdout)
 }
 
 func parseCurrentWindow(output string) (windowIdentity, error) {
@@ -158,11 +164,11 @@ func parseWindowIdentity(sessionID, windowID string) (windowIdentity, error) {
 }
 
 func (n windowNavigator) windowRing(ctx context.Context) ([]windowRingEntry, error) {
-	out, err := n.output(ctx, "list-windows", "-a", "-F", windowNavigationListFormat)
+	res, err := n.query(ctx, cmdrun.ShapeLines, n.timeouts.Query, "list-windows", "-a", "-F", windowNavigationListFormat)
 	if err != nil {
 		return nil, err
 	}
-	return parseWindowRing(string(out))
+	return parseWindowRing(res.Stdout)
 }
 
 func parseWindowRing(output string) ([]windowRingEntry, error) {

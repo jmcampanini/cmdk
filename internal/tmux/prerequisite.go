@@ -1,23 +1,21 @@
 package tmux
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/jmcampanini/cmdk/internal/cmdrun"
 )
 
 const (
-	minimumMajor          = 3
-	minimumMinor          = 2
-	prerequisiteLimit     = 4096
-	prerequisiteTimeout   = 2 * time.Second
-	prerequisiteWaitDelay = 100 * time.Millisecond
-	prerequisiteRecovery  = "ensure a runnable supported tmux executable is first in PATH"
+	minimumMajor         = 3
+	minimumMinor         = 2
+	prerequisiteTimeout  = 2 * time.Second
+	prerequisiteRecovery = "ensure a runnable supported tmux executable is first in PATH"
 )
 
 type version struct {
@@ -25,26 +23,9 @@ type version struct {
 	minor int
 }
 
-type boundedBuffer struct {
-	buf      bytes.Buffer
-	overflow bool
-}
-
-func (b *boundedBuffer) Write(p []byte) (int, error) {
-	originalLen := len(p)
-	remaining := prerequisiteLimit - b.buf.Len()
-	if remaining <= 0 {
-		b.overflow = true
-		return originalLen, nil
-	}
-	if len(p) > remaining {
-		p = p[:remaining]
-		b.overflow = true
-	}
-	_, _ = b.buf.Write(p)
-	return originalLen, nil
-}
-
+// CheckPrerequisite verifies a supported tmux binary is runnable before any
+// tmux-backed command starts. It runs under its own short deadline: a version
+// probe that cannot answer promptly is as disqualifying as a missing binary.
 func CheckPrerequisite(ctx context.Context) error {
 	return checkPrerequisite(ctx, prerequisiteTimeout)
 }
@@ -53,40 +34,20 @@ func checkPrerequisite(ctx context.Context, timeout time.Duration) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	parent := ctx
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 
-	var stdout, stderr boundedBuffer
-	cmd := exec.CommandContext(ctx, "tmux", "-V")
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	cmd.WaitDelay = prerequisiteWaitDelay
-	err := cmd.Run()
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		if errors.Is(ctxErr, context.DeadlineExceeded) {
-			if parentErr := context.Cause(parent); parentErr != nil {
-				return fmt.Errorf("checking required tmux version: %w", parentErr)
-			}
-			return fmt.Errorf("tmux 3.2 or newer is required; tmux -V did not respond within %s; %s", timeout, prerequisiteRecovery)
-		}
-		return fmt.Errorf("checking required tmux version: %w", ctxErr)
-	}
+	res, err := cmdrun.Query(ctx, cmdrun.QuerySpec{
+		Op:        "tmux -V",
+		Argv:      []string{"tmux", "-V"},
+		Timeout:   timeout,
+		Shape:     cmdrun.ShapeSingleLine,
+		MaxStdout: tmuxSmallStdoutLimit,
+		MaxStderr: tmuxSmallStderrLimit,
+	})
 	if err != nil {
-		var execErr *exec.Error
-		if errors.As(err, &execErr) && errors.Is(execErr.Err, exec.ErrNotFound) {
-			return errors.New("tmux 3.2 or newer is required; install tmux and ensure it is available in PATH")
-		}
-		if detail := strings.TrimSpace(stderr.buf.String()); detail != "" {
-			return fmt.Errorf("tmux 3.2 or newer is required; tmux -V failed: %w: %s; %s", err, detail, prerequisiteRecovery)
-		}
-		return fmt.Errorf("tmux 3.2 or newer is required; tmux -V failed: %w; %s", err, prerequisiteRecovery)
-	}
-	if stdout.overflow || stderr.overflow {
-		return fmt.Errorf("tmux 3.2 or newer is required; tmux -V returned oversized output; %s", prerequisiteRecovery)
+		return prerequisiteError(ctx, err, timeout)
 	}
 
-	raw := strings.TrimSpace(stdout.buf.String())
+	raw := strings.TrimSpace(res.Stdout)
 	found, err := parseVersion(raw)
 	if err != nil {
 		return fmt.Errorf("tmux 3.2 or newer is required; could not parse tmux -V output %q: %w; %s", raw, err, prerequisiteRecovery)
@@ -95,6 +56,34 @@ func checkPrerequisite(ctx context.Context, timeout time.Duration) error {
 		return fmt.Errorf("tmux 3.2 or newer is required; found %s; install or upgrade tmux and ensure the supported version is first in PATH", raw)
 	}
 	return nil
+}
+
+func prerequisiteError(parent context.Context, err error, timeout time.Duration) error {
+	// A canceled or expired caller context is not a verdict about tmux;
+	// report the caller's cause instead of an install/upgrade message.
+	if parentErr := context.Cause(parent); parentErr != nil {
+		return fmt.Errorf("checking required tmux version: %w", parentErr)
+	}
+	var cmdErr *cmdrun.CommandError
+	if !errors.As(err, &cmdErr) {
+		return fmt.Errorf("checking required tmux version: %w", err)
+	}
+	switch cmdErr.Kind {
+	case cmdrun.KindTimeout:
+		return fmt.Errorf("tmux 3.2 or newer is required; tmux -V did not respond within %s; %s", timeout, prerequisiteRecovery)
+	case cmdrun.KindCanceled:
+		return fmt.Errorf("checking required tmux version: %w", cmdErr.Err)
+	case cmdrun.KindOutput:
+		return fmt.Errorf("tmux 3.2 or newer is required; tmux -V %v; %s", cmdErr.Err, prerequisiteRecovery)
+	default:
+		if cmdrun.IsNotFound(err) {
+			return errors.New("tmux 3.2 or newer is required; install tmux and ensure it is available in PATH")
+		}
+		if detail := strings.TrimSpace(cmdErr.Stderr); detail != "" {
+			return fmt.Errorf("tmux 3.2 or newer is required; tmux -V failed: %w: %s; %s", cmdErr.Err, detail, prerequisiteRecovery)
+		}
+		return fmt.Errorf("tmux 3.2 or newer is required; tmux -V failed: %w; %s", cmdErr.Err, prerequisiteRecovery)
+	}
 }
 
 func parseVersion(raw string) (version, error) {

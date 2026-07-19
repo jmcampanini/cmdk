@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"maps"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -42,7 +41,7 @@ var (
 	createResolvedSessionWindow = tmux.CreateResolvedSessionWindow
 	getwd                       = os.Getwd
 	chdir                       = os.Chdir
-	lookPath                    = exec.LookPath
+	lookPath                    = cmdrun.LookPath
 )
 
 var tmplFuncs = template.FuncMap{
@@ -121,6 +120,7 @@ type Launch struct {
 	argv             []string
 	env              []string
 	resolveTimeout   time.Duration
+	tmuxTimeouts     tmux.Timeouts
 }
 
 // ResolveLaunch also returns the template-data map as of the point resolution
@@ -159,10 +159,6 @@ func ResolveLaunch(accumulated []item.Item, selected item.Item, paneID string, c
 		if err != nil {
 			return Launch{}, data, err
 		}
-		resolveTimeout := cfg.Timeout.Fetch
-		if resolveTimeout <= 0 {
-			resolveTimeout = config.DefaultConfig().Timeout.Fetch
-		}
 		return Launch{
 			mode:             mode,
 			path:             launchPath,
@@ -170,7 +166,11 @@ func ResolveLaunch(accumulated []item.Item, selected item.Item, paneID string, c
 			windowNameMaxLen: cfg.Behavior.WindowNameMaxLength,
 			command:          command,
 			newShell:         selected.NewShell,
-			resolveTimeout:   resolveTimeout,
+			resolveTimeout:   cfg.Timeout.EffectiveFetch(),
+			tmuxTimeouts: tmux.Timeouts{
+				Query:    cfg.Timeout.EffectiveFetch(),
+				Mutation: cfg.Timeout.EffectiveMutation(),
+			},
 		}, data, nil
 	case launchModeShell:
 		if selected.WindowName != "" {
@@ -201,7 +201,7 @@ func (l Launch) Execute(execFn ExecFn) error {
 	case launchModeSessionWindow:
 		resolveCtx, cancel := context.WithTimeout(context.Background(), l.resolveTimeout)
 		defer cancel()
-		plan, err := resolveSessionPlan(resolveCtx, l.path)
+		plan, err := resolveSessionPlan(resolveCtx, l.path, l.resolveTimeout)
 		if err != nil {
 			return err
 		}
@@ -211,6 +211,7 @@ func (l Launch) Execute(execFn ExecFn) error {
 			Command:       l.command,
 			Switch:        true,
 			MaxNameLength: l.windowNameMaxLen,
+			Timeouts:      l.tmuxTimeouts,
 		})
 	case launchModeShell:
 		if l.path != "" {
@@ -386,10 +387,10 @@ func resolveLaunchPathCmd(cmdTemplate string, data map[string]string, timeout ti
 		return &cmdrun.CommandError{
 			Op:       "launch_path_cmd",
 			Kind:     cmdrun.KindOutput,
-			Rendered: rendered,
+			Command:  rendered,
 			Timeout:  timeout,
 			ExitCode: 0,
-			Stdout:   res.AnnotatedStdout(),
+			Stdout:   res.Stdout,
 			Stderr:   res.AnnotatedStderr(),
 			Err:      cause,
 		}
