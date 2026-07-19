@@ -1,0 +1,13 @@
+{
+  "METADATA": {"website": "https://example.invalid"},
+  "cod-account": {"char": "", "code": "eb99"},
+  "cod-min_scalar": {"code": "0"},
+  "cod-before_surrogates": {"code": "d7ff"},
+  "cod-after_surrogates": {"code": "e000"},
+  "cod-bmp_max": {"code": "ffff"},
+  "cod-supplementary_min": {"code": "10000"},
+  "cod-max_scalar": {"code": "10ffff"},
+  "dev-go": {"char": "", "code": "e724"},
+  "oct-git_branch": {"char": "", "code": "f418"},
+  "md-skipped_prefix": {"code": "d800"}
+}
