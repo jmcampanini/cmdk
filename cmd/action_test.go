@@ -17,6 +17,7 @@ import (
 	"github.com/jmcampanini/cmdk/internal/config"
 	"github.com/jmcampanini/cmdk/internal/execute"
 	"github.com/jmcampanini/cmdk/internal/item"
+	"github.com/jmcampanini/cmdk/internal/tmux"
 )
 
 func writeActionRunConfig(t *testing.T, content string) {
@@ -31,18 +32,18 @@ func writeActionRunConfig(t *testing.T, content string) {
 	}
 }
 
-func stubActionRunCurrentPane(t *testing.T, resolve func(context.Context, time.Duration) (string, error)) {
+func stubActionRunCurrentClient(t *testing.T, resolve func(context.Context, time.Duration) (tmux.ClientTarget, error)) {
 	t.Helper()
-	old := currentActionRunPane
-	currentActionRunPane = resolve
-	t.Cleanup(func() { currentActionRunPane = old })
+	old := currentActionRunClient
+	currentActionRunClient = resolve
+	t.Cleanup(func() { currentActionRunClient = old })
 }
 
 func stubActionRunTmux(t *testing.T, paneID string) {
 	t.Helper()
 	stubTmuxPrerequisite(t, func(context.Context) error { return nil })
-	stubActionRunCurrentPane(t, func(context.Context, time.Duration) (string, error) {
-		return paneID, nil
+	stubActionRunCurrentClient(t, func(context.Context, time.Duration) (tmux.ClientTarget, error) {
+		return tmux.ClientTarget{Name: "/dev/pts/4", PaneID: paneID}, nil
 	})
 }
 
@@ -162,8 +163,8 @@ launch_path_cmd = "touch '`+marker+`'; pwd"
 cmd = "true"
 `)
 	stubTmuxPrerequisite(t, func(context.Context) error { return nil })
-	stubActionRunCurrentPane(t, func(context.Context, time.Duration) (string, error) {
-		return "", errors.New("no current tmux client")
+	stubActionRunCurrentClient(t, func(context.Context, time.Duration) (tmux.ClientTarget, error) {
+		return tmux.ClientTarget{}, errors.New("no current tmux client")
 	})
 
 	cmd := newRootCommand()

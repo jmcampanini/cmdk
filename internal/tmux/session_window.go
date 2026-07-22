@@ -48,6 +48,7 @@ type SessionWindowOptions struct {
 	Switch        bool
 	MaxNameLength int
 	Timeouts      Timeouts
+	TargetClient  ClientTarget
 }
 
 // SessionWindowResult identifies a newly created tmux window and its first pane.
@@ -112,6 +113,11 @@ func (m sessionWindowManager) createResolvedWindow(ctx context.Context, plan res
 	if err != nil {
 		return SessionWindowResult{}, err
 	}
+	if !opts.TargetClient.isZero() {
+		if err := validateAttachedClient(ctx, m.timeouts.Query, m.runner, opts.TargetClient); err != nil {
+			return SessionWindowResult{}, fmt.Errorf("target tmux client: %w", err)
+		}
+	}
 
 	shellCommand := shellCommandFromArgv(opts.Command)
 	var result SessionWindowResult
@@ -129,7 +135,7 @@ func (m sessionWindowManager) createResolvedWindow(ctx context.Context, plan res
 	}
 
 	if opts.Switch {
-		return result, m.switchClient(ctx, result.SessionID, result.WindowID)
+		return result, m.switchClient(ctx, result.SessionID, result.WindowID, opts.TargetClient.Name)
 	}
 	return result, nil
 }
@@ -197,6 +203,14 @@ func validateSessionPlan(plan resolver.Plan) error {
 func validateSessionWindowOptions(windowName string, opts SessionWindowOptions) error {
 	if windowName == "" {
 		return errors.New("window name cannot be empty")
+	}
+	if !opts.TargetClient.isZero() {
+		if !opts.Switch {
+			return errors.New("target client requires switching")
+		}
+		if err := validateClientTarget(opts.TargetClient); err != nil {
+			return err
+		}
 	}
 	haveCommand := len(opts.Command) > 0
 	if opts.NewShell && haveCommand {
@@ -456,8 +470,13 @@ func tmuxSafeSessionName(sessionKey string) string {
 	return name
 }
 
-func (m sessionWindowManager) switchClient(ctx context.Context, sessionID, windowID string) error {
-	_, err := m.query(ctx, cmdrun.ShapeEmpty, m.timeouts.Mutation, "switch-client", "-t", sessionID+":"+windowID)
+func (m sessionWindowManager) switchClient(ctx context.Context, sessionID, windowID, clientName string) error {
+	args := []string{"switch-client"}
+	if clientName != "" {
+		args = append(args, "-c", clientName)
+	}
+	args = append(args, "-t", sessionID+":"+windowID)
+	_, err := m.query(ctx, cmdrun.ShapeEmpty, m.timeouts.Mutation, args...)
 	return err
 }
 

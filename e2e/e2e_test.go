@@ -1032,6 +1032,85 @@ stages = [
 	}
 }
 
+func TestE2E_ActionRunRejectsDetachedSourceWithUnrelatedClient(t *testing.T) {
+	useIsolatedTmuxSocket(t)
+
+	marker := filepath.Join(t.TempDir(), "launch-path-command-ran")
+	actionDir := t.TempDir()
+	xdg := writeConfig(t, fmt.Sprintf(`
+[[actions]]
+name = "detached action"
+matches = "root"
+launch_path_cmd = "touch %s; printf '%%s\\n' %s"
+cmd = "sleep 300"
+`, shellQuoteE2E(marker), shellQuoteE2E(actionDir)))
+
+	unrelatedSession := "cmdk-action-unrelated"
+	clientCmd := tmuxCmd("-C", "new-session", "-s", unrelatedSession, "-x", "120", "-y", "40", "sleep", "300")
+	clientInput, err := clientCmd.StdinPipe()
+	if err != nil {
+		t.Fatalf("create unrelated tmux control client stdin: %v", err)
+	}
+	if err := clientCmd.Start(); err != nil {
+		t.Fatalf("start unrelated tmux control client: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = clientInput.Close()
+		_ = clientCmd.Process.Kill()
+		_ = clientCmd.Wait()
+	})
+
+	deadline := time.Now().Add(defaultTimeout)
+	for {
+		out, listErr := tmuxCmd("list-clients", "-t", unrelatedSession, "-F", "#{client_name}").CombinedOutput()
+		if listErr == nil && strings.TrimSpace(string(out)) != "" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("unrelated tmux client did not attach: %v\n%s", listErr, out)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	captureDir := t.TempDir()
+	stdoutPath := filepath.Join(captureDir, "stdout")
+	stderrPath := filepath.Join(captureDir, "stderr")
+	statusPath := filepath.Join(captureDir, "status")
+	shellCmd := fmt.Sprintf("%s action run %s > %s 2> %s; printf '%%s\\n' $? > %s; sleep 300",
+		shellQuoteE2E(binaryPath), shellQuoteE2E("detached action"), shellQuoteE2E(stdoutPath), shellQuoteE2E(stderrPath), shellQuoteE2E(statusPath))
+	detachedSession := "cmdk-action-detached"
+	if out, err := tmuxCmd("new-session", "-d", "-s", detachedSession,
+		"env", "XDG_CONFIG_HOME="+xdg, "HOME="+t.TempDir(), "sh", "-c", shellCmd).CombinedOutput(); err != nil {
+		t.Fatalf("start detached action session: %v\n%s", err, out)
+	}
+
+	status := strings.TrimSpace(waitForFile(t, statusPath, defaultTimeout))
+	if status == "0" {
+		t.Fatal("detached action unexpectedly succeeded")
+	}
+	if stdout, err := os.ReadFile(stdoutPath); err != nil {
+		t.Fatal(err)
+	} else if len(stdout) != 0 {
+		t.Fatalf("detached action stdout = %q, want empty", stdout)
+	}
+	if stderr, err := os.ReadFile(stderrPath); err != nil {
+		t.Fatal(err)
+	} else if !strings.Contains(string(stderr), "not invoking pane") {
+		t.Fatalf("detached action stderr = %q, want attached-client rejection", stderr)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("launch_path_cmd ran before attached-client rejection; stat error = %v", err)
+	}
+
+	clientSession, err := tmuxCmd("list-clients", "-F", "#{session_name}").CombinedOutput()
+	if err != nil {
+		t.Fatalf("query unrelated client after rejection: %v\n%s", err, clientSession)
+	}
+	if got := strings.TrimSpace(string(clientSession)); got != unrelatedSession {
+		t.Fatalf("unrelated client session = %q, want %q", got, unrelatedSession)
+	}
+}
+
 func TestE2E_RootLaunchPathActionCreatesManagedSession(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "scratch")
 	if err := os.MkdirAll(dir, 0o755); err != nil {

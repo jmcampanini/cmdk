@@ -13,88 +13,115 @@ func setCurrentClientEnv(t *testing.T, paneID string) {
 	t.Setenv("TMUX_PANE", paneID)
 }
 
-func TestCurrentClientPane(t *testing.T) {
+func TestCurrentClient(t *testing.T) {
 	setCurrentClientEnv(t, "%17")
-	runner := newScriptedTmuxRunner(t, scriptedTmuxCall{
-		args:   []string{"display-message", "-p", currentClientPaneFormat},
-		output: "/dev/pts/4\t%17\n",
-	})
+	runner := newScriptedTmuxRunner(t,
+		scriptedTmuxCall{
+			args:   []string{"display-message", "-p", currentClientFormat},
+			output: "/dev/pts/4\t%17\n",
+		},
+		scriptedTmuxCall{
+			args:   []string{"list-clients", "-F", currentClientFormat},
+			output: "/dev/pts/4\t%17\n",
+		},
+	)
 
-	paneID, err := currentClientPane(context.Background(), testTmuxTimeouts.Query, runner)
-	runner.done()
+	target, err := currentClient(context.Background(), testTmuxTimeouts.Query, runner)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if paneID != "%17" {
-		t.Errorf("paneID = %q, want %%17", paneID)
+	runner.done()
+	want := ClientTarget{Name: "/dev/pts/4", PaneID: "%17"}
+	if target != want {
+		t.Fatalf("target = %#v, want %#v", target, want)
 	}
 }
 
-func TestCurrentClientPaneRejectsMissingEnvironment(t *testing.T) {
+func TestCurrentClientRejectsMissingEnvironment(t *testing.T) {
 	t.Setenv("TMUX", "")
 	t.Setenv("TMUX_PANE", "")
 	runner := newScriptedTmuxRunner(t)
 
-	_, err := currentClientPane(context.Background(), testTmuxTimeouts.Query, runner)
+	_, err := currentClient(context.Background(), testTmuxTimeouts.Query, runner)
 	runner.done()
 	if err == nil || !strings.Contains(err.Error(), "TMUX is not set") {
 		t.Fatalf("error = %v, want missing TMUX environment", err)
 	}
 }
 
-func TestCurrentClientPaneRejectsMissingClient(t *testing.T) {
+func TestCurrentClientRejectsMissingClient(t *testing.T) {
 	setCurrentClientEnv(t, "%17")
 	runner := newScriptedTmuxRunner(t, scriptedTmuxCall{
-		args:   []string{"display-message", "-p", currentClientPaneFormat},
+		args:   []string{"display-message", "-p", currentClientFormat},
 		output: "\t%17\n",
 	})
 
-	_, err := currentClientPane(context.Background(), testTmuxTimeouts.Query, runner)
+	_, err := currentClient(context.Background(), testTmuxTimeouts.Query, runner)
 	runner.done()
 	if err == nil || !strings.Contains(err.Error(), "no current tmux client") {
-		t.Fatalf("error = %v, want missing current client", err)
+		t.Fatalf("error = %v, want missing-client rejection", err)
 	}
 }
 
-func TestCurrentClientPaneRejectsInvalidPane(t *testing.T) {
+func TestCurrentClientRejectsInvalidPane(t *testing.T) {
 	setCurrentClientEnv(t, "%17")
 	runner := newScriptedTmuxRunner(t, scriptedTmuxCall{
-		args:   []string{"display-message", "-p", currentClientPaneFormat},
-		output: "/dev/pts/4\tnot-a-pane\n",
+		args:   []string{"display-message", "-p", currentClientFormat},
+		output: "/dev/pts/4\tnot-pane\n",
 	})
 
-	_, err := currentClientPane(context.Background(), testTmuxTimeouts.Query, runner)
+	_, err := currentClient(context.Background(), testTmuxTimeouts.Query, runner)
 	runner.done()
 	if err == nil || !strings.Contains(err.Error(), "pane_id") {
-		t.Fatalf("error = %v, want invalid pane", err)
+		t.Fatalf("error = %v, want pane validation", err)
 	}
 }
 
-func TestCurrentClientPaneRejectsEnvironmentMismatch(t *testing.T) {
+func TestCurrentClientRejectsEnvironmentMismatch(t *testing.T) {
 	setCurrentClientEnv(t, "%18")
 	runner := newScriptedTmuxRunner(t, scriptedTmuxCall{
-		args:   []string{"display-message", "-p", currentClientPaneFormat},
+		args:   []string{"display-message", "-p", currentClientFormat},
 		output: "/dev/pts/4\t%17\n",
 	})
 
-	_, err := currentClientPane(context.Background(), testTmuxTimeouts.Query, runner)
+	_, err := currentClient(context.Background(), testTmuxTimeouts.Query, runner)
 	runner.done()
 	if err == nil || !strings.Contains(err.Error(), "does not match TMUX_PANE") {
 		t.Fatalf("error = %v, want pane environment mismatch", err)
 	}
 }
 
-func TestCurrentClientPaneWrapsQueryFailure(t *testing.T) {
+func TestCurrentClientRejectsClientAttachedToDifferentPane(t *testing.T) {
 	setCurrentClientEnv(t, "%17")
-	queryErr := errors.New("no server")
+	runner := newScriptedTmuxRunner(t,
+		scriptedTmuxCall{
+			args:   []string{"display-message", "-p", currentClientFormat},
+			output: "/dev/pts/4\t%17\n",
+		},
+		scriptedTmuxCall{
+			args:   []string{"list-clients", "-F", currentClientFormat},
+			output: "/dev/pts/4\t%99\n",
+		},
+	)
+
+	_, err := currentClient(context.Background(), testTmuxTimeouts.Query, runner)
+	runner.done()
+	if err == nil || !strings.Contains(err.Error(), "not invoking pane") {
+		t.Fatalf("error = %v, want attached-pane mismatch", err)
+	}
+}
+
+func TestCurrentClientWrapsQueryFailure(t *testing.T) {
+	setCurrentClientEnv(t, "%17")
+	queryErr := errors.New("query failed")
 	runner := newScriptedTmuxRunner(t, scriptedTmuxCall{
-		args: []string{"display-message", "-p", currentClientPaneFormat},
+		args: []string{"display-message", "-p", currentClientFormat},
 		err:  queryErr,
 	})
 
-	_, err := currentClientPane(context.Background(), testTmuxTimeouts.Query, runner)
+	_, err := currentClient(context.Background(), testTmuxTimeouts.Query, runner)
 	runner.done()
-	if !errors.Is(err, queryErr) {
+	if !errors.Is(err, queryErr) || !strings.Contains(err.Error(), "current tmux client") {
 		t.Fatalf("error = %v, want wrapped query failure", err)
 	}
 }

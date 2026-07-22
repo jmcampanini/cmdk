@@ -22,9 +22,9 @@ type actionRunOptions struct {
 
 type actionRunInvocation struct {
 	actionName string
+	client     tmux.ClientTarget
 	config     config.Config
 	prepared   actionrun.Prepared
-	paneID     string
 }
 
 type actionRunResult struct {
@@ -38,7 +38,7 @@ type actionRunResult struct {
 }
 
 var (
-	currentActionRunPane          = tmux.CurrentClientPane
+	currentActionRunClient        = tmux.CurrentClient
 	resolveConfiguredActionLaunch = execute.ResolveLaunch
 	executeConfiguredActionLaunch = func(launch execute.Launch) (execute.LaunchResult, error) {
 		return launch.ExecuteWithResult(cmdrun.Replace)
@@ -151,20 +151,20 @@ func prepareActionRunInvocation(cmd *cobra.Command, name string, options actionR
 	if err := requireTmux(cmd, nil); err != nil {
 		return actionRunInvocation{}, err
 	}
-	paneID, err := currentActionRunPane(commandContext(cmd), cfg.Timeout.EffectiveFetch())
+	client, err := currentActionRunClient(commandContext(cmd), cfg.Timeout.EffectiveFetch())
 	if err != nil {
 		return actionRunInvocation{}, err
 	}
 
-	prepared, err := actionrun.PrepareWithPane(cfg, name, options.path, paneID, options.inputs)
+	prepared, err := actionrun.PrepareWithPane(cfg, name, options.path, client.PaneID, options.inputs)
 	if err != nil {
 		return actionRunInvocation{}, err
 	}
 	return actionRunInvocation{
 		actionName: action.Name,
+		client:     client,
 		config:     cfg,
 		prepared:   prepared,
-		paneID:     paneID,
 	}, nil
 }
 
@@ -172,13 +172,13 @@ func runPreparedAction(cmd *cobra.Command, invocation actionRunInvocation) error
 	launch, _, err := resolveConfiguredActionLaunch(
 		invocation.prepared.Accumulated,
 		invocation.prepared.Selected,
-		invocation.paneID,
+		invocation.client.PaneID,
 		invocation.config,
 	)
 	if err != nil {
 		return err
 	}
-	result, err := executeConfiguredActionLaunch(launch)
+	result, err := executeConfiguredActionLaunch(launch.ForClient(invocation.client))
 	if err != nil {
 		return err
 	}

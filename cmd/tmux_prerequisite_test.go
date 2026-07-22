@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/jmcampanini/cmdk/internal/tmux"
 )
 
 func windowLeafCommand(t *testing.T, name string) *cobra.Command {
@@ -51,8 +53,8 @@ cmd = "true"
 		calls++
 		return nil
 	})
-	stubActionRunCurrentPane(t, func(context.Context, time.Duration) (string, error) {
-		return "%17", nil
+	stubActionRunCurrentClient(t, func(context.Context, time.Duration) (tmux.ClientTarget, error) {
+		return tmux.ClientTarget{Name: "/dev/pts/4", PaneID: "%17"}, nil
 	})
 
 	commands := []struct {

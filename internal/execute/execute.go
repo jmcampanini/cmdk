@@ -122,6 +122,12 @@ type Launch struct {
 	env              []string
 	resolveTimeout   time.Duration
 	tmuxTimeouts     tmux.Timeouts
+	targetClient     tmux.ClientTarget
+}
+
+func (l Launch) ForClient(target tmux.ClientTarget) Launch {
+	l.targetClient = target
+	return l
 }
 
 // ResolveLaunch also returns the template-data map as of the point resolution
@@ -242,6 +248,7 @@ func (l Launch) execute(execFn ExecFn, validateResultText bool) (LaunchResult, e
 			Switch:        true,
 			MaxNameLength: l.windowNameMaxLen,
 			Timeouts:      l.tmuxTimeouts,
+			TargetClient:  l.targetClient,
 		})
 		launchResult := LaunchResult{
 			LaunchPath: l.path,

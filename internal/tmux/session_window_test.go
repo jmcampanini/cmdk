@@ -27,6 +27,7 @@ var tmuxCommandClass = map[string]struct {
 	shape    cmdrun.Shape
 	mutation bool
 }{
+	"list-clients":    {shape: cmdrun.ShapeLines},
 	"list-sessions":   {shape: cmdrun.ShapeLines},
 	"list-windows":    {shape: cmdrun.ShapeLines},
 	"display-message": {shape: cmdrun.ShapeSingleLine},
@@ -700,6 +701,46 @@ func TestTruncateWindowName(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCreateResolvedSessionWindowTargetsValidatedClient(t *testing.T) {
+	plan := repoSessionWindowPlan()
+	target := ClientTarget{Name: "/dev/pts/4", PaneID: "%17"}
+	runner := newScriptedTmuxRunner(t,
+		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$2\t" + plan.SessionKey + "\n"},
+		scriptedTmuxCall{args: []string{"list-clients", "-F", currentClientFormat}, output: target.Name + "\t" + target.PaneID + "\n"},
+		scriptedTmuxCall{args: []string{"new-window", "-P", "-F", newWindowResultFormat, "-t", "$2:", "-n", "tests", "-c", launchPathForPlan(plan)}, output: "@5\t%5\ttests\n"},
+		scriptedTmuxCall{args: []string{"switch-client", "-c", target.Name, "-t", "$2:@5"}},
+	)
+
+	_, err := createWindowResultWithRunner(t, runner, plan, SessionWindowOptions{
+		Name:         "tests",
+		NewShell:     true,
+		Switch:       true,
+		TargetClient: target,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCreateResolvedSessionWindowRejectsDetachedTargetBeforeMutation(t *testing.T) {
+	plan := repoSessionWindowPlan()
+	target := ClientTarget{Name: "/dev/pts/4", PaneID: "%17"}
+	runner := newScriptedTmuxRunner(t,
+		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$2\t" + plan.SessionKey + "\n"},
+		scriptedTmuxCall{args: []string{"list-clients", "-F", currentClientFormat}, output: target.Name + "\t%99\n"},
+	)
+
+	_, err := createWindowResultWithRunner(t, runner, plan, SessionWindowOptions{
+		Name:         "tests",
+		NewShell:     true,
+		Switch:       true,
+		TargetClient: target,
+	})
+	if err == nil || !strings.Contains(err.Error(), "not invoking pane") {
+		t.Fatalf("error = %v, want detached target rejection", err)
 	}
 }
 

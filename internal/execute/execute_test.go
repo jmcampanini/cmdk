@@ -860,7 +860,8 @@ func TestLaunchExecute_SessionWindowCreatesManagedWindow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveLaunch: %v", err)
 	}
-	result, err := launch.ExecuteWithResult(func(string, []string, []string) error {
+	target := tmux.ClientTarget{Name: "/dev/pts/4", PaneID: "%17"}
+	result, err := launch.ForClient(target).ExecuteWithResult(func(string, []string, []string) error {
 		t.Fatal("execFn should not be called for session-window mode")
 		return nil
 	})
@@ -879,6 +880,9 @@ func TestLaunchExecute_SessionWindowCreatesManagedWindow(t *testing.T) {
 	}
 	if !gotOpts.Switch {
 		t.Error("Switch = false, want true")
+	}
+	if gotOpts.TargetClient != target {
+		t.Errorf("TargetClient = %#v, want %#v", gotOpts.TargetClient, target)
 	}
 	if gotOpts.MaxNameLength != 20 {
 		t.Errorf("MaxNameLength = %d, want default 20", gotOpts.MaxNameLength)

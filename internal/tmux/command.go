@@ -9,8 +9,8 @@ import (
 )
 
 // Byte limits per call-site class. Small covers single-line results (IDs,
-// version strings) and expect-empty mutations; list covers list-sessions and
-// list-windows output, whose size scales with user state (session and window
+// version strings) and expect-empty mutations; list covers list-clients,
+// list-sessions, and list-windows output, whose size scales with user state
 // names are user-controlled), so the cap sits far above the measured
 // legitimate worst case of a few hundred KiB.
 const (
@@ -25,8 +25,8 @@ const (
 // timeout.mutation. Both are required by the underlying runner; attach is a
 // streaming command and deliberately runs without a deadline.
 type Timeouts struct {
-	// Query bounds read-only commands: list-sessions, list-windows,
-	// display-message.
+	// Query bounds read-only commands: list-clients, list-sessions,
+	// list-windows, display-message.
 	Query time.Duration
 	// Mutation bounds state-changing commands: new-session, new-window,
 	// set-option, switch-client.
