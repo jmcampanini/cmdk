@@ -290,6 +290,35 @@ stages = [
 	}
 }
 
+func TestActionFlagErrorsEscapeTerminalControls(t *testing.T) {
+	tests := []struct {
+		name string
+		flag string
+	}{
+		{name: "long", flag: "--unknown\x1b]52;c;payload\a"},
+		{name: "shorthand", flag: "-\x1b"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cmd := newRootCommand()
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
+			cmd.SetArgs([]string{"action", "run", "unused", test.flag})
+
+			err := cmd.Execute()
+			if err == nil {
+				t.Fatal("expected flag parsing error")
+			}
+			if strings.ContainsRune(err.Error(), '\x1b') || strings.ContainsRune(err.Error(), '\a') {
+				t.Fatalf("unsafe controls remain in %q", err.Error())
+			}
+			if !strings.Contains(err.Error(), `\x1b`) {
+				t.Errorf("safe error %q missing escaped control", err.Error())
+			}
+		})
+	}
+}
+
 func TestTerminalSafeActionRunErrorEscapesControlsAndPreservesCause(t *testing.T) {
 	cause := errors.New("bad\x1b[31m\toutput\xff\nnext")
 	err := terminalSafeActionRunError(cause)
