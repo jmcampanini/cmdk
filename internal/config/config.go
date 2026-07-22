@@ -129,7 +129,7 @@ var validMatchTypes = []string{matchTypeRoot, matchTypeDir, matchTypeSession}
 
 var validLaunchModes = []string{"", LaunchModeDetect, LaunchModeSessionWindow, LaunchModeShell}
 
-// reservedStageKeys must not be used by stage outputs because they are runtime-provided
+// reservedStageKeys must not be used by action inputs because they are runtime-provided
 // variables or reserved names that should not be introduced as template aliases.
 var reservedStageKeys = []string{
 	"path",

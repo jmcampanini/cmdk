@@ -14,6 +14,7 @@ import (
 	"text/template"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/jmcampanini/cmdk/internal/cmdrun"
 	"github.com/jmcampanini/cmdk/internal/config"
@@ -121,6 +122,12 @@ type Launch struct {
 	env              []string
 	resolveTimeout   time.Duration
 	tmuxTimeouts     tmux.Timeouts
+	targetClient     tmux.ClientTarget
+}
+
+func (l Launch) ForClient(target tmux.ClientTarget) Launch {
+	l.targetClient = target
+	return l
 }
 
 // ResolveLaunch also returns the template-data map as of the point resolution
@@ -196,32 +203,71 @@ func ResolveLaunch(accumulated []item.Item, selected item.Item, paneID string, c
 	}
 }
 
+type LaunchResult struct {
+	LaunchPath string
+	SessionID  string
+	SessionKey string
+	WindowID   string
+	WindowName string
+	PaneID     string
+}
+
 func (l Launch) Execute(execFn ExecFn) error {
+	_, err := l.execute(execFn, false)
+	return err
+}
+
+func (l Launch) ExecuteWithResult(execFn ExecFn) (LaunchResult, error) {
+	return l.execute(execFn, true)
+}
+
+func (l Launch) execute(execFn ExecFn, validateResultText bool) (LaunchResult, error) {
 	switch l.mode {
 	case launchModeSessionWindow:
+		if validateResultText {
+			if !utf8.ValidString(l.path) {
+				return LaunchResult{}, errors.New("launch_path is not valid UTF-8")
+			}
+			if !utf8.ValidString(l.windowName) {
+				return LaunchResult{}, errors.New("window_name is not valid UTF-8")
+			}
+		}
 		resolveCtx, cancel := context.WithTimeout(context.Background(), l.resolveTimeout)
 		defer cancel()
 		plan, err := resolveSessionPlan(resolveCtx, l.path, l.resolveTimeout)
 		if err != nil {
-			return err
+			return LaunchResult{}, err
 		}
-		return createResolvedSessionWindow(context.Background(), plan, l.path, tmux.SessionWindowOptions{
+		if validateResultText && !utf8.ValidString(plan.SessionKey) {
+			return LaunchResult{}, errors.New("session_key is not valid UTF-8")
+		}
+		result, err := createResolvedSessionWindow(context.Background(), plan, l.path, tmux.SessionWindowOptions{
 			Name:          l.windowName,
 			NewShell:      l.newShell,
 			Command:       l.command,
 			Switch:        true,
 			MaxNameLength: l.windowNameMaxLen,
 			Timeouts:      l.tmuxTimeouts,
+			TargetClient:  l.targetClient,
 		})
+		launchResult := LaunchResult{
+			LaunchPath: l.path,
+			SessionID:  result.SessionID,
+			SessionKey: result.SessionKey,
+			WindowID:   result.WindowID,
+			WindowName: result.WindowName,
+			PaneID:     result.PaneID,
+		}
+		return launchResult, err
 	case launchModeShell:
 		if l.path != "" {
 			if err := chdir(l.path); err != nil {
-				return fmt.Errorf("chdir to launch_path %s: %w", l.path, err)
+				return LaunchResult{}, fmt.Errorf("chdir to launch_path %s: %w", l.path, err)
 			}
 		}
-		return execFn(l.argv0, l.argv, l.env)
+		return LaunchResult{}, execFn(l.argv0, l.argv, l.env)
 	default:
-		return fmt.Errorf("invalid effective launch_mode %q", l.mode)
+		return LaunchResult{}, fmt.Errorf("invalid effective launch_mode %q", l.mode)
 	}
 }
 

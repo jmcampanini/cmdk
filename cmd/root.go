@@ -47,7 +47,11 @@ func newRootCommand() *cobra.Command {
 		Short: "Keyboard-driven tmux launcher",
 		Long: `Keyboard-driven tmux launcher.
 
-Launch a shell or command in the cmdk-managed session for a directory:
+Run an existing configured session-window action noninteractively:
+
+  cmdk action run <exact-name> --path <dir> --input key=value
+
+Or launch a shell or command in the cmdk-managed session for a directory:
 
   cmdk session window <path> [--switch] --new
   cmdk session window <path> [--switch] -- <command> [args...]
@@ -79,6 +83,7 @@ Log file:
 	cmd.Flags().BoolVar(&timingsFlag, "timings", false, "measure and print startup phase durations")
 	cmd.Flags().BoolVar(&timingsJSON, "timings-json", false, "output timings as JSON (implies --timings)")
 	cmd.AddCommand(
+		newActionCommand(),
 		newAttachCommand(),
 		newConfigCommand(),
 		newDocsCommand(),

@@ -60,13 +60,13 @@ func TestRunSessionWindowCommandNewShellDefaultsToBackground(t *testing.T) {
 	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
 
 	called := false
-	createResolvedSessionWindow = func(ctx context.Context, plan resolver.Plan, launchPath string, opts tmux.SessionWindowOptions) error {
+	createResolvedSessionWindow = func(ctx context.Context, plan resolver.Plan, launchPath string, opts tmux.SessionWindowOptions) (tmux.SessionWindowResult, error) {
 		called = true
 		if _, ok := ctx.Deadline(); ok {
-			return errors.New("window context unexpectedly inherited resolve timeout")
+			return tmux.SessionWindowResult{}, errors.New("window context unexpectedly inherited resolve timeout")
 		}
 		if err := ctx.Err(); err != nil {
-			return err
+			return tmux.SessionWindowResult{}, err
 		}
 		if plan.SessionKind != resolver.KindDirectory {
 			t.Errorf("SessionKind = %q, want %q", plan.SessionKind, resolver.KindDirectory)
@@ -80,7 +80,7 @@ func TestRunSessionWindowCommandNewShellDefaultsToBackground(t *testing.T) {
 		if opts.Switch {
 			t.Error("Switch = true, want false")
 		}
-		return nil
+		return tmux.SessionWindowResult{}, nil
 	}
 
 	cmd := &cobra.Command{}
@@ -103,14 +103,14 @@ func TestRunSessionWindowCommandCommandModePassesArgvUnchanged(t *testing.T) {
 	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
 
 	wantCommand := []string{"echo", "hello $HOME", "|", "tee", "x"}
-	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, launchPath string, opts tmux.SessionWindowOptions) error {
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, launchPath string, opts tmux.SessionWindowOptions) (tmux.SessionWindowResult, error) {
 		if opts.NewShell {
 			t.Error("NewShell = true, want false")
 		}
 		if !slices.Equal(opts.Command, wantCommand) {
 			t.Errorf("Command = %q, want %q", opts.Command, wantCommand)
 		}
-		return nil
+		return tmux.SessionWindowResult{}, nil
 	}
 
 	cmd := &cobra.Command{}
@@ -193,11 +193,11 @@ func TestRunSessionWindowCommandNameOverride(t *testing.T) {
 	oldCreate := createResolvedSessionWindow
 	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
 
-	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, launchPath string, opts tmux.SessionWindowOptions) error {
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, launchPath string, opts tmux.SessionWindowOptions) (tmux.SessionWindowResult, error) {
 		if opts.Name != "tests" {
 			t.Errorf("Name = %q, want tests", opts.Name)
 		}
-		return nil
+		return tmux.SessionWindowResult{}, nil
 	}
 
 	cmd := &cobra.Command{}
@@ -240,9 +240,9 @@ func TestSessionWindowCommandParsesFlagsOnlyBeforeDashDash(t *testing.T) {
 	stubTmuxPrerequisite(t, func(context.Context) error { return nil })
 
 	var got tmux.SessionWindowOptions
-	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, _ string, opts tmux.SessionWindowOptions) error {
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, _ string, opts tmux.SessionWindowOptions) (tmux.SessionWindowResult, error) {
 		got = opts
-		return nil
+		return tmux.SessionWindowResult{}, nil
 	}
 
 	tests := []struct {
@@ -291,7 +291,7 @@ func TestRunSessionWindowCommandThreadsConfiguredWindowNameMaxLength(t *testing.
 	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
 
 	called := false
-	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, _ string, opts tmux.SessionWindowOptions) error {
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, _ string, opts tmux.SessionWindowOptions) (tmux.SessionWindowResult, error) {
 		called = true
 		if opts.Name != "a-very-long-directory-name" {
 			t.Errorf("Name = %q, want untruncated basename", opts.Name)
@@ -299,7 +299,7 @@ func TestRunSessionWindowCommandThreadsConfiguredWindowNameMaxLength(t *testing.
 		if opts.MaxNameLength != 7 {
 			t.Errorf("MaxNameLength = %d, want configured 7", opts.MaxNameLength)
 		}
-		return nil
+		return tmux.SessionWindowResult{}, nil
 	}
 
 	cmd := &cobra.Command{}
@@ -322,12 +322,12 @@ func TestRunSessionWindowCommandDefaultsWindowNameMaxLength(t *testing.T) {
 	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
 
 	called := false
-	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, _ string, opts tmux.SessionWindowOptions) error {
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, _ string, opts tmux.SessionWindowOptions) (tmux.SessionWindowResult, error) {
 		called = true
 		if opts.MaxNameLength != 20 {
 			t.Errorf("MaxNameLength = %d, want default 20", opts.MaxNameLength)
 		}
-		return nil
+		return tmux.SessionWindowResult{}, nil
 	}
 
 	cmd := &cobra.Command{}

@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -849,6 +850,267 @@ matches = "root"
 
 	if _, err := os.Stat(marker); err != nil {
 		t.Errorf("expected marker file to be created: %v", err)
+	}
+}
+
+func TestE2E_ActionRunLaunchesWithLiteralInputsAndReportsLiveTmuxState(t *testing.T) {
+	useIsolatedTmuxSocket(t)
+
+	actionName := "Issue 125 exact action"
+	windowName := "issue-125-live"
+	actionDir := filepath.Join(t.TempDir(), "literal-action")
+	if err := os.MkdirAll(actionDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	promptValue := `prompt literal = true, [one.two] $HOME {{template}}`
+	pickerValue := `picker literal=a=b,["x.y"] $(touch nope); echo injected`
+	payloadMarker := filepath.Join(t.TempDir(), "payload-values")
+	pickerSourceMarker := filepath.Join(t.TempDir(), "picker-source-ran")
+	payloadScript := filepath.Join(actionDir, "payload.sh")
+	script := fmt.Sprintf(`#!/bin/sh
+	tmp=%s
+	printf '%%s\n%%s\n%%s\n' "$1" "$2" "$3" > "$tmp"
+	mv "$tmp" %s
+	sleep 300
+`, shellQuoteE2E(payloadMarker+".tmp"), shellQuoteE2E(payloadMarker))
+	if err := os.WriteFile(payloadScript, []byte(script), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	payloadCommand := fmt.Sprintf("sh %s {{sq .prompt_value}} {{sq .picker_value}} {{sq .pane_id}}", shellQuoteE2E(payloadScript))
+	pickerSource := fmt.Sprintf("printf source-ran > %s; exit 99", shellQuoteE2E(pickerSourceMarker))
+	xdg := writeConfig(t, fmt.Sprintf(`
+[[actions]]
+name = %q
+matches = "dir"
+window_name = %q
+cmd = %q
+stages = [
+  { type = "prompt", text = "Literal prompt:", key = "prompt_value" },
+  { type = "picker", source = %q, key = "picker_value" },
+]
+`, actionName, windowName, payloadCommand, pickerSource))
+
+	captureDir := t.TempDir()
+	stdoutPath := filepath.Join(captureDir, "stdout")
+	stderrPath := filepath.Join(captureDir, "stderr")
+	statusPath := filepath.Join(captureDir, "status")
+	args := []string{
+		shellQuoteE2E(binaryPath), "action", "run", shellQuoteE2E(actionName),
+		"--path", shellQuoteE2E(actionDir),
+		"--input", shellQuoteE2E("prompt_value=" + promptValue),
+		"--input", shellQuoteE2E("picker_value=" + pickerValue),
+	}
+	shellCmd := fmt.Sprintf("%s > %s 2> %s; printf '%%s\\n' $? > %s; sleep 300",
+		strings.Join(args, " "), shellQuoteE2E(stdoutPath), shellQuoteE2E(stderrPath), shellQuoteE2E(statusPath))
+	callerSession := "cmdk-action-run-" + fmt.Sprintf("%d", time.Now().UnixNano())
+	clientCmd := tmuxCmd("-C", "new-session", "-s", callerSession, "-x", "120", "-y", "40",
+		"env", "XDG_CONFIG_HOME="+xdg, "HOME="+t.TempDir(), "sh", "-c", shellCmd)
+	clientInput, err := clientCmd.StdinPipe()
+	if err != nil {
+		t.Fatalf("create tmux control client stdin: %v", err)
+	}
+	if err := clientCmd.Start(); err != nil {
+		t.Fatalf("start attached tmux control client: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = clientInput.Close()
+		_ = clientCmd.Process.Kill()
+		_ = clientCmd.Wait()
+	})
+
+	status := strings.TrimSpace(waitForFile(t, statusPath, defaultTimeout))
+	stdout, err := os.ReadFile(stdoutPath)
+	if err != nil {
+		t.Fatalf("read action run stdout: %v", err)
+	}
+	stderr, err := os.ReadFile(stderrPath)
+	if err != nil {
+		t.Fatalf("read action run stderr: %v", err)
+	}
+	if status != "0" {
+		t.Fatalf("action run exit status = %q, want 0\nstdout:\n%s\nstderr:\n%s", status, stdout, stderr)
+	}
+	if len(stderr) != 0 {
+		t.Fatalf("action run stderr = %q, want empty", stderr)
+	}
+
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(stdout, &fields); err != nil {
+		t.Fatalf("action run stdout is not exactly one JSON object: %v\nstdout: %q", err, stdout)
+	}
+	wantJSONFields := []string{"action", "launchPath", "sessionId", "sessionKey", "windowId", "windowName", "paneId"}
+	if len(fields) != len(wantJSONFields) {
+		t.Fatalf("JSON fields = %v, want exactly %v", fields, wantJSONFields)
+	}
+	for _, name := range wantJSONFields {
+		if _, ok := fields[name]; !ok {
+			t.Errorf("JSON is missing field %q: %s", name, stdout)
+		}
+	}
+	var result struct {
+		Action     string `json:"action"`
+		LaunchPath string `json:"launchPath"`
+		SessionID  string `json:"sessionId"`
+		SessionKey string `json:"sessionKey"`
+		WindowID   string `json:"windowId"`
+		WindowName string `json:"windowName"`
+		PaneID     string `json:"paneId"`
+	}
+	if err := json.Unmarshal(stdout, &result); err != nil {
+		t.Fatalf("decode action run result: %v", err)
+	}
+	if result.Action != actionName {
+		t.Errorf("action = %q, want %q", result.Action, actionName)
+	}
+	if result.LaunchPath != filepath.Clean(actionDir) {
+		t.Errorf("launchPath = %q, want %q", result.LaunchPath, filepath.Clean(actionDir))
+	}
+	if result.SessionKey != realPathE2E(t, actionDir) {
+		t.Errorf("sessionKey = %q, want %q", result.SessionKey, realPathE2E(t, actionDir))
+	}
+	if result.WindowName != windowName {
+		t.Errorf("windowName = %q, want %q", result.WindowName, windowName)
+	}
+
+	callerPaneOut, err := tmuxCmd("display-message", "-p", "-t", callerSession, "#{pane_id}").CombinedOutput()
+	if err != nil {
+		t.Fatalf("query invoking pane: %v\n%s", err, callerPaneOut)
+	}
+	callerPaneID := strings.TrimSpace(string(callerPaneOut))
+
+	payload := waitForFile(t, payloadMarker, defaultTimeout)
+	if want := promptValue + "\n" + pickerValue + "\n" + callerPaneID + "\n"; payload != want {
+		t.Fatalf("launched payload values = %q, want literal values %q", payload, want)
+	}
+	if _, err := os.Stat(pickerSourceMarker); err == nil {
+		t.Fatal("picker source command ran even though picker input was supplied")
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat picker source marker: %v", err)
+	}
+
+	liveOut, err := tmuxCmd("display-message", "-p", "-t", result.PaneID,
+		"#{session_id}\t#{@cmdk_session_key}\t#{window_id}\t#{window_name}\t#{pane_id}\t#{pane_current_path}\t#{pane_dead}").CombinedOutput()
+	if err != nil {
+		t.Fatalf("query launched pane: %v\n%s", err, liveOut)
+	}
+	live := strings.Split(strings.TrimRight(string(liveOut), "\r\n"), "\t")
+	if len(live) != 7 {
+		t.Fatalf("live tmux fields = %#v, want 7", live)
+	}
+	checks := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{name: "sessionId", got: result.SessionID, want: live[0]},
+		{name: "sessionKey", got: result.SessionKey, want: live[1]},
+		{name: "windowId", got: result.WindowID, want: live[2]},
+		{name: "windowName", got: result.WindowName, want: live[3]},
+		{name: "paneId", got: result.PaneID, want: live[4]},
+	}
+	for _, check := range checks {
+		if check.got != check.want {
+			t.Errorf("JSON %s = %q, live tmux value = %q", check.name, check.got, check.want)
+		}
+	}
+	if realPathE2E(t, result.LaunchPath) != realPathE2E(t, live[5]) {
+		t.Errorf("JSON launchPath = %q, live pane path = %q", result.LaunchPath, live[5])
+	}
+	if live[6] != "0" {
+		t.Errorf("launched payload pane_dead = %q, want 0 during verification", live[6])
+	}
+
+	clientOut, err := tmuxCmd("list-clients", "-F", "#{session_id}\t#{window_id}\t#{pane_id}").CombinedOutput()
+	if err != nil {
+		t.Fatalf("query switched tmux client: %v\n%s", err, clientOut)
+	}
+	clientTarget := strings.TrimSpace(string(clientOut))
+	wantClientTarget := strings.Join([]string{result.SessionID, result.WindowID, result.PaneID}, "\t")
+	if clientTarget != wantClientTarget {
+		t.Errorf("current client target = %q, want launched target %q", clientTarget, wantClientTarget)
+	}
+}
+
+func TestE2E_ActionRunRejectsDetachedSourceWithUnrelatedClient(t *testing.T) {
+	useIsolatedTmuxSocket(t)
+
+	marker := filepath.Join(t.TempDir(), "launch-path-command-ran")
+	actionDir := t.TempDir()
+	xdg := writeConfig(t, fmt.Sprintf(`
+[[actions]]
+name = "detached action"
+matches = "root"
+launch_path_cmd = "touch %s; printf '%%s\\n' %s"
+cmd = "sleep 300"
+`, shellQuoteE2E(marker), shellQuoteE2E(actionDir)))
+
+	unrelatedSession := "cmdk-action-unrelated"
+	clientCmd := tmuxCmd("-C", "new-session", "-s", unrelatedSession, "-x", "120", "-y", "40", "sleep", "300")
+	clientInput, err := clientCmd.StdinPipe()
+	if err != nil {
+		t.Fatalf("create unrelated tmux control client stdin: %v", err)
+	}
+	if err := clientCmd.Start(); err != nil {
+		t.Fatalf("start unrelated tmux control client: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = clientInput.Close()
+		_ = clientCmd.Process.Kill()
+		_ = clientCmd.Wait()
+	})
+
+	deadline := time.Now().Add(defaultTimeout)
+	for {
+		out, listErr := tmuxCmd("list-clients", "-t", unrelatedSession, "-F", "#{client_name}").CombinedOutput()
+		if listErr == nil && strings.TrimSpace(string(out)) != "" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("unrelated tmux client did not attach: %v\n%s", listErr, out)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	captureDir := t.TempDir()
+	stdoutPath := filepath.Join(captureDir, "stdout")
+	stderrPath := filepath.Join(captureDir, "stderr")
+	statusPath := filepath.Join(captureDir, "status")
+	shellCmd := fmt.Sprintf("%s action run %s > %s 2> %s; printf '%%s\\n' $? > %s; sleep 300",
+		shellQuoteE2E(binaryPath), shellQuoteE2E("detached action"), shellQuoteE2E(stdoutPath), shellQuoteE2E(stderrPath), shellQuoteE2E(statusPath))
+	detachedSession := "cmdk-action-detached"
+	if out, err := tmuxCmd("new-session", "-d", "-s", detachedSession,
+		"env", "XDG_CONFIG_HOME="+xdg, "HOME="+t.TempDir(), "sh", "-c", shellCmd).CombinedOutput(); err != nil {
+		t.Fatalf("start detached action session: %v\n%s", err, out)
+	}
+
+	status := strings.TrimSpace(waitForFile(t, statusPath, defaultTimeout))
+	if status == "0" {
+		t.Fatal("detached action unexpectedly succeeded")
+	}
+	if stdout, err := os.ReadFile(stdoutPath); err != nil {
+		t.Fatal(err)
+	} else if len(stdout) != 0 {
+		t.Fatalf("detached action stdout = %q, want empty", stdout)
+	}
+	if stderr, err := os.ReadFile(stderrPath); err != nil {
+		t.Fatal(err)
+	} else {
+		diagnostic := string(stderr)
+		if !strings.Contains(diagnostic, "no current tmux client") && !strings.Contains(diagnostic, "not invoking pane") {
+			t.Fatalf("detached action stderr = %q, want attached-client rejection", stderr)
+		}
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("launch_path_cmd ran before attached-client rejection; stat error = %v", err)
+	}
+
+	clientSession, err := tmuxCmd("list-clients", "-F", "#{session_name}").CombinedOutput()
+	if err != nil {
+		t.Fatalf("query unrelated client after rejection: %v\n%s", err, clientSession)
+	}
+	if got := strings.TrimSpace(string(clientSession)); got != unrelatedSession {
+		t.Fatalf("unrelated client session = %q, want %q", got, unrelatedSession)
 	}
 }
 
