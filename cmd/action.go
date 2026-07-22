@@ -156,7 +156,7 @@ func prepareActionRunInvocation(cmd *cobra.Command, name string, options actionR
 		return actionRunInvocation{}, err
 	}
 
-	prepared, err := actionrun.PrepareWithPane(cfg, name, options.path, client.PaneID, options.inputs)
+	prepared, err := actionrun.Prepare(cfg, name, options.path, client.PaneID, options.inputs)
 	if err != nil {
 		return actionRunInvocation{}, err
 	}

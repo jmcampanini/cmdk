@@ -22,11 +22,7 @@ type Prepared struct {
 
 // Prepare resolves a configured action and its noninteractive stage inputs
 // without executing commands or interacting with tmux.
-func Prepare(cfg config.Config, name, path string, rawInputs []string) (Prepared, error) {
-	return PrepareWithPane(cfg, name, path, "", rawInputs)
-}
-
-func PrepareWithPane(cfg config.Config, name, path, paneID string, rawInputs []string) (Prepared, error) {
+func Prepare(cfg config.Config, name, path, paneID string, rawInputs []string) (Prepared, error) {
 	action, err := ValidateAction(cfg, name)
 	if err != nil {
 		return Prepared{}, err

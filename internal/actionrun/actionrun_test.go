@@ -17,7 +17,7 @@ func TestPrepareExactActionLookup(t *testing.T) {
 		{Name: "Build", Matches: "root", LaunchMode: config.LaunchModeSessionWindow, Cmd: "upper"},
 	}}
 
-	prepared, err := Prepare(cfg, "Build", "", nil)
+	prepared, err := prepare(cfg, "Build", "", nil)
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
@@ -25,7 +25,7 @@ func TestPrepareExactActionLookup(t *testing.T) {
 		t.Fatalf("selected action = %#v, want exact-case Build", prepared.Selected)
 	}
 
-	_, err = Prepare(cfg, "BUILD", "", nil)
+	_, err = prepare(cfg, "BUILD", "", nil)
 	assertErrorContains(t, err, `configured action "BUILD" not found`)
 }
 
@@ -36,7 +36,7 @@ func TestPrepareRejectsDuplicateExactNames(t *testing.T) {
 		{Name: "same", Matches: "dir", Cmd: "two"},
 	}}
 
-	_, err := Prepare(cfg, "same", "", nil)
+	_, err := prepare(cfg, "same", "", nil)
 	assertErrorContains(t, err, `2 exact matches`)
 	assertErrorContains(t, err, `actions[0] matches="root"`)
 	assertErrorContains(t, err, `actions[2] matches="dir"`)
@@ -67,7 +67,7 @@ func TestPrepareRejectsUnsupportedActionsBeforeInputs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := Prepare(config.Config{Actions: []config.Action{tt.action}}, "run", "", []string{"malformed"})
+			_, err := prepare(config.Config{Actions: []config.Action{tt.action}}, "run", "", []string{"malformed"})
 			assertErrorContains(t, err, tt.want)
 			if strings.Contains(err.Error(), "key=value") {
 				t.Fatalf("unsupported action resolved inputs first: %v", err)
@@ -81,13 +81,13 @@ func TestPreparePathRules(t *testing.T) {
 		cfg := config.Config{Actions: []config.Action{{
 			Name: "run", Matches: "root", LaunchMode: config.LaunchModeSessionWindow, Cmd: "true",
 		}}}
-		_, err := Prepare(cfg, "run", ".", nil)
+		_, err := prepare(cfg, "run", ".", nil)
 		assertErrorContains(t, err, "--path is not valid")
 	})
 
 	t.Run("dir requires path", func(t *testing.T) {
 		cfg := dirConfig(nil)
-		_, err := Prepare(cfg, "run", "", nil)
+		_, err := prepare(cfg, "run", "", nil)
 		assertErrorContains(t, err, "--path is required")
 	})
 
@@ -98,16 +98,16 @@ func TestPreparePathRules(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, path := range []string{filepath.Join(dir, "missing"), file} {
-			_, err := Prepare(dirConfig(nil), "run", path, nil)
+			_, err := prepare(dirConfig(nil), "run", path, nil)
 			if err == nil {
-				t.Fatalf("Prepare(path=%q) succeeded", path)
+				t.Fatalf("prepare(path=%q) succeeded", path)
 			}
 		}
 	})
 
 	t.Run("dir rejects invalid UTF-8 before launch resolution", func(t *testing.T) {
 		dir := filepath.Join(t.TempDir(), string([]byte{0xff}))
-		_, err := Prepare(dirConfig(nil), "run", dir, nil)
+		_, err := prepare(dirConfig(nil), "run", dir, nil)
 		assertErrorContains(t, err, "not valid UTF-8")
 	})
 
@@ -116,14 +116,14 @@ func TestPreparePathRules(t *testing.T) {
 		if err := os.Mkdir(dir, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		_, err := Prepare(dirConfig(nil), "run", dir, nil)
+		_, err := prepare(dirConfig(nil), "run", dir, nil)
 		assertErrorContains(t, err, "contains control characters")
 	})
 
 	t.Run("dir provides absolute clean context", func(t *testing.T) {
 		dir := t.TempDir()
 		unclean := filepath.Join(dir, ".", "child", "..")
-		prepared, err := Prepare(dirConfig(nil), "run", unclean, nil)
+		prepared, err := prepare(dirConfig(nil), "run", unclean, nil)
 		if err != nil {
 			t.Fatalf("Prepare: %v", err)
 		}
@@ -146,7 +146,7 @@ func TestPrepareRawInputParsing(t *testing.T) {
 		{Type: "prompt", Key: "Target", Text: "Target:"},
 		{Type: "picker", Key: "value", Source: "unused"},
 	}
-	prepared, err := Prepare(dirConfig(stages), "run", t.TempDir(), []string{
+	prepared, err := prepare(dirConfig(stages), "run", t.TempDir(), []string{
 		"Target=a,'b'.c[d]", "value=x=y=",
 	})
 	if err != nil {
@@ -172,18 +172,18 @@ func TestPrepareRawInputParsing(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := Prepare(dirConfig(stages), "run", t.TempDir(), tt.raw)
+			_, err := prepare(dirConfig(stages), "run", t.TempDir(), tt.raw)
 			assertErrorContains(t, err, tt.want)
 			assertErrorContains(t, err, "accepted keys: Target, value")
 		})
 	}
 }
 
-func TestPrepareWithPaneRendersPromptDefault(t *testing.T) {
+func TestPrepareRendersPromptDefaultFromPaneID(t *testing.T) {
 	stages := []config.StageConfig{{
 		Type: "prompt", Key: "origin", Text: "Origin:", Default: "{{.pane_id}}",
 	}}
-	prepared, err := PrepareWithPane(dirConfig(stages), "run", t.TempDir(), "%17", nil)
+	prepared, err := Prepare(dirConfig(stages), "run", t.TempDir(), "%17", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func TestPrepareStagesInDeclarationOrder(t *testing.T) {
 		{Type: "prompt", Key: "second", Text: "Second:", Default: "{{.first}}/two"},
 		{Type: "picker", Key: "third", Source: "unused"},
 	}
-	prepared, err := Prepare(dirConfig(stages), "run", dir, []string{"third=literal"})
+	prepared, err := prepare(dirConfig(stages), "run", dir, []string{"third=literal"})
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
@@ -260,7 +260,7 @@ func TestPrepareMissingStageInputs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := Prepare(dirConfig([]config.StageConfig{tt.stage}), "run", t.TempDir(), nil)
+			_, err := prepare(dirConfig([]config.StageConfig{tt.stage}), "run", t.TempDir(), nil)
 			assertErrorContains(t, err, tt.want)
 			assertErrorContains(t, err, "accepted inputs: name")
 		})
@@ -301,7 +301,7 @@ func TestPrepareEmptyInputSemantics(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			prepared, err := Prepare(dirConfig([]config.StageConfig{tt.stage}), "run", t.TempDir(), tt.raw)
+			prepared, err := prepare(dirConfig([]config.StageConfig{tt.stage}), "run", t.TempDir(), tt.raw)
 			if tt.wantErr {
 				assertErrorContains(t, err, `input "value" cannot be empty`)
 				return
@@ -320,9 +320,13 @@ func TestPrepareDefaultTemplateError(t *testing.T) {
 	stages := []config.StageConfig{{
 		Type: "prompt", Key: "value", Text: "Value:", Default: "{{.missing}}",
 	}}
-	_, err := Prepare(dirConfig(stages), "run", t.TempDir(), nil)
+	_, err := prepare(dirConfig(stages), "run", t.TempDir(), nil)
 	assertErrorContains(t, err, `input "value" default template`)
 	assertErrorContains(t, err, `map has no entry for key "missing"`)
+}
+
+func prepare(cfg config.Config, name, path string, rawInputs []string) (Prepared, error) {
+	return Prepare(cfg, name, path, "", rawInputs)
 }
 
 func dirConfig(stages []config.StageConfig) config.Config {
