@@ -13,13 +13,11 @@ import (
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
-// Prepared contains the selected action and the context stack expected by
+// Prepared contains the selected action and context stack expected by
 // execute.ResolveLaunch.
 type Prepared struct {
-	Action      config.Action
 	Selected    item.Item
 	Accumulated []item.Item
-	Inputs      map[string]string
 }
 
 // Prepare resolves a configured action and its noninteractive stage inputs
@@ -45,7 +43,6 @@ func PrepareWithPane(cfg config.Config, name, path, paneID string, rawInputs []s
 	}
 
 	acceptedInputs := acceptedInputKeys(action.Stages)
-	resolved := make(map[string]string, len(action.Stages))
 	for i, stage := range action.Stages {
 		value, supplied := provided[stage.Key]
 		if !supplied {
@@ -73,19 +70,16 @@ func PrepareWithPane(cfg config.Config, name, path, paneID string, rawInputs []s
 			return Prepared{}, fmt.Errorf("action %q stage %d input %q cannot be empty (accepted inputs: %s)", name, i, stage.Key, acceptedInputs)
 		}
 
-		result := item.NewItem()
-		result.Type = "stage-result"
-		result.Display = value
-		result.Data[stage.Key] = value
-		accumulated = append(accumulated, result)
-		resolved[stage.Key] = value
+		accumulated = append(accumulated, item.Item{
+			Type:    "stage-result",
+			Display: value,
+			Data:    map[string]string{stage.Key: value},
+		})
 	}
 
 	return Prepared{
-		Action:      action,
 		Selected:    action.ToItem(),
 		Accumulated: accumulated,
-		Inputs:      resolved,
 	}, nil
 }
 

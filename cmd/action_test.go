@@ -14,7 +14,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/jmcampanini/cmdk/internal/actionrun"
 	"github.com/jmcampanini/cmdk/internal/config"
 	"github.com/jmcampanini/cmdk/internal/execute"
 	"github.com/jmcampanini/cmdk/internal/item"
@@ -324,9 +323,7 @@ func TestRunPreparedActionDoesNotWriteJSONOnLaunchError(t *testing.T) {
 	var stdout bytes.Buffer
 	cmd := &cobra.Command{}
 	cmd.SetOut(&stdout)
-	err := runPreparedAction(cmd, actionRunInvocation{
-		prepared: actionrun.Prepared{Action: config.Action{Name: "test"}},
-	})
+	err := runPreparedAction(cmd, actionRunInvocation{actionName: "test"})
 	if err == nil || !strings.Contains(err.Error(), "switch failed") {
 		t.Fatalf("error = %v, want switch failure", err)
 	}

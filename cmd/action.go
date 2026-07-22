@@ -16,15 +16,15 @@ import (
 )
 
 type actionRunOptions struct {
-	path    string
-	pathSet bool
-	inputs  []string
+	path   string
+	inputs []string
 }
 
 type actionRunInvocation struct {
-	config   config.Config
-	prepared actionrun.Prepared
-	paneID   string
+	actionName string
+	config     config.Config
+	prepared   actionrun.Prepared
+	paneID     string
 }
 
 type actionRunResult struct {
@@ -100,7 +100,6 @@ Diagnostics are written to stderr and return exit status 1. No --json flag is
 needed. cmdk does not send text or keys to the launched application.`,
 		Args: cobra.ExactArgs(1),
 		PreRunE: func(cmd *cobra.Command, args []string) error {
-			options.pathSet = cmd.Flags().Changed("path")
 			prepared, err := prepareActionRunInvocation(cmd, args[0], options)
 			if err != nil {
 				return terminalSafeActionRunError(err)
@@ -134,13 +133,14 @@ func prepareActionRunInvocation(cmd *cobra.Command, name string, options actionR
 	if err != nil {
 		return actionRunInvocation{}, err
 	}
+	pathSet := cmd.Flags().Changed("path")
 	switch action.Matches {
 	case "root":
-		if options.pathSet {
+		if pathSet {
 			return actionRunInvocation{}, fmt.Errorf("action %q: --path is not valid for an action matching root", name)
 		}
 	case "dir":
-		if !options.pathSet || options.path == "" {
+		if !pathSet || options.path == "" {
 			return actionRunInvocation{}, fmt.Errorf("action %q: --path is required for an action matching dir", name)
 		}
 	}
@@ -157,7 +157,12 @@ func prepareActionRunInvocation(cmd *cobra.Command, name string, options actionR
 	if err != nil {
 		return actionRunInvocation{}, err
 	}
-	return actionRunInvocation{config: cfg, prepared: prepared, paneID: paneID}, nil
+	return actionRunInvocation{
+		actionName: action.Name,
+		config:     cfg,
+		prepared:   prepared,
+		paneID:     paneID,
+	}, nil
 }
 
 func runPreparedAction(cmd *cobra.Command, invocation actionRunInvocation) error {
@@ -176,7 +181,7 @@ func runPreparedAction(cmd *cobra.Command, invocation actionRunInvocation) error
 	}
 
 	return writeActionRunResult(cmd, actionRunResult{
-		Action:     invocation.prepared.Action.Name,
+		Action:     invocation.actionName,
 		LaunchPath: result.LaunchPath,
 		SessionID:  result.SessionID,
 		SessionKey: result.SessionKey,

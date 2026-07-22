@@ -21,8 +21,8 @@ func TestPrepareExactActionLookup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
-	if prepared.Action.Cmd != "upper" || prepared.Selected.Cmd != "upper" {
-		t.Fatalf("selected action = %#v, want exact-case Build", prepared.Action)
+	if prepared.Selected.Cmd != "upper" {
+		t.Fatalf("selected action = %#v, want exact-case Build", prepared.Selected)
 	}
 
 	_, err = Prepare(cfg, "BUILD", "", nil)
@@ -152,10 +152,11 @@ func TestPrepareRawInputParsing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Prepare: %v", err)
 	}
-	if got := prepared.Inputs["Target"]; got != "a,'b'.c[d]" {
+	data := execute.FlattenData(prepared.Accumulated)
+	if got := data["Target"]; got != "a,'b'.c[d]" {
 		t.Errorf("Target = %q", got)
 	}
-	if got := prepared.Inputs["value"]; got != "x=y=" {
+	if got := data["value"]; got != "x=y=" {
 		t.Errorf("value = %q", got)
 	}
 
@@ -186,8 +187,8 @@ func TestPrepareWithPaneRendersPromptDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if prepared.Inputs["origin"] != "%17" {
-		t.Errorf("origin = %q, want %%17", prepared.Inputs["origin"])
+	if got := execute.FlattenData(prepared.Accumulated)["origin"]; got != "%17" {
+		t.Errorf("origin = %q, want %%17", got)
 	}
 }
 
@@ -206,10 +207,11 @@ func TestPrepareStagesInDeclarationOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := prepared.Inputs["first"], absolute+"/one"; got != want {
+	preparedData := execute.FlattenData(prepared.Accumulated)
+	if got, want := preparedData["first"], absolute+"/one"; got != want {
 		t.Errorf("first = %q, want %q", got, want)
 	}
-	if got, want := prepared.Inputs["second"], absolute+"/one/two"; got != want {
+	if got, want := preparedData["second"], absolute+"/one/two"; got != want {
 		t.Errorf("second = %q, want %q", got, want)
 	}
 	if len(prepared.Accumulated) != 4 {
@@ -217,7 +219,7 @@ func TestPrepareStagesInDeclarationOrder(t *testing.T) {
 	}
 	for i, key := range []string{"first", "second", "third"} {
 		result := prepared.Accumulated[i+1]
-		if result.Type != "stage-result" || result.Data[key] != prepared.Inputs[key] {
+		if result.Type != "stage-result" || result.Data[key] != preparedData[key] {
 			t.Errorf("result %d = %#v", i, result)
 		}
 	}
@@ -229,9 +231,9 @@ func TestPrepareStagesInDeclarationOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveLaunch with prepared context: %v", err)
 	}
-	for key, want := range prepared.Inputs {
-		if data[key] != want {
-			t.Errorf("ResolveLaunch data[%q] = %q, want %q", key, data[key], want)
+	for _, key := range []string{"first", "second", "third"} {
+		if data[key] != preparedData[key] {
+			t.Errorf("ResolveLaunch data[%q] = %q, want %q", key, data[key], preparedData[key])
 		}
 	}
 	if data["path"] != absolute {
@@ -307,8 +309,8 @@ func TestPrepareEmptyInputSemantics(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Prepare: %v", err)
 			}
-			if prepared.Inputs["value"] != "" {
-				t.Errorf("value = %q, want literal empty", prepared.Inputs["value"])
+			if got := execute.FlattenData(prepared.Accumulated)["value"]; got != "" {
+				t.Errorf("value = %q, want literal empty", got)
 			}
 		})
 	}
