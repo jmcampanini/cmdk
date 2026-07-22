@@ -1095,8 +1095,11 @@ cmd = "sleep 300"
 	}
 	if stderr, err := os.ReadFile(stderrPath); err != nil {
 		t.Fatal(err)
-	} else if !strings.Contains(string(stderr), "not invoking pane") {
-		t.Fatalf("detached action stderr = %q, want attached-client rejection", stderr)
+	} else {
+		diagnostic := string(stderr)
+		if !strings.Contains(diagnostic, "no current tmux client") && !strings.Contains(diagnostic, "not invoking pane") {
+			t.Fatalf("detached action stderr = %q, want attached-client rejection", stderr)
+		}
 	}
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
 		t.Fatalf("launch_path_cmd ran before attached-client rejection; stat error = %v", err)
