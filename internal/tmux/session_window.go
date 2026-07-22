@@ -25,7 +25,17 @@ var (
 		"#{session_id}",
 		tmuxEscapedFormat(cmdkSessionKeyOption),
 	)
-	newSessionIDsFormat     = tmuxFormatFields("#{session_id}", "#{window_id}")
+	newSessionResultFormat = tmuxFormatFields(
+		"#{session_id}",
+		"#{window_id}",
+		"#{pane_id}",
+		tmuxEscapedWindowNameFormat,
+	)
+	newWindowResultFormat = tmuxFormatFields(
+		"#{window_id}",
+		"#{pane_id}",
+		tmuxEscapedWindowNameFormat,
+	)
 	tmuxSessionNameReplacer = strings.NewReplacer(".", "_", ":", "_")
 )
 
@@ -38,6 +48,15 @@ type SessionWindowOptions struct {
 	Switch        bool
 	MaxNameLength int
 	Timeouts      Timeouts
+}
+
+// SessionWindowResult identifies a newly created tmux window and its first pane.
+type SessionWindowResult struct {
+	SessionID  string
+	SessionKey string
+	WindowID   string
+	WindowName string
+	PaneID     string
 }
 
 // AttachOptions controls attaching the caller's terminal to a cmdk-managed
@@ -60,7 +79,7 @@ type sessionWindowManager struct {
 // cmdk-managed session described by plan. If the session does not exist yet,
 // the first window created by tmux new-session is the requested window. The
 // window is targeted by its returned stable window ID, never by display name.
-func CreateResolvedSessionWindow(ctx context.Context, plan resolver.Plan, launchPath string, opts SessionWindowOptions) error {
+func CreateResolvedSessionWindow(ctx context.Context, plan resolver.Plan, launchPath string, opts SessionWindowOptions) (SessionWindowResult, error) {
 	m := sessionWindowManager{runner: execTmuxRunner{}, timeouts: opts.Timeouts}
 	return m.createResolvedWindow(ctx, plan, launchPath, opts)
 }
@@ -74,41 +93,45 @@ func AttachResolvedSession(ctx context.Context, plan resolver.Plan, launchPath s
 	return m.attachResolvedSession(ctx, plan, launchPath, opts)
 }
 
-func (m sessionWindowManager) createResolvedWindow(ctx context.Context, plan resolver.Plan, launchPath string, opts SessionWindowOptions) error {
+func (m sessionWindowManager) createResolvedWindow(ctx context.Context, plan resolver.Plan, launchPath string, opts SessionWindowOptions) (SessionWindowResult, error) {
 	ctx = m.ensureDefaults(ctx)
 
 	if err := validateSessionPlan(plan); err != nil {
-		return err
+		return SessionWindowResult{}, err
 	}
 	if err := validateLaunchPath(launchPath); err != nil {
-		return err
+		return SessionWindowResult{}, err
 	}
 	windowName := opts.Name
 	if err := validateSessionWindowOptions(windowName, opts); err != nil {
-		return err
+		return SessionWindowResult{}, err
 	}
 	windowName = truncateWindowName(windowName, opts.MaxNameLength)
 
 	sessionID, err := m.findManagedSession(ctx, plan.SessionKey)
 	if err != nil {
-		return err
+		return SessionWindowResult{}, err
 	}
 
 	shellCommand := shellCommandFromArgv(opts.Command)
-	var windowID string
+	var result SessionWindowResult
 	if sessionID == "" {
-		sessionID, windowID, err = m.createManagedSession(ctx, plan, launchPath, windowName, shellCommand)
+		result, err = m.createManagedSession(ctx, plan, launchPath, windowName, shellCommand)
 	} else {
-		windowID, err = m.createWindow(ctx, sessionID, launchPath, windowName, shellCommand, !opts.Switch)
+		result, err = m.createWindow(ctx, sessionID, launchPath, windowName, shellCommand, !opts.Switch)
+		if err == nil {
+			result.SessionID = sessionID
+			result.SessionKey = plan.SessionKey
+		}
 	}
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	if opts.Switch {
-		return m.switchClient(ctx, sessionID, windowID)
+		return result, m.switchClient(ctx, result.SessionID, result.WindowID)
 	}
-	return nil
+	return result, nil
 }
 
 func (m sessionWindowManager) attachResolvedSession(ctx context.Context, plan resolver.Plan, launchPath string, opts AttachOptions) error {
@@ -131,10 +154,11 @@ func (m sessionWindowManager) attachResolvedSession(ctx context.Context, plan re
 		return err
 	}
 	if sessionID == "" {
-		sessionID, _, err = m.createManagedSession(ctx, plan, launchPath, windowName, "")
-		if err != nil {
-			return err
+		result, createErr := m.createManagedSession(ctx, plan, launchPath, windowName, "")
+		if createErr != nil {
+			return createErr
 		}
+		sessionID = result.SessionID
 	}
 
 	return m.attachSession(ctx, sessionID, opts.Terminal)
@@ -286,20 +310,20 @@ func parseManagedSessionRows(output string) ([]managedSessionRow, error) {
 	return rows, nil
 }
 
-func (m sessionWindowManager) createManagedSession(ctx context.Context, plan resolver.Plan, launchPath, windowName, shellCommand string) (string, string, error) {
-	sessionID, windowID, err := m.createSession(ctx, plan, launchPath, windowName, shellCommand)
+func (m sessionWindowManager) createManagedSession(ctx context.Context, plan resolver.Plan, launchPath, windowName, shellCommand string) (SessionWindowResult, error) {
+	result, err := m.createSession(ctx, plan, launchPath, windowName, shellCommand)
 	if err != nil {
-		return "", "", err
+		return result, err
 	}
-	if err := m.setSessionMetadata(ctx, sessionID, plan); err != nil {
-		return "", "", err
+	if err := m.setSessionMetadata(ctx, result.SessionID, plan); err != nil {
+		return result, err
 	}
-	return sessionID, windowID, nil
+	return result, nil
 }
 
-func (m sessionWindowManager) createSession(ctx context.Context, plan resolver.Plan, launchPath, windowName, shellCommand string) (string, string, error) {
+func (m sessionWindowManager) createSession(ctx context.Context, plan resolver.Plan, launchPath, windowName, shellCommand string) (SessionWindowResult, error) {
 	args := []string{
-		"new-session", "-d", "-P", "-F", newSessionIDsFormat,
+		"new-session", "-d", "-P", "-F", newSessionResultFormat,
 		"-s", tmuxSafeSessionName(plan.SessionKey),
 		"-n", windowName,
 		"-c", launchPath,
@@ -310,28 +334,41 @@ func (m sessionWindowManager) createSession(ctx context.Context, plan resolver.P
 
 	res, err := m.query(ctx, cmdrun.ShapeSingleLine, m.timeouts.Mutation, args...)
 	if err != nil {
-		return "", "", err
+		return SessionWindowResult{}, err
 	}
 
-	return parseCreatedSessionIDs(res.Stdout)
+	result, err := parseCreatedSessionResult(res.Stdout)
+	if err != nil {
+		return result, err
+	}
+	result.SessionKey = plan.SessionKey
+	return result, nil
 }
 
-func parseCreatedSessionIDs(output string) (string, string, error) {
+func parseCreatedSessionResult(output string) (SessionWindowResult, error) {
 	lines := tmuxLines(output)
 	if len(lines) != 1 {
-		return "", "", fmt.Errorf("could not parse tmux new-session output: expected 1 row, got %d", len(lines))
+		return SessionWindowResult{}, fmt.Errorf("could not parse tmux new-session output: expected 1 row, got %d", len(lines))
 	}
-	fields, ok := splitTmuxFields(lines[0], 2)
+	fields, ok := splitTmuxFields(lines[0], 4)
 	if !ok {
-		return "", "", errors.New("could not parse tmux new-session output: expected session_id and window_id")
+		return SessionWindowResult{}, errors.New("could not parse tmux new-session output: expected session_id, window_id, pane_id, and window_name")
 	}
 	if !validTmuxSessionID.MatchString(fields[0]) {
-		return "", "", fmt.Errorf("could not parse tmux new-session output: invalid session_id %q", fields[0])
+		return SessionWindowResult{}, fmt.Errorf("could not parse tmux new-session output: invalid session_id %q", fields[0])
 	}
 	if !validTmuxWindowID.MatchString(fields[1]) {
-		return "", "", fmt.Errorf("could not parse tmux new-session output: invalid window_id %q", fields[1])
+		return SessionWindowResult{}, fmt.Errorf("could not parse tmux new-session output: invalid window_id %q", fields[1])
 	}
-	return fields[0], fields[1], nil
+	if !validTmuxPaneID.MatchString(fields[2]) {
+		return SessionWindowResult{}, fmt.Errorf("could not parse tmux new-session output: invalid pane_id %q", fields[2])
+	}
+	return SessionWindowResult{
+		SessionID:  fields[0],
+		WindowID:   fields[1],
+		WindowName: displaySafeTmuxWindowName(fields[3]),
+		PaneID:     fields[2],
+	}, nil
 }
 
 func (m sessionWindowManager) setSessionMetadata(ctx context.Context, sessionID string, plan resolver.Plan) error {
@@ -350,13 +387,13 @@ func (m sessionWindowManager) setSessionMetadata(ctx context.Context, sessionID 
 	return nil
 }
 
-func (m sessionWindowManager) createWindow(ctx context.Context, sessionID, launchPath, windowName, shellCommand string, detached bool) (string, error) {
+func (m sessionWindowManager) createWindow(ctx context.Context, sessionID, launchPath, windowName, shellCommand string, detached bool) (SessionWindowResult, error) {
 	args := []string{"new-window"}
 	if detached {
 		args = append(args, "-d")
 	}
 	args = append(args,
-		"-P", "-F", "#{window_id}",
+		"-P", "-F", newWindowResultFormat,
 		"-t", sessionID+":",
 		"-n", windowName,
 		"-c", launchPath,
@@ -367,21 +404,31 @@ func (m sessionWindowManager) createWindow(ctx context.Context, sessionID, launc
 
 	res, err := m.query(ctx, cmdrun.ShapeSingleLine, m.timeouts.Mutation, args...)
 	if err != nil {
-		return "", err
+		return SessionWindowResult{}, err
 	}
-	return parseCreatedWindowID(res.Stdout)
+	return parseCreatedWindowResult(res.Stdout)
 }
 
-func parseCreatedWindowID(output string) (string, error) {
+func parseCreatedWindowResult(output string) (SessionWindowResult, error) {
 	lines := tmuxLines(output)
 	if len(lines) != 1 {
-		return "", fmt.Errorf("could not parse tmux new-window output: expected 1 row, got %d", len(lines))
+		return SessionWindowResult{}, fmt.Errorf("could not parse tmux new-window output: expected 1 row, got %d", len(lines))
 	}
-	windowID := lines[0]
-	if !validTmuxWindowID.MatchString(windowID) {
-		return "", fmt.Errorf("could not parse tmux new-window output: invalid window_id %q", windowID)
+	fields, ok := splitTmuxFields(lines[0], 3)
+	if !ok {
+		return SessionWindowResult{}, errors.New("could not parse tmux new-window output: expected window_id, pane_id, and window_name")
 	}
-	return windowID, nil
+	if !validTmuxWindowID.MatchString(fields[0]) {
+		return SessionWindowResult{}, fmt.Errorf("could not parse tmux new-window output: invalid window_id %q", fields[0])
+	}
+	if !validTmuxPaneID.MatchString(fields[1]) {
+		return SessionWindowResult{}, fmt.Errorf("could not parse tmux new-window output: invalid pane_id %q", fields[1])
+	}
+	return SessionWindowResult{
+		WindowID:   fields[0],
+		WindowName: displaySafeTmuxWindowName(fields[2]),
+		PaneID:     fields[1],
+	}, nil
 }
 
 func shellCommandFromArgv(argv []string) string {

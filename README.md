@@ -65,6 +65,7 @@ For the full command reference, run `cmdk --help`. See also:
 - `cmdk attach [path]` - from outside tmux, attach to a configured or explicit cmdk-managed session
 - `cmdk session resolve <path>` - inspect the planned session for a path
 - `cmdk session window <path> --new` - create a background window in the cmdk-managed tmux session; add `--switch` to select it
+- `cmdk action run <exact-name> [--path <dir>] [--input key=value]...` - from an attached tmux client, noninteractively run a configured session-window action and print its launch identifiers as JSON; see `cmdk action run --help`
 - `cmdk window next` / `cmdk window previous` - cycle through tmux windows across sessions
 - `cmdk docs` - configuration reference
 - `cmdk icons` - supported icon aliases

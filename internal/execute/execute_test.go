@@ -795,10 +795,10 @@ func TestLaunchExecute_SessionWindowNewShellCreatesInteractiveWindow(t *testing.
 
 	var gotLaunchPath string
 	var gotOpts tmux.SessionWindowOptions
-	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, launchPath string, opts tmux.SessionWindowOptions) error {
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, launchPath string, opts tmux.SessionWindowOptions) (tmux.SessionWindowResult, error) {
 		gotLaunchPath = launchPath
 		gotOpts = opts
-		return nil
+		return tmux.SessionWindowResult{}, nil
 	}
 
 	selected := item.Item{MatchType: "dir", LaunchMode: "session-window", NewShell: true}
@@ -841,19 +841,30 @@ func TestLaunchExecute_SessionWindowCreatesManagedWindow(t *testing.T) {
 	var gotPlan resolver.Plan
 	var gotLaunchPath string
 	var gotOpts tmux.SessionWindowOptions
-	createResolvedSessionWindow = func(_ context.Context, plan resolver.Plan, launchPath string, opts tmux.SessionWindowOptions) error {
+	createResolvedSessionWindow = func(_ context.Context, plan resolver.Plan, launchPath string, opts tmux.SessionWindowOptions) (tmux.SessionWindowResult, error) {
 		gotPlan = plan
 		gotLaunchPath = launchPath
 		gotOpts = opts
-		return nil
+		return tmux.SessionWindowResult{
+			SessionID:  "$5",
+			SessionKey: plan.SessionKey,
+			WindowID:   "@18",
+			WindowName: "x-result",
+			PaneID:     "%51",
+		}, nil
 	}
 
 	selected := item.Item{Cmd: "echo {{.launch_path}}", MatchType: "dir", WindowName: "x-{{.launch_basename}}"}
 	accumulated := []item.Item{{Type: "dir", Data: map[string]string{"path": dir}}}
-	if err := resolveAndExecute(t, accumulated, selected, "", func(string, []string, []string) error {
+	launch, _, err := ResolveLaunch(accumulated, selected, "", config.DefaultConfig())
+	if err != nil {
+		t.Fatalf("ResolveLaunch: %v", err)
+	}
+	result, err := launch.ExecuteWithResult(func(string, []string, []string) error {
 		t.Fatal("execFn should not be called for session-window mode")
 		return nil
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if resolvedPath != filepath.Clean(dir) || gotLaunchPath != filepath.Clean(dir) || gotPlan.SessionKey != filepath.Clean(dir) {
@@ -871,6 +882,67 @@ func TestLaunchExecute_SessionWindowCreatesManagedWindow(t *testing.T) {
 	}
 	if gotOpts.MaxNameLength != 20 {
 		t.Errorf("MaxNameLength = %d, want default 20", gotOpts.MaxNameLength)
+	}
+	wantResult := LaunchResult{
+		LaunchPath: filepath.Clean(dir),
+		SessionID:  "$5",
+		SessionKey: filepath.Clean(dir),
+		WindowID:   "@18",
+		WindowName: "x-result",
+		PaneID:     "%51",
+	}
+	if result != wantResult {
+		t.Errorf("result = %#v, want %#v", result, wantResult)
+	}
+}
+
+func TestExecuteWithResultRejectsInvalidUTF8BeforeSessionResolution(t *testing.T) {
+	oldResolve := resolveSessionPlan
+	t.Cleanup(func() { resolveSessionPlan = oldResolve })
+	resolveSessionPlan = func(context.Context, string, time.Duration) (resolver.Plan, error) {
+		t.Fatal("session resolution ran for a non-UTF-8 JSON field")
+		return resolver.Plan{}, nil
+	}
+
+	tests := []struct {
+		name       string
+		launchPath string
+		windowName string
+		want       string
+	}{
+		{name: "launch path", launchPath: "/tmp/" + string([]byte{0xff}), windowName: "main", want: "launch_path"},
+		{name: "window name", launchPath: "/tmp", windowName: string([]byte{0xff}), want: "window_name"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			launch := Launch{mode: launchModeSessionWindow, path: test.launchPath, windowName: test.windowName}
+			_, err := launch.ExecuteWithResult(func(string, []string, []string) error { return nil })
+			if err == nil || !strings.Contains(err.Error(), test.want) || !strings.Contains(err.Error(), "UTF-8") {
+				t.Fatalf("error = %v, want %s UTF-8 validation", err, test.want)
+			}
+		})
+	}
+}
+
+func TestExecuteWithResultRejectsInvalidUTF8SessionKeyBeforeTmux(t *testing.T) {
+	oldResolve := resolveSessionPlan
+	oldCreate := createResolvedSessionWindow
+	t.Cleanup(func() {
+		resolveSessionPlan = oldResolve
+		createResolvedSessionWindow = oldCreate
+	})
+	resolveSessionPlan = func(context.Context, string, time.Duration) (resolver.Plan, error) {
+		return resolver.Plan{SessionKey: "/tmp/" + string([]byte{0xff})}, nil
+	}
+	createResolvedSessionWindow = func(context.Context, resolver.Plan, string, tmux.SessionWindowOptions) (tmux.SessionWindowResult, error) {
+		t.Fatal("tmux mutation ran for a non-UTF-8 session key")
+		return tmux.SessionWindowResult{}, nil
+	}
+
+	launch := Launch{mode: launchModeSessionWindow, path: t.TempDir(), windowName: "main"}
+	_, err := launch.ExecuteWithResult(func(string, []string, []string) error { return nil })
+	if err == nil || !strings.Contains(err.Error(), "session_key") || !strings.Contains(err.Error(), "UTF-8") {
+		t.Fatalf("error = %v, want session_key UTF-8 validation", err)
 	}
 }
 
@@ -1013,9 +1085,9 @@ func TestLaunchExecute_SessionWindowThreadsConfiguredWindowNameMaxLength(t *test
 		return resolver.Plan{SessionKind: resolver.KindDirectory, SessionKey: path}, nil
 	}
 	var gotOpts tmux.SessionWindowOptions
-	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, _ string, opts tmux.SessionWindowOptions) error {
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, _ string, opts tmux.SessionWindowOptions) (tmux.SessionWindowResult, error) {
 		gotOpts = opts
-		return nil
+		return tmux.SessionWindowResult{}, nil
 	}
 
 	selected := item.Item{MatchType: "dir", LaunchMode: "session-window", NewShell: true}

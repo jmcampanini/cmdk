@@ -141,13 +141,19 @@ func directorySessionWindowPlan() resolver.Plan {
 
 func createWindowWithRunner(t *testing.T, runner *scriptedTmuxRunner, plan resolver.Plan, opts SessionWindowOptions) error {
 	t.Helper()
+	_, err := createWindowResultWithRunner(t, runner, plan, opts)
+	return err
+}
+
+func createWindowResultWithRunner(t *testing.T, runner *scriptedTmuxRunner, plan resolver.Plan, opts SessionWindowOptions) (SessionWindowResult, error) {
+	t.Helper()
 	if opts.Name == "" {
 		opts.Name = defaultWindowNameForPlan(plan)
 	}
 	m := sessionWindowManager{runner: runner, timeouts: testTmuxTimeouts}
-	err := m.createResolvedWindow(context.Background(), plan, launchPathForPlan(plan), opts)
+	result, err := m.createResolvedWindow(context.Background(), plan, launchPathForPlan(plan), opts)
 	runner.done()
-	return err
+	return result, err
 }
 
 func attachWithRunner(t *testing.T, runner *scriptedTmuxRunner, plan resolver.Plan) error {
@@ -201,7 +207,7 @@ func TestAttachResolvedSessionCreatesMissingSessionThenAttaches(t *testing.T) {
 	plan := repoSessionWindowPlan()
 	runner := newScriptedTmuxRunner(t,
 		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$9\t/other\n"},
-		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionIDsFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", defaultWindowNameForPlan(plan), "-c", launchPathForPlan(plan)}, output: "$1\t@1\n"},
+		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionResultFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", defaultWindowNameForPlan(plan), "-c", launchPathForPlan(plan)}, output: "$1\t@1\t%1\tmain\n"},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$1", cmdkSessionKindOption, plan.SessionKind}},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$1", cmdkSessionKeyOption, plan.SessionKey}},
 		scriptedTmuxCall{args: []string{"attach-session", "-t", "$1"}, useStream: true},
@@ -216,7 +222,7 @@ func TestAttachResolvedSessionTreatsNoServerAsMissing(t *testing.T) {
 	plan := directorySessionWindowPlan()
 	runner := newScriptedTmuxRunner(t,
 		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, err: tmuxListSessionsExitStatusError(t, 1, "no server running on /tmp/tmux-501/default")},
-		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionIDsFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", defaultWindowNameForPlan(plan), "-c", launchPathForPlan(plan)}, output: "$4\t@8\n"},
+		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionResultFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", defaultWindowNameForPlan(plan), "-c", launchPathForPlan(plan)}, output: "$4\t@8\t%8\tscratch\n"},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionKindOption, plan.SessionKind}},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionKeyOption, plan.SessionKey}},
 		scriptedTmuxCall{args: []string{"attach-session", "-t", "$4"}, useStream: true},
@@ -231,7 +237,7 @@ func TestAttachResolvedSessionTreatsMissingSocketAsMissing(t *testing.T) {
 	plan := directorySessionWindowPlan()
 	runner := newScriptedTmuxRunner(t,
 		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, err: tmuxListSessionsExitStatusError(t, 1, "error connecting to /private/tmp/tmux-501/default (No such file or directory)")},
-		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionIDsFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", defaultWindowNameForPlan(plan), "-c", launchPathForPlan(plan)}, output: "$4\t@8\n"},
+		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionResultFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", defaultWindowNameForPlan(plan), "-c", launchPathForPlan(plan)}, output: "$4\t@8\t%8\tscratch\n"},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionKindOption, plan.SessionKind}},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionKeyOption, plan.SessionKey}},
 		scriptedTmuxCall{args: []string{"attach-session", "-t", "$4"}, useStream: true},
@@ -261,15 +267,25 @@ func TestCreateResolvedSessionWindowCreatesMissingSessionWithRequestedWindow(t *
 	plan := repoSessionWindowPlan()
 	runner := newScriptedTmuxRunner(t,
 		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$9\t/other\n"},
-		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionIDsFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", defaultWindowNameForPlan(plan), "-c", launchPathForPlan(plan)}, output: "$1\t@1\n"},
+		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionResultFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", defaultWindowNameForPlan(plan), "-c", launchPathForPlan(plan)}, output: "$1\t@1\t%1\tmain\n"},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$1", cmdkSessionKindOption, plan.SessionKind}},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$1", cmdkSessionKeyOption, plan.SessionKey}},
 		scriptedTmuxCall{args: []string{"switch-client", "-t", "$1:@1"}},
 	)
 
-	err := createWindowWithRunner(t, runner, plan, SessionWindowOptions{NewShell: true, Switch: true})
+	result, err := createWindowResultWithRunner(t, runner, plan, SessionWindowOptions{NewShell: true, Switch: true})
 	if err != nil {
 		t.Fatal(err)
+	}
+	want := SessionWindowResult{
+		SessionID:  "$1",
+		SessionKey: plan.SessionKey,
+		WindowID:   "@1",
+		WindowName: "main",
+		PaneID:     "%1",
+	}
+	if result != want {
+		t.Errorf("result = %#v, want %#v", result, want)
 	}
 }
 
@@ -277,7 +293,7 @@ func TestCreateResolvedSessionWindowCreatesMissingDirectorySession(t *testing.T)
 	plan := directorySessionWindowPlan()
 	runner := newScriptedTmuxRunner(t,
 		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}},
-		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionIDsFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", "scratch", "-c", launchPathForPlan(plan)}, output: "$4\t@8\n"},
+		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionResultFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", "scratch", "-c", launchPathForPlan(plan)}, output: "$4\t@8\t%8\tscratch\n"},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionKindOption, resolver.KindDirectory}},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$4", cmdkSessionKeyOption, plan.SessionKey}},
 		scriptedTmuxCall{args: []string{"switch-client", "-t", "$4:@8"}},
@@ -293,13 +309,23 @@ func TestCreateResolvedSessionWindowExistingSessionCreatesFreshNewWindow(t *test
 	plan := repoSessionWindowPlan()
 	runner := newScriptedTmuxRunner(t,
 		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$2\t" + plan.SessionKey + "\n$3\t/other\n"},
-		scriptedTmuxCall{args: []string{"new-window", "-P", "-F", "#{window_id}", "-t", "$2:", "-n", "main", "-c", launchPathForPlan(plan)}, output: "@5\n"},
+		scriptedTmuxCall{args: []string{"new-window", "-P", "-F", newWindowResultFormat, "-t", "$2:", "-n", "main", "-c", launchPathForPlan(plan)}, output: "@5\t%5\tactual-main\n"},
 		scriptedTmuxCall{args: []string{"switch-client", "-t", "$2:@5"}},
 	)
 
-	err := createWindowWithRunner(t, runner, plan, SessionWindowOptions{NewShell: true, Switch: true})
+	result, err := createWindowResultWithRunner(t, runner, plan, SessionWindowOptions{NewShell: true, Switch: true})
 	if err != nil {
 		t.Fatal(err)
+	}
+	want := SessionWindowResult{
+		SessionID:  "$2",
+		SessionKey: plan.SessionKey,
+		WindowID:   "@5",
+		WindowName: "actual-main",
+		PaneID:     "%5",
+	}
+	if result != want {
+		t.Errorf("result = %#v, want %#v", result, want)
 	}
 }
 
@@ -307,7 +333,7 @@ func TestCreateResolvedSessionWindowDoesNotSearchOrReuseExistingWindows(t *testi
 	plan := repoSessionWindowPlan()
 	runner := newScriptedTmuxRunner(t,
 		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$2\t" + plan.SessionKey + "\n"},
-		scriptedTmuxCall{args: []string{"new-window", "-P", "-F", "#{window_id}", "-t", "$2:", "-n", "main", "-c", launchPathForPlan(plan)}, output: "@6\n"},
+		scriptedTmuxCall{args: []string{"new-window", "-P", "-F", newWindowResultFormat, "-t", "$2:", "-n", "main", "-c", launchPathForPlan(plan)}, output: "@6\t%6\tmain\n"},
 		scriptedTmuxCall{args: []string{"switch-client", "-t", "$2:@6"}},
 	)
 
@@ -323,7 +349,7 @@ func TestCreateResolvedSessionWindowCommandModeShellQuotesArgv(t *testing.T) {
 	wantCommand := `'echo' 'hello $HOME' 'it'\''s ok'`
 	runner := newScriptedTmuxRunner(t,
 		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$2\t" + plan.SessionKey + "\n"},
-		scriptedTmuxCall{args: []string{"new-window", "-P", "-F", "#{window_id}", "-t", "$2:", "-n", "main", "-c", launchPathForPlan(plan), wantCommand}, output: "@7\n"},
+		scriptedTmuxCall{args: []string{"new-window", "-P", "-F", newWindowResultFormat, "-t", "$2:", "-n", "main", "-c", launchPathForPlan(plan), wantCommand}, output: "@7\t%7\tmain\n"},
 		scriptedTmuxCall{args: []string{"switch-client", "-t", "$2:@7"}},
 	)
 
@@ -339,7 +365,7 @@ func TestCreateResolvedSessionWindowCommandModeMetacharactersAreLiteral(t *testi
 	wantCommand := `'printf' '$HOME | tee out; rm -rf /' '>file'`
 	runner := newScriptedTmuxRunner(t,
 		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$2\t" + plan.SessionKey + "\n"},
-		scriptedTmuxCall{args: []string{"new-window", "-P", "-F", "#{window_id}", "-t", "$2:", "-n", "main", "-c", launchPathForPlan(plan), wantCommand}, output: "@8\n"},
+		scriptedTmuxCall{args: []string{"new-window", "-P", "-F", newWindowResultFormat, "-t", "$2:", "-n", "main", "-c", launchPathForPlan(plan), wantCommand}, output: "@8\t%8\tmain\n"},
 		scriptedTmuxCall{args: []string{"switch-client", "-t", "$2:@8"}},
 	)
 
@@ -355,7 +381,7 @@ func TestCreateResolvedSessionWindowCommandModeExplicitShellRemainsAvailable(t *
 	wantCommand := `'sh' '-lc' 'echo hi | tee x'`
 	runner := newScriptedTmuxRunner(t,
 		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$2\t" + plan.SessionKey + "\n"},
-		scriptedTmuxCall{args: []string{"new-window", "-P", "-F", "#{window_id}", "-t", "$2:", "-n", "main", "-c", launchPathForPlan(plan), wantCommand}, output: "@9\n"},
+		scriptedTmuxCall{args: []string{"new-window", "-P", "-F", newWindowResultFormat, "-t", "$2:", "-n", "main", "-c", launchPathForPlan(plan), wantCommand}, output: "@9\t%9\tmain\n"},
 		scriptedTmuxCall{args: []string{"switch-client", "-t", "$2:@9"}},
 	)
 
@@ -369,7 +395,7 @@ func TestCreateResolvedSessionWindowNameOverrideAppliesToNewShell(t *testing.T) 
 	plan := repoSessionWindowPlan()
 	runner := newScriptedTmuxRunner(t,
 		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$2\t" + plan.SessionKey + "\n"},
-		scriptedTmuxCall{args: []string{"new-window", "-P", "-F", "#{window_id}", "-t", "$2:", "-n", "tests", "-c", launchPathForPlan(plan)}, output: "@10\n"},
+		scriptedTmuxCall{args: []string{"new-window", "-P", "-F", newWindowResultFormat, "-t", "$2:", "-n", "tests", "-c", launchPathForPlan(plan)}, output: "@10\t%10\ttests\n"},
 		scriptedTmuxCall{args: []string{"switch-client", "-t", "$2:@10"}},
 	)
 
@@ -383,7 +409,7 @@ func TestCreateResolvedSessionWindowNameOverrideAppliesToCommandMode(t *testing.
 	plan := repoSessionWindowPlan()
 	runner := newScriptedTmuxRunner(t,
 		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$2\t" + plan.SessionKey + "\n"},
-		scriptedTmuxCall{args: []string{"new-window", "-P", "-F", "#{window_id}", "-t", "$2:", "-n", "claude", "-c", launchPathForPlan(plan), "'claude'"}, output: "@11\n"},
+		scriptedTmuxCall{args: []string{"new-window", "-P", "-F", newWindowResultFormat, "-t", "$2:", "-n", "claude", "-c", launchPathForPlan(plan), "'claude'"}, output: "@11\t%11\tclaude\n"},
 		scriptedTmuxCall{args: []string{"switch-client", "-t", "$2:@11"}},
 	)
 
@@ -397,7 +423,7 @@ func TestCreateResolvedSessionWindowCanSkipSwitch(t *testing.T) {
 	plan := repoSessionWindowPlan()
 	runner := newScriptedTmuxRunner(t,
 		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$2\t" + plan.SessionKey + "\n"},
-		scriptedTmuxCall{args: []string{"new-window", "-d", "-P", "-F", "#{window_id}", "-t", "$2:", "-n", "main", "-c", launchPathForPlan(plan)}, output: "@12\n"},
+		scriptedTmuxCall{args: []string{"new-window", "-d", "-P", "-F", newWindowResultFormat, "-t", "$2:", "-n", "main", "-c", launchPathForPlan(plan)}, output: "@12\t%12\tmain\n"},
 	)
 
 	err := createWindowWithRunner(t, runner, plan, SessionWindowOptions{NewShell: true})
@@ -493,7 +519,7 @@ func TestCreateResolvedSessionWindowParsesNewSessionIDsForFollowupTargets(t *tes
 	plan := repoSessionWindowPlan()
 	runner := newScriptedTmuxRunner(t,
 		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}},
-		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionIDsFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", defaultWindowNameForPlan(plan), "-c", launchPathForPlan(plan)}, output: "$42\t@99\n"},
+		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionResultFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", defaultWindowNameForPlan(plan), "-c", launchPathForPlan(plan)}, output: "$42\t@99\t%99\tmain\n"},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$42", cmdkSessionKindOption, plan.SessionKind}},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$42", cmdkSessionKeyOption, plan.SessionKey}},
 		scriptedTmuxCall{args: []string{"switch-client", "-t", "$42:@99"}},
@@ -505,11 +531,36 @@ func TestCreateResolvedSessionWindowParsesNewSessionIDsForFollowupTargets(t *tes
 	}
 }
 
+func TestCreateResolvedSessionWindowReturnsCreatedResultOnSwitchFailure(t *testing.T) {
+	plan := repoSessionWindowPlan()
+	switchErr := errors.New("switch failed")
+	runner := newScriptedTmuxRunner(t,
+		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$2\t" + plan.SessionKey + "\n"},
+		scriptedTmuxCall{args: []string{"new-window", "-P", "-F", newWindowResultFormat, "-t", "$2:", "-n", "main", "-c", launchPathForPlan(plan)}, output: "@15\t%21\tmain\n"},
+		scriptedTmuxCall{args: []string{"switch-client", "-t", "$2:@15"}, err: switchErr},
+	)
+
+	result, err := createWindowResultWithRunner(t, runner, plan, SessionWindowOptions{NewShell: true, Switch: true})
+	if !errors.Is(err, switchErr) {
+		t.Fatalf("error = %v, want switch error", err)
+	}
+	want := SessionWindowResult{
+		SessionID:  "$2",
+		SessionKey: plan.SessionKey,
+		WindowID:   "@15",
+		WindowName: "main",
+		PaneID:     "%21",
+	}
+	if result != want {
+		t.Errorf("result = %#v, want %#v", result, want)
+	}
+}
+
 func TestCreateResolvedSessionWindowRejectsMalformedNewSessionOutput(t *testing.T) {
 	plan := repoSessionWindowPlan()
 	runner := newScriptedTmuxRunner(t,
 		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}},
-		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionIDsFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", defaultWindowNameForPlan(plan), "-c", launchPathForPlan(plan)}, output: "$42\tnot-window\n"},
+		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionResultFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", defaultWindowNameForPlan(plan), "-c", launchPathForPlan(plan)}, output: "$42\tnot-window\t%1\tmain\n"},
 	)
 
 	err := createWindowWithRunner(t, runner, plan, SessionWindowOptions{NewShell: true})
@@ -525,7 +576,7 @@ func TestCreateResolvedSessionWindowRejectsMalformedNewWindowOutput(t *testing.T
 	plan := repoSessionWindowPlan()
 	runner := newScriptedTmuxRunner(t,
 		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$2\t" + plan.SessionKey + "\n"},
-		scriptedTmuxCall{args: []string{"new-window", "-d", "-P", "-F", "#{window_id}", "-t", "$2:", "-n", "feature", "-c", launchPathForPlan(plan)}, output: "not-a-window-id\n"},
+		scriptedTmuxCall{args: []string{"new-window", "-d", "-P", "-F", newWindowResultFormat, "-t", "$2:", "-n", "feature", "-c", launchPathForPlan(plan)}, output: "not-a-window-id\t%1\tfeature\n"},
 	)
 
 	err := createWindowWithRunner(t, runner, plan, SessionWindowOptions{Name: "feature", NewShell: true})
@@ -534,6 +585,34 @@ func TestCreateResolvedSessionWindowRejectsMalformedNewWindowOutput(t *testing.T
 	}
 	if !strings.Contains(err.Error(), "new-window output") {
 		t.Errorf("error = %q, want new-window parse context", err.Error())
+	}
+}
+
+func TestParseCreatedSessionResult(t *testing.T) {
+	result, err := parseCreatedSessionResult("$42\t@99\t%17\tactual-name\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := SessionWindowResult{
+		SessionID:  "$42",
+		WindowID:   "@99",
+		WindowName: "actual-name",
+		PaneID:     "%17",
+	}
+	if result != want {
+		t.Errorf("result = %#v, want %#v", result, want)
+	}
+}
+
+func TestParseCreatedResultsRejectInvalidIDs(t *testing.T) {
+	if _, err := parseCreatedSessionResult("not-session\t@99\t%17\tmain\n"); err == nil || !strings.Contains(err.Error(), "invalid session_id") {
+		t.Errorf("new-session error = %v, want invalid session_id", err)
+	}
+	if _, err := parseCreatedSessionResult("$42\t@99\tnot-pane\tmain\n"); err == nil || !strings.Contains(err.Error(), "invalid pane_id") {
+		t.Errorf("new-session error = %v, want invalid pane_id", err)
+	}
+	if _, err := parseCreatedWindowResult("@99\tnot-pane\tmain\n"); err == nil || !strings.Contains(err.Error(), "invalid pane_id") {
+		t.Errorf("new-window error = %v, want invalid pane_id", err)
 	}
 }
 
@@ -628,11 +707,11 @@ func TestCreateResolvedSessionWindowTruncatesLongWindowName(t *testing.T) {
 	plan := repoSessionWindowPlan()
 	runner := newScriptedTmuxRunner(t,
 		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$2\t" + plan.SessionKey + "\n"},
-		scriptedTmuxCall{args: []string{"new-window", "-P", "-F", "#{window_id}", "-t", "$2:", "-n", "issue-117-window-na…", "-c", launchPathForPlan(plan)}, output: "@5\n"},
+		scriptedTmuxCall{args: []string{"new-window", "-P", "-F", newWindowResultFormat, "-t", "$2:", "-n", "issue-117-window-na…", "-c", launchPathForPlan(plan)}, output: "@5\t%5\tissue-117-window-na…\n"},
 		scriptedTmuxCall{args: []string{"switch-client", "-t", "$2:@5"}},
 	)
 
-	err := createWindowWithRunner(t, runner, plan, SessionWindowOptions{
+	result, err := createWindowResultWithRunner(t, runner, plan, SessionWindowOptions{
 		Name:          "issue-117-window-name-maximum-limit",
 		NewShell:      true,
 		Switch:        true,
@@ -641,13 +720,16 @@ func TestCreateResolvedSessionWindowTruncatesLongWindowName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if result.WindowName != "issue-117-window-na…" {
+		t.Errorf("WindowName = %q, want truncated tmux name", result.WindowName)
+	}
 }
 
 func TestAttachResolvedSessionTruncatesLongWindowName(t *testing.T) {
 	plan := repoSessionWindowPlan()
 	runner := newScriptedTmuxRunner(t,
 		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$9\t/other\n"},
-		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionIDsFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", "issue-117-window-na…", "-c", launchPathForPlan(plan)}, output: "$1\t@1\n"},
+		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionResultFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", "issue-117-window-na…", "-c", launchPathForPlan(plan)}, output: "$1\t@1\t%1\tissue-117-window-na…\n"},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$1", cmdkSessionKindOption, plan.SessionKind}},
 		scriptedTmuxCall{args: []string{"set-option", "-t", "$1", cmdkSessionKeyOption, plan.SessionKey}},
 		scriptedTmuxCall{args: []string{"attach-session", "-t", "$1"}, useStream: true},

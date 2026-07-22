@@ -113,7 +113,7 @@ func runSessionWindowCommand(cmd *cobra.Command, args []string, options sessionW
 		windowName = defaultWindowNameForLaunchPath(launchPath)
 	}
 
-	return createResolvedSessionWindow(commandContext(cmd), plan, launchPath, tmux.SessionWindowOptions{
+	_, err = createResolvedSessionWindow(commandContext(cmd), plan, launchPath, tmux.SessionWindowOptions{
 		Name:          windowName,
 		NewShell:      options.newShell,
 		Command:       commandArgs,
@@ -121,6 +121,7 @@ func runSessionWindowCommand(cmd *cobra.Command, args []string, options sessionW
 		MaxNameLength: cfg.Behavior.WindowNameMaxLength,
 		Timeouts:      tmuxTimeouts(cfg),
 	})
+	return err
 }
 
 func splitSessionWindowArgs(args []string, options sessionWindowOptions) (string, []string, bool, error) {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -36,25 +37,41 @@ func forbidTmuxPrerequisite(t *testing.T) {
 }
 
 func TestTmuxBackedCommandsCheckPrerequisite(t *testing.T) {
+	dir := t.TempDir()
+	writeActionRunConfig(t, `
+[[actions]]
+name = "tmux prerequisite"
+matches = "root"
+launch_path = "`+dir+`"
+cmd = "true"
+`)
+
 	calls := 0
 	stubTmuxPrerequisite(t, func(context.Context) error {
 		calls++
 		return nil
 	})
+	stubActionRunCurrentPane(t, func(context.Context, time.Duration) (string, error) {
+		return "%17", nil
+	})
 
-	commands := []*cobra.Command{
-		newRootCommand(),
-		newAttachCommand(),
-		newSessionWindowCommand(),
-		windowLeafCommand(t, "next"),
-		windowLeafCommand(t, "previous"),
+	commands := []struct {
+		command *cobra.Command
+		args    []string
+	}{
+		{command: newRootCommand()},
+		{command: newActionRunCommand(), args: []string{"tmux prerequisite"}},
+		{command: newAttachCommand()},
+		{command: newSessionWindowCommand()},
+		{command: windowLeafCommand(t, "next")},
+		{command: windowLeafCommand(t, "previous")},
 	}
-	for _, command := range commands {
-		if command.PreRunE == nil {
-			t.Fatalf("%s has no tmux prerequisite check", command.CommandPath())
+	for _, test := range commands {
+		if test.command.PreRunE == nil {
+			t.Fatalf("%s has no tmux prerequisite check", test.command.CommandPath())
 		}
-		if err := command.PreRunE(command, nil); err != nil {
-			t.Fatalf("%s prerequisite: %v", command.CommandPath(), err)
+		if err := test.command.PreRunE(test.command, test.args); err != nil {
+			t.Fatalf("%s prerequisite: %v", test.command.CommandPath(), err)
 		}
 	}
 	if calls != len(commands) {

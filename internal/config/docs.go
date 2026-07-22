@@ -46,7 +46,7 @@ func ConfigDocs() []SectionDoc {
 		},
 		{
 			Name:        "actions",
-			Description: "Actions shown in the launcher. Each action declares which item type\n  it matches, how it launches, and an optional stage pipeline to collect data before execution.",
+			Description: "Actions shown in the launcher. Each action declares which item type\n  it matches, how it launches, and an optional stage pipeline to collect action inputs before execution.",
 			Fields: []FieldDoc{
 				{Name: "name", Type: "string", Description: "Display name in the launcher.", Validation: "cannot be empty"},
 				{Name: "matches", Type: "string", Description: "Item type this action appears for: \"root\" (top-level), \"dir\" (after selecting a directory), or \"session\" (after selecting a tmux session).", Validation: "cannot be empty; must be \"root\", \"dir\", or \"session\""},
@@ -62,10 +62,10 @@ func ConfigDocs() []SectionDoc {
 		},
 		{
 			Name:        "stages",
-			Description: "Stages are declared inline within an action's stages array.\n  Each stage collects one piece of data before the action executes.",
+			Description: "Stages are declared inline within an action's stages array.\n  Each stage collects one action input before the action executes.",
 			Fields: []FieldDoc{
 				{Name: "type", Type: "string", Description: "Stage type: \"prompt\" (text input) or \"picker\" (shell command → fuzzy list).", Validation: "must be \"prompt\" or \"picker\""},
-				{Name: "key", Type: "string", Description: "Template variable name for the stage's output value.", Validation: reservedStageKeyValidation},
+				{Name: "key", Type: "string", Description: "Name of the action input. Templates consume its value as {{.<key>}}.", Validation: reservedStageKeyValidation},
 				{Name: "text", Type: "string", Description: "Prompt label (Go template). Only for type = \"prompt\".", Validation: "required for prompt; forbidden for picker"},
 				{Name: "default", Type: "string", Description: "Default value pre-filled in prompt (Go template). Only for type = \"prompt\"."},
 				{Name: "source", Type: "string", Description: "Shell command run via sh -c that produces newline-separated entries (Go template). Only for type = \"picker\". stdout is capped at 4 MiB and stderr at 64 KiB; stdout beyond the cap fails the source with an error screen instead of showing a partial list.", Validation: "required for picker; forbidden for prompt"},
@@ -194,7 +194,7 @@ TEMPLATE VARIABLES
 
   Available variables (from stack):
       {{.path}}           directory path (for dir-matching actions)
-      {{.pane_id}}        tmux pane ID (when --pane-id is set)
+      {{.pane_id}}        invoking tmux pane ID (from --pane-id in the TUI; resolved from the current client by action run)
       {{.session_id}}     stable tmux session ID (from window or session items)
       {{.session_key}}    cmdk-managed canonical session path when present (from window or session items)
       {{.session_name}}   display-safe tmux session name (from window or session items)
@@ -207,12 +207,12 @@ TEMPLATE VARIABLES
       {{.session_display}}  display string for the selected session
       {{.session_kind}}     session classification; "external" in this phase
       {{.session_windows}}  tmux window count (from session items)
-      {{.<key>}}          stage output keyed by the stage's key field
+      {{.<key>}}          action input named by a stage's key field
 
   Available functions:
       {{sq .path}}     shell-safe single-quoting
 
-  Security: variables such as path, session_name, and stage inputs
+  Security: variables such as path, session_name, and action inputs
   come from external sources (tmux, zoxide, user input) and may
   contain shell metacharacters. session_name renders tabs and newlines as
   display glyphs (⇥, ↵), but it is not a stable tmux target and is not
@@ -228,11 +228,56 @@ TEMPLATE VARIABLES
   and sets CMDK_* variables for data available to that command, such as
   CMDK_PATH, CMDK_PANE_ID, and CMDK_LAUNCH_PATH when available.
 
-  Session-window actions do not pass action or stage data through tmux
+  Session-window actions do not pass action input data through tmux
   environment variables. Payload commands in session-window mode should use
   template variables such as {{.launch_path}} in cmd. Interactive
   session-window shells do not receive action-specific CMDK_* variables from
   cmdk.
+
+ACTION RUN
+  cmdk action run <exact-name> noninteractively runs a configured action by its
+  exact, case-sensitive name. No match is an error; multiple configured actions
+  with that exact name are ambiguous and also fail. This command supports only
+  root- and dir-matching actions whose effective launch mode is session-window.
+  Session-matching actions and effective shell-mode actions are unsupported.
+  Unsupported actions are rejected before launch_path_cmd runs or tmux is
+  mutated. The command must run from inside an attached tmux client because a
+  successful action switches that client.
+
+  A dir action requires --path <dir>, which supplies its selected directory
+  context. A root action rejects --path. Action input keys are also exact and
+  case-sensitive. Supply inputs with repeatable --input key=value flags:
+
+      cmdk action run "Deploy" --path . \
+          --input environment=production \
+          --input 'message=deploy after approval'
+
+  Each value is a literal string: cmdk splits at the first = and does not apply
+  JSON, numeric, boolean, comma, dot, or bracket parsing. Unknown, duplicate,
+  and missing keys are errors; input errors list the action's accepted keys.
+  An omitted prompt input uses its rendered default when configured. key=
+  explicitly supplies an empty string; empty or whitespace-only prompt input is
+  accepted only when that stage has allow_empty = true. A supplied picker input
+  is used directly as the stage's passed value; its source command and picker UI
+  are bypassed. Stages collect action inputs, each stage's key names its input,
+  and action templates consume those values as {{.<key>}}.
+
+  The command follows normal session-window action behavior: it creates a fresh
+  window and switches the current tmux client to it. It does not send text or
+  keys to the launched application. On success, stdout is exactly one JSON
+  object with these fields:
+
+      action       exact configured action name
+      launchPath   absolute effective launch directory
+      sessionId    stable tmux session ID
+      sessionKey   cmdk-managed canonical session key
+      windowId     stable tmux window ID
+      windowName   effective tmux window name
+      paneId       stable ID of the created window's initial tmux pane
+
+  The JSON keys are action, launchPath, sessionId, sessionKey, windowId,
+  windowName, and paneId. Errors and diagnostics are written to stderr and exit
+  with status 1; an error does not produce a success JSON object.
 
 ATTACH
   cmdk attach enters a cmdk-managed tmux session from outside tmux. It refuses
@@ -288,7 +333,7 @@ EXECUTION
   the effective launch path, renders the payload command, creates/switches to a
   fresh window in the cmdk-managed tmux session for that path, and runs the
   rendered cmd there via sh -lc. Dir-matching actions default to session-window.
-  cmdk does not pass CMDK_* action/stage data to tmux with -e or set it in the
+  cmdk does not pass CMDK_* action-input data to tmux with -e or set it in the
   managed session environment; use template variables in cmd.
 
   In shell mode, commands are passed to sh -c via the exec(2) syscall,
