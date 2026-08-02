@@ -104,6 +104,8 @@ func TestRenderHelp_ContainsSessionWindowDocs(t *testing.T) {
 		"cmdk attach",
 		"[startup].path",
 		"outside tmux",
+		"cmdk action run <exact-name> [--no-switch]",
+		"CMDK_PANE_ID is omitted",
 		"cmdk session window <path> [--switch] --new",
 		"cmdk session window <path> [--name <name>] [--switch] -- <command> [args...]",
 		"stays in the background by",

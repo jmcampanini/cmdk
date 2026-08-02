@@ -123,10 +123,18 @@ type Launch struct {
 	resolveTimeout   time.Duration
 	tmuxTimeouts     tmux.Timeouts
 	targetClient     tmux.ClientTarget
+	noSwitch         bool
 }
 
 func (l Launch) ForClient(target tmux.ClientTarget) Launch {
 	l.targetClient = target
+	l.noSwitch = false
+	return l
+}
+
+func (l Launch) WithoutSwitch() Launch {
+	l.noSwitch = true
+	l.targetClient = tmux.ClientTarget{}
 	return l
 }
 
@@ -245,7 +253,7 @@ func (l Launch) execute(execFn ExecFn, validateResultText bool) (LaunchResult, e
 			Name:          l.windowName,
 			NewShell:      l.newShell,
 			Command:       l.command,
-			Switch:        true,
+			Switch:        !l.noSwitch,
 			MaxNameLength: l.windowNameMaxLen,
 			Timeouts:      l.tmuxTimeouts,
 			TargetClient:  l.targetClient,

@@ -900,6 +900,45 @@ func TestLaunchExecute_SessionWindowCreatesManagedWindow(t *testing.T) {
 	}
 }
 
+func TestLaunchExecute_SessionWindowWithoutSwitchClearsClientTarget(t *testing.T) {
+	dir := t.TempDir()
+	oldResolve := resolveSessionPlan
+	oldCreate := createResolvedSessionWindow
+	t.Cleanup(func() {
+		resolveSessionPlan = oldResolve
+		createResolvedSessionWindow = oldCreate
+	})
+
+	resolveSessionPlan = func(_ context.Context, path string, _ time.Duration) (resolver.Plan, error) {
+		return resolver.Plan{SessionKind: resolver.KindDirectory, SessionKey: path}, nil
+	}
+	var gotOpts tmux.SessionWindowOptions
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, _ string, opts tmux.SessionWindowOptions) (tmux.SessionWindowResult, error) {
+		gotOpts = opts
+		return tmux.SessionWindowResult{}, nil
+	}
+
+	selected := item.Item{Cmd: "true", MatchType: "dir"}
+	accumulated := []item.Item{{Type: "dir", Data: map[string]string{"path": dir}}}
+	launch, _, err := ResolveLaunch(accumulated, selected, "", config.DefaultConfig())
+	if err != nil {
+		t.Fatalf("ResolveLaunch: %v", err)
+	}
+	target := tmux.ClientTarget{Name: "/dev/pts/4", PaneID: "%17"}
+	if _, err := launch.ForClient(target).WithoutSwitch().ExecuteWithResult(func(string, []string, []string) error {
+		t.Fatal("execFn should not be called for session-window mode")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if gotOpts.Switch {
+		t.Error("Switch = true, want false")
+	}
+	if gotOpts.TargetClient != (tmux.ClientTarget{}) {
+		t.Errorf("TargetClient = %#v, want empty", gotOpts.TargetClient)
+	}
+}
+
 func TestExecuteWithResultRejectsInvalidUTF8BeforeSessionResolution(t *testing.T) {
 	oldResolve := resolveSessionPlan
 	t.Cleanup(func() { resolveSessionPlan = oldResolve })

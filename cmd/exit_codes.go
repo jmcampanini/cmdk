@@ -27,18 +27,22 @@ func newExitCodesCommand() *cobra.Command {
 
       "cmdk action run" also exits 1 for cmdk-detected errors such as an
       action that is missing, ambiguous, unsupported, or given invalid action
-      inputs, and for launch resolution or tmux failures. Its errors and
-      diagnostics are written to stderr rather than as success JSON.
+      inputs, and for launch resolution or tmux failures. Its default mode also
+      exits 1 when no invoking attached client can be established; --no-switch
+      does not require one. Errors and diagnostics are written to stderr rather
+      than as success JSON.
 
   *   Propagated for shell-mode actions. When a selected action runs in shell
       mode, cmdk replaces its own process with the action's command via an
       exec(2) syscall. The action's exit code becomes cmdk's exit code, so
       any value other than 0 or 1 originates from the action itself, not cmdk.
 
-      Session-window actions create and switch to a tmux window, then cmdk
-      exits 0 once that launch succeeds. For "cmdk action run", the launch
-      identifiers are written as JSON before exit. The payload runs inside
-      tmux and its eventual exit status is not propagated to the cmdk process.
+      Configured session-window actions create a tmux window and normally
+      switch to it, then cmdk exits 0 once that launch succeeds. "cmdk action
+      run --no-switch" instead leaves attached clients unchanged. In both
+      action-run modes, launch identifiers are written as JSON before exit. The
+      payload runs inside tmux and its eventual exit status is not propagated
+      to the cmdk process.
 
 Subcommands follow the same convention: 0 on success, 1 on
 cmdk-detected errors. Empty results (e.g. "cmdk icons" with a filter

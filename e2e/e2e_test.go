@@ -1032,7 +1032,7 @@ stages = [
 	}
 }
 
-func TestE2E_ActionRunRejectsDetachedSourceWithUnrelatedClient(t *testing.T) {
+func TestE2E_ActionRunDetachedSourceRequiresNoSwitchAndPreservesUnrelatedClient(t *testing.T) {
 	useIsolatedTmuxSocket(t)
 
 	marker := filepath.Join(t.TempDir(), "launch-path-command-ran")
@@ -1041,7 +1041,7 @@ func TestE2E_ActionRunRejectsDetachedSourceWithUnrelatedClient(t *testing.T) {
 [[actions]]
 name = "detached action"
 matches = "root"
-launch_path_cmd = "touch %s; printf '%%s\\n' %s"
+launch_path_cmd = "if test -n \"${CMDK_PANE_ID+x}\"; then exit 91; fi; touch %s; printf '%%s\\n' %s"
 cmd = "sleep 300"
 `, shellQuoteE2E(marker), shellQuoteE2E(actionDir)))
 
@@ -1105,12 +1105,84 @@ cmd = "sleep 300"
 		t.Fatalf("launch_path_cmd ran before attached-client rejection; stat error = %v", err)
 	}
 
-	clientSession, err := tmuxCmd("list-clients", "-F", "#{session_name}").CombinedOutput()
+	clientTargetBeforeOut, err := tmuxCmd("list-clients", "-F", "#{session_id}\t#{window_id}\t#{pane_id}").CombinedOutput()
 	if err != nil {
-		t.Fatalf("query unrelated client after rejection: %v\n%s", err, clientSession)
+		t.Fatalf("query unrelated client after rejection: %v\n%s", err, clientTargetBeforeOut)
 	}
-	if got := strings.TrimSpace(string(clientSession)); got != unrelatedSession {
-		t.Fatalf("unrelated client session = %q, want %q", got, unrelatedSession)
+	clientTargetBefore := strings.TrimSpace(string(clientTargetBeforeOut))
+
+	noSwitchCaptureDir := t.TempDir()
+	noSwitchStdoutPath := filepath.Join(noSwitchCaptureDir, "stdout")
+	noSwitchStderrPath := filepath.Join(noSwitchCaptureDir, "stderr")
+	noSwitchStatusPath := filepath.Join(noSwitchCaptureDir, "status")
+	noSwitchShellCmd := fmt.Sprintf("%s action run %s --no-switch > %s 2> %s; printf '%%s\\n' $? > %s; sleep 300",
+		shellQuoteE2E(binaryPath), shellQuoteE2E("detached action"), shellQuoteE2E(noSwitchStdoutPath), shellQuoteE2E(noSwitchStderrPath), shellQuoteE2E(noSwitchStatusPath))
+	noSwitchSourceSession := "cmdk-action-no-switch"
+	if out, err := tmuxCmd("new-session", "-d", "-s", noSwitchSourceSession,
+		"env", "XDG_CONFIG_HOME="+xdg, "HOME="+t.TempDir(), "sh", "-c", noSwitchShellCmd).CombinedOutput(); err != nil {
+		t.Fatalf("start no-switch action session: %v\n%s", err, out)
+	}
+
+	noSwitchStatus := strings.TrimSpace(waitForFile(t, noSwitchStatusPath, defaultTimeout))
+	noSwitchStdout, err := os.ReadFile(noSwitchStdoutPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	noSwitchStderr, err := os.ReadFile(noSwitchStderrPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noSwitchStatus != "0" {
+		t.Fatalf("no-switch action exit status = %q, want 0\nstdout:\n%s\nstderr:\n%s", noSwitchStatus, noSwitchStdout, noSwitchStderr)
+	}
+	if len(noSwitchStderr) != 0 {
+		t.Fatalf("no-switch action stderr = %q, want empty", noSwitchStderr)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("no-switch launch_path_cmd marker: %v", err)
+	}
+
+	var result struct {
+		Action     string `json:"action"`
+		LaunchPath string `json:"launchPath"`
+		SessionID  string `json:"sessionId"`
+		SessionKey string `json:"sessionKey"`
+		WindowID   string `json:"windowId"`
+		WindowName string `json:"windowName"`
+		PaneID     string `json:"paneId"`
+	}
+	if err := json.Unmarshal(noSwitchStdout, &result); err != nil {
+		t.Fatalf("decode no-switch action result: %v\nstdout: %q", err, noSwitchStdout)
+	}
+	if result.Action != "detached action" {
+		t.Errorf("action = %q, want detached action", result.Action)
+	}
+	if result.LaunchPath != filepath.Clean(actionDir) {
+		t.Errorf("launchPath = %q, want %q", result.LaunchPath, filepath.Clean(actionDir))
+	}
+
+	liveOut, err := tmuxCmd("display-message", "-p", "-t", result.PaneID,
+		"#{session_id}\t#{@cmdk_session_key}\t#{window_id}\t#{window_name}\t#{pane_id}").CombinedOutput()
+	if err != nil {
+		t.Fatalf("query no-switch launched pane: %v\n%s", err, liveOut)
+	}
+	live := strings.Split(strings.TrimSpace(string(liveOut)), "\t")
+	if len(live) != 5 {
+		t.Fatalf("live no-switch fields = %#v, want 5", live)
+	}
+	gotFields := []string{result.SessionID, result.SessionKey, result.WindowID, result.WindowName, result.PaneID}
+	for i, got := range gotFields {
+		if got != live[i] {
+			t.Errorf("JSON field %d = %q, live tmux value = %q", i, got, live[i])
+		}
+	}
+
+	clientTargetAfterOut, err := tmuxCmd("list-clients", "-F", "#{session_id}\t#{window_id}\t#{pane_id}").CombinedOutput()
+	if err != nil {
+		t.Fatalf("query unrelated client after no-switch launch: %v\n%s", err, clientTargetAfterOut)
+	}
+	if clientTargetAfter := strings.TrimSpace(string(clientTargetAfterOut)); clientTargetAfter != clientTargetBefore {
+		t.Fatalf("unrelated client moved from %q to %q", clientTargetBefore, clientTargetAfter)
 	}
 }
 

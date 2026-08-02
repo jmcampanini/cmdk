@@ -58,6 +58,8 @@ func TestActionRunHelpDocumentsContract(t *testing.T) {
 		"run <exact-name>",
 		"--path",
 		"--input key=value",
+		"--no-switch",
+		"CMDK_PANE_ID",
 		"case-sensitive",
 		"session-window",
 		"Picker inputs",
@@ -177,6 +179,62 @@ cmd = "true"
 	}
 	if _, statErr := os.Stat(marker); !os.IsNotExist(statErr) {
 		t.Fatalf("launch_path_cmd side effect exists; stat error = %v", statErr)
+	}
+}
+
+func TestActionRunNoSwitchSkipsCurrentClientAndOmitsPaneContext(t *testing.T) {
+	dir := t.TempDir()
+	writeActionRunConfig(t, `
+[[actions]]
+name = "headless action"
+matches = "root"
+launch_path = "`+dir+`"
+cmd = "true"
+`)
+	stubTmuxPrerequisite(t, func(context.Context) error { return nil })
+	clientCalled := false
+	stubActionRunCurrentClient(t, func(context.Context, time.Duration) (tmux.ClientTarget, error) {
+		clientCalled = true
+		return tmux.ClientTarget{}, errors.New("current client should not be resolved")
+	})
+
+	oldResolve := resolveConfiguredActionLaunch
+	oldExecute := executeConfiguredActionLaunch
+	t.Cleanup(func() {
+		resolveConfiguredActionLaunch = oldResolve
+		executeConfiguredActionLaunch = oldExecute
+	})
+	resolved := false
+	resolveConfiguredActionLaunch = func(_ []item.Item, _ item.Item, paneID string, _ config.Config) (execute.Launch, map[string]string, error) {
+		resolved = true
+		if paneID != "" {
+			t.Errorf("paneID = %q, want empty", paneID)
+		}
+		return execute.Launch{}, nil, nil
+	}
+	executeConfiguredActionLaunch = func(execute.Launch) (execute.LaunchResult, error) {
+		return execute.LaunchResult{
+			LaunchPath: dir,
+			SessionID:  "$5",
+			SessionKey: dir,
+			WindowID:   "@18",
+			WindowName: "headless",
+			PaneID:     "%51",
+		}, nil
+	}
+
+	cmd := newRootCommand()
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"action", "run", "headless action", "--no-switch"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if clientCalled {
+		t.Fatal("current client was resolved in no-switch mode")
+	}
+	if !resolved {
+		t.Fatal("launch was not resolved")
 	}
 }
 
