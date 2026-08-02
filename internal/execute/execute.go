@@ -314,19 +314,14 @@ func validateNoPaneTemplatesBeforeLaunchPathCmd(selected item.Item, data map[str
 			return nil
 		}
 		// A concrete placeholder cannot prove branches controlled by the eventual launch values safe.
-		paneDependent, err := templateReferencesRootKey(field.text, "pane_id")
+		tmpl, err := template.New("cmd").Funcs(tmplFuncs).Parse(field.text)
 		if err != nil {
 			return nil
 		}
-		launchPathDependent, err := templateReferencesRootKey(field.text, "launch_path")
-		if err != nil {
-			return nil
-		}
-		launchBasenameDependent, err := templateReferencesRootKey(field.text, "launch_basename")
-		if err != nil {
-			return nil
-		}
-		if paneDependent && (launchPathDependent || launchBasenameDependent) {
+		paneDependent := templateReferencesRootKey(tmpl, "pane_id")
+		launchDependent := templateReferencesRootKey(tmpl, "launch_path") ||
+			templateReferencesRootKey(tmpl, "launch_basename")
+		if paneDependent && launchDependent {
 			_, err = RenderCmd("{{.pane_id}}", preflightData)
 			if err != nil {
 				return fmt.Errorf("%s template: %w", field.name, err)
@@ -336,11 +331,7 @@ func validateNoPaneTemplatesBeforeLaunchPathCmd(selected item.Item, data map[str
 	return nil
 }
 
-func templateReferencesRootKey(text, key string) (bool, error) {
-	tmpl, err := template.New("cmd").Funcs(tmplFuncs).Parse(text)
-	if err != nil {
-		return false, err
-	}
+func templateReferencesRootKey(tmpl *template.Template, key string) bool {
 	visited := make(map[string]bool)
 	var visitTemplate func(string) bool
 	visitTemplate = func(name string) bool {
@@ -351,7 +342,7 @@ func templateReferencesRootKey(text, key string) (bool, error) {
 		defined := tmpl.Lookup(name)
 		return defined != nil && defined.Tree != nil && templateNodeReferencesRootKey(defined.Root, key, visitTemplate)
 	}
-	return visitTemplate("cmd"), nil
+	return visitTemplate("cmd")
 }
 
 func templateNodeReferencesRootKey(node parse.Node, key string, visitTemplate func(string) bool) bool {
