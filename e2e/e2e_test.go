@@ -1186,6 +1186,54 @@ cmd = "sleep 300"
 	}
 }
 
+func TestE2E_ActionRunNoSwitchWithoutServerFailsBeforeLaunchPathCmd(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "launch-path-command-ran")
+	actionDir := t.TempDir()
+	xdg := writeConfig(t, fmt.Sprintf(`
+[[actions]]
+name = "no server action"
+matches = "root"
+launch_path_cmd = "touch %s; printf '%%s\\n' %s"
+cmd = "sleep 300"
+`, shellQuoteE2E(marker), shellQuoteE2E(actionDir)))
+
+	tmuxTmp, err := os.MkdirTemp("", "cmdk-no-server-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(tmuxTmp) })
+
+	// Scrub the inherited tmux context so the binary resolves the default
+	// socket inside the empty TMUX_TMPDIR, where no server is running.
+	env := []string{"XDG_CONFIG_HOME=" + xdg, "HOME=" + t.TempDir(), "TMUX_TMPDIR=" + tmuxTmp}
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, "TMUX") || strings.HasPrefix(kv, "XDG_CONFIG_HOME=") || strings.HasPrefix(kv, "HOME=") {
+			continue
+		}
+		env = append(env, kv)
+	}
+
+	runCmd := exec.Command(binaryPath, "action", "run", "no server action", "--no-switch")
+	runCmd.Env = env
+	out, err := runCmd.CombinedOutput()
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok || exitErr.ExitCode() != 1 {
+		t.Fatalf("action run err = %v, want exit status 1\noutput:\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "no running tmux server") {
+		t.Fatalf("output = %q, want missing-server diagnostic", out)
+	}
+	if _, statErr := os.Stat(marker); !os.IsNotExist(statErr) {
+		t.Fatalf("launch_path_cmd ran before the missing-server rejection; stat error = %v", statErr)
+	}
+
+	probe := exec.Command("tmux", "list-sessions")
+	probe.Env = env
+	if probeOut, probeErr := probe.CombinedOutput(); probeErr == nil {
+		t.Fatalf("a tmux server is running after the failed launch:\n%s", probeOut)
+	}
+}
+
 func TestE2E_RootLaunchPathActionCreatesManagedSession(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "scratch")
 	if err := os.MkdirAll(dir, 0o755); err != nil {

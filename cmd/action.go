@@ -41,6 +41,7 @@ type actionRunResult struct {
 
 var (
 	currentActionRunClient        = tmux.CurrentClient
+	requireActionRunServer        = tmux.RequireRunningServer
 	resolveConfiguredActionLaunch = execute.ResolveLaunch
 	executeConfiguredActionLaunch = func(launch execute.Launch) (execute.LaunchResult, error) {
 		return launch.ExecuteWithResult(cmdrun.Replace)
@@ -78,10 +79,12 @@ are resolved or external commands run. By default, cmdk requires an attached
 tmux client and switches that exact client.
 
 With --no-switch, cmdk requires a running tmux server but not an attached
-client. It does not start a server. The window is created in the background,
-and cmdk never invokes switch-client. This mode provides no invoking pane context:
-{{.pane_id}} is unavailable and CMDK_PANE_ID is omitted. Templates that
-reference pane_id fail before launch_path_cmd runs or tmux is mutated.
+client. It does not start a server, and a missing server fails before action
+inputs are resolved or external commands run. The window is created in the
+background, and cmdk never invokes switch-client. This mode provides no
+invoking pane context: {{.pane_id}} is unavailable and CMDK_PANE_ID is
+omitted. Templates that reference pane_id fail before launch_path_cmd runs or
+tmux is mutated.
 
 Directory actions require --path. Root actions reject --path and retain their
 configured launch path behavior, including the current-directory fallback for
@@ -161,7 +164,11 @@ func prepareActionRunInvocation(cmd *cobra.Command, name string, options actionR
 		return actionRunInvocation{}, err
 	}
 	var client tmux.ClientTarget
-	if !options.noSwitch {
+	if options.noSwitch {
+		if err := requireActionRunServer(commandContext(cmd), cfg.Timeout.EffectiveFetch()); err != nil {
+			return actionRunInvocation{}, err
+		}
+	} else {
 		client, err = currentActionRunClient(commandContext(cmd), cfg.Timeout.EffectiveFetch())
 		if err != nil {
 			return actionRunInvocation{}, err

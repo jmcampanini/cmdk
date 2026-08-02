@@ -39,6 +39,13 @@ func stubActionRunCurrentClient(t *testing.T, resolve func(context.Context, time
 	t.Cleanup(func() { currentActionRunClient = old })
 }
 
+func stubActionRunServerCheck(t *testing.T, check func(context.Context, time.Duration) error) {
+	t.Helper()
+	old := requireActionRunServer
+	requireActionRunServer = check
+	t.Cleanup(func() { requireActionRunServer = old })
+}
+
 func stubActionRunTmux(t *testing.T, paneID string) {
 	t.Helper()
 	stubTmuxPrerequisite(t, func(context.Context) error { return nil })
@@ -195,6 +202,7 @@ launch_path = "`+dir+`"
 cmd = "true"
 `)
 	stubTmuxPrerequisite(t, func(context.Context) error { return nil })
+	stubActionRunServerCheck(t, func(context.Context, time.Duration) error { return nil })
 	clientCalled := false
 	stubActionRunCurrentClient(t, func(context.Context, time.Duration) (tmux.ClientTarget, error) {
 		clientCalled = true
@@ -238,6 +246,42 @@ cmd = "true"
 	}
 	if !resolved {
 		t.Fatal("launch was not resolved")
+	}
+}
+
+func TestActionRunNoSwitchFailsWithoutServerBeforeResolvingLaunch(t *testing.T) {
+	dir := t.TempDir()
+	writeActionRunConfig(t, `
+[[actions]]
+name = "headless action"
+matches = "root"
+launch_path = "`+dir+`"
+cmd = "true"
+`)
+	stubTmuxPrerequisite(t, func(context.Context) error { return nil })
+	stubActionRunServerCheck(t, func(context.Context, time.Duration) error {
+		return errors.New("no running tmux server; cmdk does not start one")
+	})
+	stubActionRunCurrentClient(t, func(context.Context, time.Duration) (tmux.ClientTarget, error) {
+		t.Error("current client should not be resolved in no-switch mode")
+		return tmux.ClientTarget{}, errors.New("unexpected")
+	})
+
+	oldResolve := resolveConfiguredActionLaunch
+	t.Cleanup(func() { resolveConfiguredActionLaunch = oldResolve })
+	resolveConfiguredActionLaunch = func([]item.Item, item.Item, string, config.Config) (execute.Launch, map[string]string, error) {
+		t.Error("launch was resolved despite the missing server")
+		return execute.Launch{}, nil, nil
+	}
+
+	cmd := newRootCommand()
+	cmd.SetOut(io.Discard)
+	var errOut bytes.Buffer
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"action", "run", "headless action", "--no-switch"})
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "no running tmux server") {
+		t.Fatalf("error = %v, want missing tmux server", err)
 	}
 }
 

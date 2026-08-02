@@ -245,8 +245,10 @@ ACTION RUN
 
   By default, the command must run from inside an attached tmux client and a
   successful action switches that exact client. With --no-switch, cmdk requires
-  a running tmux server but not an attached client. It does not start a server.
-  The window is created in the background, and cmdk never invokes switch-client.
+  a running tmux server but not an attached client. It does not start a server,
+  and a missing server fails before action inputs are resolved or external
+  commands run. The window is created in the background, and cmdk never invokes
+  switch-client.
   No-switch mode provides no invoking pane context: {{.pane_id}} is unavailable
   and CMDK_PANE_ID is omitted. cmd and window_name templates that reference
   pane_id fail before launch_path_cmd runs or tmux is mutated.
