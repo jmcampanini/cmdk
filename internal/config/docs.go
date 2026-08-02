@@ -248,8 +248,8 @@ ACTION RUN
   a running tmux server but not an attached client. It does not start a server.
   The window is created in the background, and cmdk never invokes switch-client.
   No-switch mode provides no invoking pane context: {{.pane_id}} is unavailable
-  and CMDK_PANE_ID is omitted. Templates requiring pane_id fail
-  before launch_path_cmd runs or tmux is mutated.
+  and CMDK_PANE_ID is omitted. cmd and window_name templates that reference
+  pane_id fail before launch_path_cmd runs or tmux is mutated.
 
   A dir action requires --path <dir>, which supplies its selected directory
   context. A root action rejects --path. Action input keys are also exact and

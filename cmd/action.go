@@ -80,8 +80,8 @@ tmux client and switches that exact client.
 With --no-switch, cmdk requires a running tmux server but not an attached
 client. It does not start a server. The window is created in the background,
 and cmdk never invokes switch-client. This mode provides no invoking pane context:
-{{.pane_id}} is unavailable and CMDK_PANE_ID is omitted. Templates requiring
-pane_id fail before launch_path_cmd runs or tmux is mutated.
+{{.pane_id}} is unavailable and CMDK_PANE_ID is omitted. Templates that
+reference pane_id fail before launch_path_cmd runs or tmux is mutated.
 
 Directory actions require --path. Root actions reject --path and retain their
 configured launch path behavior, including the current-directory fallback for

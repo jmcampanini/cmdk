@@ -12,7 +12,6 @@ import (
 	"slices"
 	"strings"
 	"text/template"
-	"text/template/parse"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -53,18 +52,10 @@ var tmplFuncs = template.FuncMap{
 }
 
 func RenderCmd(cmdTemplate string, data map[string]string) (string, error) {
-	tmpl, err := parseCmdTemplate(cmdTemplate)
+	tmpl, err := template.New("cmd").Funcs(tmplFuncs).Option("missingkey=error").Parse(cmdTemplate)
 	if err != nil {
 		return "", err
 	}
-	return executeCmdTemplate(tmpl, data)
-}
-
-func parseCmdTemplate(text string) (*template.Template, error) {
-	return template.New("cmd").Funcs(tmplFuncs).Option("missingkey=error").Parse(text)
-}
-
-func executeCmdTemplate(tmpl *template.Template, data map[string]string) (string, error) {
 	var buf strings.Builder
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", err
@@ -162,7 +153,7 @@ func ResolveLaunch(accumulated []item.Item, selected item.Item, paneID string, c
 		return Launch{}, data, errors.New("new shell action requires session-window launch_mode")
 	}
 	if paneID == "" && selected.LaunchPathCmd != "" {
-		if err := validateNoPaneTemplatesBeforeLaunchPathCmd(selected, data); err != nil {
+		if err := validateNoPaneTemplatesBeforeLaunchPathCmd(selected); err != nil {
 			return Launch{}, data, err
 		}
 	}
@@ -298,11 +289,10 @@ func effectiveLaunchMode(selected item.Item) launchMode {
 	return launchMode(config.EffectiveLaunchMode(selected.MatchType, selected.LaunchMode, hasLaunchPath))
 }
 
-func validateNoPaneTemplatesBeforeLaunchPathCmd(selected item.Item, data map[string]string) error {
-	preflightData := maps.Clone(data)
-	delete(preflightData, "pane_id")
-	preflightData["launch_path"] = "/cmdk/preflight"
-	preflightData["launch_basename"] = "preflight"
+// The check is deliberately blunt: rendering cannot prove pane_id safety
+// because branches taken can depend on the not-yet-known launch values, so any
+// mention fails loudly before the side-effectful launch_path_cmd runs.
+func validateNoPaneTemplatesBeforeLaunchPathCmd(selected item.Item) error {
 	fields := []struct {
 		name string
 		text string
@@ -311,125 +301,11 @@ func validateNoPaneTemplatesBeforeLaunchPathCmd(selected item.Item, data map[str
 		{name: "window_name", text: selected.WindowName},
 	}
 	for _, field := range fields {
-		if field.text == "" {
-			continue
-		}
-		tmpl, err := parseCmdTemplate(field.text)
-		if err != nil {
-			return nil
-		}
-		if _, err := executeCmdTemplate(tmpl, preflightData); err != nil {
-			if strings.Contains(err.Error(), `map has no entry for key "pane_id"`) {
-				return fmt.Errorf("%s template: %w", field.name, err)
-			}
-			return nil
-		}
-		// A concrete placeholder cannot prove branches controlled by the eventual launch values safe.
-		paneDependent := templateReferencesRootKey(tmpl, "pane_id")
-		launchDependent := templateReferencesRootKey(tmpl, "launch_path") ||
-			templateReferencesRootKey(tmpl, "launch_basename")
-		if paneDependent && launchDependent {
-			_, err = RenderCmd("{{.pane_id}}", preflightData)
-			if err != nil {
-				return fmt.Errorf("%s template: %w", field.name, err)
-			}
+		if strings.Contains(field.text, "pane_id") {
+			return fmt.Errorf("%s template references pane_id, which is unavailable without an invoking tmux pane", field.name)
 		}
 	}
 	return nil
-}
-
-func templateReferencesRootKey(tmpl *template.Template, key string) bool {
-	visited := make(map[string]bool)
-	var visitTemplate func(string) bool
-	visitTemplate = func(name string) bool {
-		if visited[name] {
-			return false
-		}
-		visited[name] = true
-		defined := tmpl.Lookup(name)
-		return defined != nil && defined.Tree != nil && templateNodeReferencesRootKey(defined.Root, key, visitTemplate)
-	}
-	return visitTemplate("cmd")
-}
-
-func templateNodeReferencesRootKey(node parse.Node, key string, visitTemplate func(string) bool) bool {
-	if node == nil {
-		return false
-	}
-	switch node := node.(type) {
-	case *parse.ListNode:
-		for _, child := range node.Nodes {
-			if templateNodeReferencesRootKey(child, key, visitTemplate) {
-				return true
-			}
-		}
-	case *parse.ActionNode:
-		return templateNodeReferencesRootKey(node.Pipe, key, visitTemplate)
-	case *parse.IfNode:
-		return templateNodeReferencesRootKey(node.Pipe, key, visitTemplate) ||
-			templateNodeReferencesRootKey(node.List, key, visitTemplate) ||
-			templateNodeReferencesRootKey(node.ElseList, key, visitTemplate)
-	case *parse.RangeNode:
-		return templateNodeReferencesRootKey(node.Pipe, key, visitTemplate) ||
-			templateNodeReferencesRootKey(node.List, key, visitTemplate) ||
-			templateNodeReferencesRootKey(node.ElseList, key, visitTemplate)
-	case *parse.WithNode:
-		return templateNodeReferencesRootKey(node.Pipe, key, visitTemplate) ||
-			templateNodeReferencesRootKey(node.List, key, visitTemplate) ||
-			templateNodeReferencesRootKey(node.ElseList, key, visitTemplate)
-	case *parse.TemplateNode:
-		return templateNodeReferencesRootKey(node.Pipe, key, visitTemplate) || visitTemplate(node.Name)
-	case *parse.PipeNode:
-		for _, command := range node.Cmds {
-			if templateNodeReferencesRootKey(command, key, visitTemplate) {
-				return true
-			}
-		}
-	case *parse.CommandNode:
-		if key != "pane_id" && commandIndexesRootKey(node, key) {
-			return true
-		}
-		for _, arg := range node.Args {
-			if templateNodeReferencesRootKey(arg, key, visitTemplate) {
-				return true
-			}
-		}
-	case *parse.FieldNode:
-		return len(node.Ident) > 0 && node.Ident[0] == key
-	case *parse.VariableNode:
-		return len(node.Ident) > 1 && node.Ident[1] == key
-	case *parse.ChainNode:
-		return templateNodeReferencesRootKey(node.Node, key, visitTemplate) ||
-			templateNodeIsRoot(node.Node) && len(node.Field) > 0 && node.Field[0] == key
-	}
-	return false
-}
-
-func commandIndexesRootKey(command *parse.CommandNode, key string) bool {
-	if len(command.Args) < 3 {
-		return false
-	}
-	identifier, ok := command.Args[0].(*parse.IdentifierNode)
-	if !ok || identifier.Ident != "index" || !templateNodeIsRoot(command.Args[1]) {
-		return false
-	}
-	indexedKey, ok := command.Args[2].(*parse.StringNode)
-	return ok && indexedKey.Text == key
-}
-
-func templateNodeIsRoot(node parse.Node) bool {
-	switch node := node.(type) {
-	case *parse.DotNode:
-		return true
-	case *parse.VariableNode:
-		return len(node.Ident) == 1
-	case *parse.PipeNode:
-		return len(node.Cmds) == 1 && templateNodeIsRoot(node.Cmds[0])
-	case *parse.CommandNode:
-		return len(node.Args) == 1 && templateNodeIsRoot(node.Args[0])
-	default:
-		return false
-	}
 }
 
 func resolveEffectiveLaunchPath(selected item.Item, data map[string]string, mode launchMode, timeout time.Duration, paneID string) (string, bool, error) {

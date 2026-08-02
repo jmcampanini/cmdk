@@ -1057,55 +1057,39 @@ func TestResolveLaunch_RelativeOutputWrapsAsCommandError(t *testing.T) {
 	}
 }
 
-func TestResolveLaunch_PaneDependentLateTemplateFailsBeforeLaunchPathCommand(t *testing.T) {
+func TestResolveLaunch_PaneMentionFailsBeforeLaunchPathCommand(t *testing.T) {
 	tests := []struct {
-		name           string
-		cmd            string
-		windowName     string
-		targetBasename string
-		wantField      string
+		name       string
+		cmd        string
+		windowName string
+		wantField  string
 	}{
-		{name: "cmd", cmd: "echo {{sq .launch_path}} {{.pane_id}}", wantField: "cmd template"},
-		{name: "window name", cmd: "true", windowName: "{{.launch_basename}}-{{.pane_id}}", wantField: "window_name template"},
-		{name: "root variable", cmd: `{{$root := $}}echo {{$root.pane_id}}`, wantField: "cmd template"},
-		{name: "parenthesized dot", cmd: `echo {{(.).pane_id}}`, wantField: "cmd template"},
-		{name: "parenthesized root", cmd: `echo {{($).pane_id}}`, wantField: "cmd template"},
-		{name: "parenthesized root variable", cmd: `{{$root := $}}echo {{($root).pane_id}}`, wantField: "cmd template"},
-		{name: "called template", cmd: `{{template "pane" .}}{{define "pane"}}{{.pane_id}}{{end}}`, wantField: "cmd template"},
+		{name: "cmd reference", cmd: "echo {{sq .launch_path}} {{.pane_id}}", wantField: "cmd template"},
+		{name: "window name reference", cmd: "true", windowName: "{{.launch_basename}}-{{.pane_id}}", wantField: "window_name template"},
 		{
-			name:           "launch-dependent branch",
-			cmd:            `{{if eq .launch_basename "repo"}}echo {{.pane_id}}{{else}}true{{end}}`,
-			targetBasename: "repo",
-			wantField:      "cmd template",
+			name:      "launch-dependent branch",
+			cmd:       `{{if eq .launch_basename "repo"}}echo {{.pane_id}}{{else}}true{{end}}`,
+			wantField: "cmd template",
 		},
-		{
-			name:           "indexed launch-dependent branch",
-			cmd:            `{{if eq (index . "launch_basename") "repo"}}echo {{.pane_id}}{{else}}true{{end}}`,
-			targetBasename: "repo",
-			wantField:      "cmd template",
-		},
+		{name: "skipped branch", cmd: `{{if .use_pane}}echo {{.pane_id}}{{else}}true{{end}}`, wantField: "cmd template"},
+		{name: "indexed reference", cmd: `echo {{index . "pane_id"}}`, wantField: "cmd template"},
+		{name: "literal mention", cmd: "grep pane_id notes.txt", wantField: "cmd template"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			dir := t.TempDir()
-			if test.targetBasename != "" {
-				dir = filepath.Join(dir, test.targetBasename)
-				if err := os.Mkdir(dir, 0o755); err != nil {
-					t.Fatal(err)
-				}
-			}
 			marker := filepath.Join(t.TempDir(), "launch-path-command-ran")
 			selected := item.Item{
 				Cmd:           test.cmd,
 				MatchType:     "root",
 				LaunchPathCmd: "touch {{sq .marker}}; printf '%s\\n' {{sq .target}}",
 				WindowName:    test.windowName,
-				Data:          map[string]string{"marker": marker, "target": dir},
+				Data:          map[string]string{"marker": marker, "target": dir, "use_pane": ""},
 			}
 
 			_, _, err := ResolveLaunch(nil, selected, "", config.DefaultConfig())
 			if err == nil || !strings.Contains(err.Error(), test.wantField) || !strings.Contains(err.Error(), "pane_id") {
-				t.Fatalf("error = %v, want %s missing pane_id error", err, test.wantField)
+				t.Fatalf("error = %v, want %s pane_id rejection", err, test.wantField)
 			}
 			if _, statErr := os.Stat(marker); !errors.Is(statErr, os.ErrNotExist) {
 				t.Fatalf("launch_path_cmd side effect exists; stat error = %v", statErr)
@@ -1114,60 +1098,22 @@ func TestResolveLaunch_PaneDependentLateTemplateFailsBeforeLaunchPathCommand(t *
 	}
 }
 
-func TestResolveLaunch_PanePreflightRespectsTemplateExecution(t *testing.T) {
-	tests := []struct {
-		name string
-		cmd  string
-	}{
-		{name: "skipped branch", cmd: `{{if .use_pane}}echo {{.pane_id}}{{else}}true{{end}}`},
-		{name: "short circuit", cmd: `echo {{and .use_pane .pane_id}}`},
-		{name: "skipped named template", cmd: `{{if .use_pane}}{{template "pane" .}}{{else}}true{{end}}{{define "pane"}}echo {{.pane_id}}{{end}}`},
-		{name: "named template with non-root dot", cmd: `{{template "value" .label}}{{define "value"}}{{if .}}echo {{.}}{{else}}{{.pane_id}}{{end}}{{end}}`},
-		{name: "optional indexed pane", cmd: `echo {{.launch_path}}; {{with index . "pane_id"}}echo {{.}}{{else}}true{{end}}`},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			dir := t.TempDir()
-			marker := filepath.Join(t.TempDir(), "launch-path-command-ran")
-			selected := item.Item{
-				Cmd:           test.cmd,
-				MatchType:     "root",
-				LaunchPathCmd: "touch {{sq .marker}}; printf '%s\\n' {{sq .target}}",
-				Data: map[string]string{
-					"label":    "safe",
-					"marker":   marker,
-					"target":   dir,
-					"use_pane": "",
-				},
-			}
-
-			if _, _, err := ResolveLaunch(nil, selected, "", config.DefaultConfig()); err != nil {
-				t.Fatalf("ResolveLaunch: %v", err)
-			}
-			if _, err := os.Stat(marker); err != nil {
-				t.Fatalf("launch_path_cmd marker: %v", err)
-			}
-		})
-	}
-}
-
-func TestResolveLaunch_PanePreflightPreservesEarlierTemplateError(t *testing.T) {
+func TestResolveLaunch_PaneMentionAllowedWithInvokingPane(t *testing.T) {
 	dir := t.TempDir()
 	marker := filepath.Join(t.TempDir(), "launch-path-command-ran")
 	selected := item.Item{
-		Cmd:           "echo {{.missing}}",
+		Cmd:           "echo {{.pane_id}}",
 		MatchType:     "root",
 		LaunchPathCmd: "touch {{sq .marker}}; printf '%s\\n' {{sq .target}}",
 		WindowName:    "pane-{{.pane_id}}",
 		Data:          map[string]string{"marker": marker, "target": dir},
 	}
 
-	_, _, err := ResolveLaunch(nil, selected, "", config.DefaultConfig())
-	if err == nil || !strings.Contains(err.Error(), "cmd template") || !strings.Contains(err.Error(), `key "missing"`) {
-		t.Fatalf("error = %v, want earlier cmd template missing-key error", err)
+	if _, _, err := ResolveLaunch(nil, selected, "%42", config.DefaultConfig()); err != nil {
+		t.Fatalf("ResolveLaunch: %v", err)
 	}
-	if _, statErr := os.Stat(marker); statErr != nil {
-		t.Fatalf("launch_path_cmd marker: %v", statErr)
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("launch_path_cmd marker: %v", err)
 	}
 }
 
