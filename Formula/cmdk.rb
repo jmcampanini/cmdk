@@ -1,6 +1,7 @@
 class Cmdk < Formula
   desc "Keyboard-driven tmux launcher"
   homepage "https://github.com/jmcampanini/cmdk"
+  license "MIT"
   head "https://github.com/jmcampanini/cmdk.git", branch: "main"
 
   depends_on "go" => :build
