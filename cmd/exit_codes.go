@@ -29,7 +29,8 @@ func newExitCodesCommand() *cobra.Command {
       action that is missing, ambiguous, unsupported, or given invalid action
       inputs, and for launch resolution or tmux failures. Its default mode also
       exits 1 when no invoking attached client can be established; --no-switch
-      does not require one. Errors and diagnostics are written to stderr rather
+      does not require one. Both modes require a running tmux server, and cmdk
+      does not start one. Errors and diagnostics are written to stderr rather
       than as success JSON.
 
   *   Propagated for shell-mode actions. When a selected action runs in shell
