@@ -53,10 +53,18 @@ var tmplFuncs = template.FuncMap{
 }
 
 func RenderCmd(cmdTemplate string, data map[string]string) (string, error) {
-	tmpl, err := template.New("cmd").Funcs(tmplFuncs).Option("missingkey=error").Parse(cmdTemplate)
+	tmpl, err := parseCmdTemplate(cmdTemplate)
 	if err != nil {
 		return "", err
 	}
+	return executeCmdTemplate(tmpl, data)
+}
+
+func parseCmdTemplate(text string) (*template.Template, error) {
+	return template.New("cmd").Funcs(tmplFuncs).Option("missingkey=error").Parse(text)
+}
+
+func executeCmdTemplate(tmpl *template.Template, data map[string]string) (string, error) {
 	var buf strings.Builder
 	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", err
@@ -306,18 +314,17 @@ func validateNoPaneTemplatesBeforeLaunchPathCmd(selected item.Item, data map[str
 		if field.text == "" {
 			continue
 		}
-		_, err := RenderCmd(field.text, preflightData)
+		tmpl, err := parseCmdTemplate(field.text)
 		if err != nil {
+			return nil
+		}
+		if _, err := executeCmdTemplate(tmpl, preflightData); err != nil {
 			if strings.Contains(err.Error(), `map has no entry for key "pane_id"`) {
 				return fmt.Errorf("%s template: %w", field.name, err)
 			}
 			return nil
 		}
 		// A concrete placeholder cannot prove branches controlled by the eventual launch values safe.
-		tmpl, err := template.New("cmd").Funcs(tmplFuncs).Parse(field.text)
-		if err != nil {
-			return nil
-		}
 		paneDependent := templateReferencesRootKey(tmpl, "pane_id")
 		launchDependent := templateReferencesRootKey(tmpl, "launch_path") ||
 			templateReferencesRootKey(tmpl, "launch_basename")
