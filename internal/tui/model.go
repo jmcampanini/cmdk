@@ -859,7 +859,7 @@ func pickerErrorItem(stage item.Stage, data map[string]string, cwd string, cwdEr
 	it.Display = display
 	contextFields := []item.DiagnosticField{
 		{Label: "Stage key", Value: stage.Key},
-		{Label: "Working directory", Value: workingDirectoryValue(cwd, cwdErr)},
+		{Label: "Inherited working directory", Value: workingDirectoryValue(cwd, cwdErr)},
 	}
 	it.Diagnostics = commandFailureDiagnostics(display, contextFields, stage.Source, data, err)
 	return it
@@ -874,7 +874,7 @@ func launchErrorItem(action item.Item, data map[string]string, cwd string, cwdEr
 	it.Display = display
 	contextFields := []item.DiagnosticField{
 		{Label: "Action", Value: action.Display},
-		{Label: "Working directory", Value: workingDirectoryValue(cwd, cwdErr)},
+		{Label: "Inherited working directory", Value: workingDirectoryValue(cwd, cwdErr)},
 	}
 	cmdTemplate := ""
 	var cmdErr *cmdrun.CommandError

@@ -530,7 +530,7 @@ func TestErrorDetailsRendersStructuredDiagnostics(t *testing.T) {
 		Diagnostics: &item.Diagnostics{
 			Summary: "structured summary",
 			Fields: []item.DiagnosticField{
-				{Label: "Working directory", Value: "/tmp/project"},
+				{Label: "Inherited working directory", Value: "/tmp/project"},
 				{Label: "Error", Value: "exit status 2"},
 			},
 			Sections: []item.DiagnosticSection{
@@ -545,7 +545,7 @@ func TestErrorDetailsRendersStructuredDiagnostics(t *testing.T) {
 		"Error details",
 		"Source: test-source",
 		"structured summary",
-		"Working directory: /tmp/project",
+		"Inherited working directory: /tmp/project",
 		"Error: exit status 2",
 		"Rendered command:",
 		"false",
@@ -1920,7 +1920,7 @@ func TestPickerStage_CommandErrorDetailsIncludeExecutionContext(t *testing.T) {
 
 	content := ansi.Strip(m.errorDetailsView())
 	compactContent := strings.Join(strings.Fields(content), "")
-	if want := "Working directory: " + cwd; !strings.Contains(compactContent, strings.Join(strings.Fields(want), "")) {
+	if want := "Inherited working directory: " + cwd; !strings.Contains(compactContent, strings.Join(strings.Fields(want), "")) {
 		t.Fatalf("details view should contain wrapped %q, got:\n%s", want, content)
 	}
 	for _, want := range []string{
@@ -1943,6 +1943,51 @@ func TestPickerStage_CommandErrorDetailsIncludeExecutionContext(t *testing.T) {
 		if !strings.Contains(content, want) {
 			t.Fatalf("details view should contain %q, got:\n%s", want, content)
 		}
+	}
+}
+
+func TestPickerStage_CommandErrorDetailsReportsInheritedWorkingDirectoryAfterCd(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	commandDir := t.TempDir()
+
+	dir := item.Item{Type: "dir", Display: "project", Data: map[string]string{"path": commandDir}}
+	action := item.Item{
+		Type:    "action",
+		Display: "Bad Picker After Cd",
+		Action:  item.ActionStaged,
+		Cmd:     "echo {{.file}}",
+		Stages: []item.Stage{
+			{
+				Type:   item.StagePicker,
+				Key:    "file",
+				Source: "cd {{sq .path}} && printf 'boom\\n' >&2 && exit 7",
+			},
+		},
+	}
+	m := NewModel([]list.Item{action}, "%1", []item.Item{dir}, testRegistry(), generator.Context{Config: testConfig()}, theme.Default(), nil, nil)
+	m = setWindowSize(t, m, 120, 40)
+
+	m = selectStagedItem(t, m)
+	if m.mode != viewPicker {
+		t.Fatalf("mode = %d, want viewPicker", m.mode)
+	}
+
+	result, cmd := m.Update(enterMsg)
+	m = result.(Model)
+	if cmd != nil {
+		t.Fatal("Enter on picker error item should not quit")
+	}
+
+	content := ansi.Strip(m.errorDetailsView())
+	compactContent := strings.Join(strings.Fields(content), "")
+	if want := "Inherited working directory: " + cwd; !strings.Contains(compactContent, strings.Join(strings.Fields(want), "")) {
+		t.Fatalf("details view should contain wrapped %q, got:\n%s", want, content)
+	}
+	if unwanted := "Inherited working directory: " + commandDir; strings.Contains(compactContent, strings.Join(strings.Fields(unwanted), "")) {
+		t.Fatalf("details view should not report command directory as %q, got:\n%s", unwanted, content)
 	}
 }
 
@@ -2308,7 +2353,7 @@ func TestFinalizeSelection_LaunchFailureShowsErrorDetails(t *testing.T) {
 		"Source: launch",
 		"launch_path_cmd failed: exit status 23",
 		"Action: Bad Launch",
-		"Working directory:",
+		"Inherited working directory:",
 		"Timeout: 2s",
 		"Exit code: 23",
 		"Command template:",
