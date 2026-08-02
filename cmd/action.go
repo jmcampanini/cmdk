@@ -16,8 +16,9 @@ import (
 )
 
 type actionRunOptions struct {
-	path   string
-	inputs []string
+	path     string
+	inputs   []string
+	noSwitch bool
 }
 
 type actionRunInvocation struct {
@@ -25,6 +26,7 @@ type actionRunInvocation struct {
 	client     tmux.ClientTarget
 	config     config.Config
 	prepared   actionrun.Prepared
+	noSwitch   bool
 }
 
 type actionRunResult struct {
@@ -39,6 +41,7 @@ type actionRunResult struct {
 
 var (
 	currentActionRunClient        = tmux.CurrentClient
+	requireActionRunServer        = tmux.RequireRunningServer
 	resolveConfiguredActionLaunch = execute.ResolveLaunch
 	executeConfiguredActionLaunch = func(launch execute.Launch) (execute.LaunchResult, error) {
 		return launch.ExecuteWithResult(cmdrun.Replace)
@@ -72,8 +75,16 @@ func newActionRunCommand() *cobra.Command {
 
 Only actions matching root or dir whose effective launch_mode is session-window
 are supported. Session-matching and shell-mode actions fail before action inputs
-are resolved or external commands run. The command must run from inside an
-attached tmux client because successful actions switch that client.
+are resolved or external commands run. By default, cmdk requires an attached
+tmux client and switches that exact client.
+
+With --no-switch, cmdk requires a running tmux server but not an attached
+client. It does not start a server, and a missing server fails before action
+inputs are resolved or external commands run. The window is created in the
+background, and cmdk never invokes switch-client. This mode provides no
+invoking pane context: {{.pane_id}} is unavailable and CMDK_PANE_ID is
+omitted. Templates that reference pane_id fail before launch_path_cmd runs or
+tmux is mutated.
 
 Directory actions require --path. Root actions reject --path and retain their
 configured launch path behavior, including the current-directory fallback for
@@ -86,8 +97,8 @@ inputs may use their rendered defaults when omitted. Picker inputs must be
 supplied and are accepted directly without running the picker source.
 
 Missing, unknown, duplicate, and disallowed-empty inputs fail before
-launch_path_cmd or tmux mutation. On success, cmdk creates and switches to the
-new window and writes one JSON object to stdout:
+launch_path_cmd or tmux mutation. On success, cmdk creates the new window,
+switches to it unless --no-switch is set, and writes one JSON object to stdout:
 
   {
     "action": "pi worktree",
@@ -119,6 +130,7 @@ needed. cmdk does not send text or keys to the launched application.`,
 	}
 	cmd.Flags().StringVar(&options.path, "path", "", "selected directory context (required for dir actions)")
 	cmd.Flags().StringArrayVar(&options.inputs, "input", nil, "action input as exact key=value (repeatable)")
+	cmd.Flags().BoolVar(&options.noSwitch, "no-switch", false, "create the window without switching an attached tmux client")
 	return cmd
 }
 
@@ -151,9 +163,16 @@ func prepareActionRunInvocation(cmd *cobra.Command, name string, options actionR
 	if err := requireTmux(cmd, nil); err != nil {
 		return actionRunInvocation{}, err
 	}
-	client, err := currentActionRunClient(commandContext(cmd), cfg.Timeout.EffectiveFetch())
-	if err != nil {
-		return actionRunInvocation{}, err
+	var client tmux.ClientTarget
+	if options.noSwitch {
+		if err := requireActionRunServer(commandContext(cmd), cfg.Timeout.EffectiveFetch()); err != nil {
+			return actionRunInvocation{}, err
+		}
+	} else {
+		client, err = currentActionRunClient(commandContext(cmd), cfg.Timeout.EffectiveFetch())
+		if err != nil {
+			return actionRunInvocation{}, err
+		}
 	}
 
 	prepared, err := actionrun.Prepare(cfg, name, options.path, client.PaneID, options.inputs)
@@ -165,6 +184,7 @@ func prepareActionRunInvocation(cmd *cobra.Command, name string, options actionR
 		client:     client,
 		config:     cfg,
 		prepared:   prepared,
+		noSwitch:   options.noSwitch,
 	}, nil
 }
 
@@ -178,7 +198,12 @@ func runPreparedAction(cmd *cobra.Command, invocation actionRunInvocation) error
 	if err != nil {
 		return err
 	}
-	result, err := executeConfiguredActionLaunch(launch.ForClient(invocation.client))
+	if invocation.noSwitch {
+		launch = launch.WithoutSwitch()
+	} else {
+		launch = launch.ForClient(invocation.client)
+	}
+	result, err := executeConfiguredActionLaunch(launch)
 	if err != nil {
 		return err
 	}

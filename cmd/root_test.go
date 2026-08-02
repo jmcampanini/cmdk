@@ -17,7 +17,7 @@ func TestRootHelpMakesSessionWindowLaunchingDiscoverable(t *testing.T) {
 
 	help := out.String()
 	for _, want := range []string{
-		"cmdk action run <exact-name> --path <dir> --input key=value",
+		"cmdk action run <exact-name> --path <dir> --input key=value [--no-switch]",
 		"Run configured actions noninteractively",
 		"cmdk session window <path> [--switch] --new",
 		"cmdk session window <path> [--switch] -- <command> [args...]",

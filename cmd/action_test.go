@@ -39,6 +39,13 @@ func stubActionRunCurrentClient(t *testing.T, resolve func(context.Context, time
 	t.Cleanup(func() { currentActionRunClient = old })
 }
 
+func stubActionRunServerCheck(t *testing.T, check func(context.Context, time.Duration) error) {
+	t.Helper()
+	old := requireActionRunServer
+	requireActionRunServer = check
+	t.Cleanup(func() { requireActionRunServer = old })
+}
+
 func stubActionRunTmux(t *testing.T, paneID string) {
 	t.Helper()
 	stubTmuxPrerequisite(t, func(context.Context) error { return nil })
@@ -58,6 +65,11 @@ func TestActionRunHelpDocumentsContract(t *testing.T) {
 		"run <exact-name>",
 		"--path",
 		"--input key=value",
+		"--no-switch",
+		"running tmux server",
+		"does not start a server",
+		"CMDK_PANE_ID",
+		"before launch_path_cmd runs",
 		"case-sensitive",
 		"session-window",
 		"Picker inputs",
@@ -177,6 +189,99 @@ cmd = "true"
 	}
 	if _, statErr := os.Stat(marker); !os.IsNotExist(statErr) {
 		t.Fatalf("launch_path_cmd side effect exists; stat error = %v", statErr)
+	}
+}
+
+func TestActionRunNoSwitchSkipsCurrentClientAndOmitsPaneContext(t *testing.T) {
+	dir := t.TempDir()
+	writeActionRunConfig(t, `
+[[actions]]
+name = "headless action"
+matches = "root"
+launch_path = "`+dir+`"
+cmd = "true"
+`)
+	stubTmuxPrerequisite(t, func(context.Context) error { return nil })
+	stubActionRunServerCheck(t, func(context.Context, time.Duration) error { return nil })
+	clientCalled := false
+	stubActionRunCurrentClient(t, func(context.Context, time.Duration) (tmux.ClientTarget, error) {
+		clientCalled = true
+		return tmux.ClientTarget{}, errors.New("current client should not be resolved")
+	})
+
+	oldResolve := resolveConfiguredActionLaunch
+	oldExecute := executeConfiguredActionLaunch
+	t.Cleanup(func() {
+		resolveConfiguredActionLaunch = oldResolve
+		executeConfiguredActionLaunch = oldExecute
+	})
+	resolved := false
+	resolveConfiguredActionLaunch = func(_ []item.Item, _ item.Item, paneID string, _ config.Config) (execute.Launch, map[string]string, error) {
+		resolved = true
+		if paneID != "" {
+			t.Errorf("paneID = %q, want empty", paneID)
+		}
+		return execute.Launch{}, nil, nil
+	}
+	executeConfiguredActionLaunch = func(execute.Launch) (execute.LaunchResult, error) {
+		return execute.LaunchResult{
+			LaunchPath: dir,
+			SessionID:  "$5",
+			SessionKey: dir,
+			WindowID:   "@18",
+			WindowName: "headless",
+			PaneID:     "%51",
+		}, nil
+	}
+
+	cmd := newRootCommand()
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs([]string{"action", "run", "headless action", "--no-switch"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if clientCalled {
+		t.Fatal("current client was resolved in no-switch mode")
+	}
+	if !resolved {
+		t.Fatal("launch was not resolved")
+	}
+}
+
+func TestActionRunNoSwitchFailsWithoutServerBeforeResolvingLaunch(t *testing.T) {
+	dir := t.TempDir()
+	writeActionRunConfig(t, `
+[[actions]]
+name = "headless action"
+matches = "root"
+launch_path = "`+dir+`"
+cmd = "true"
+`)
+	stubTmuxPrerequisite(t, func(context.Context) error { return nil })
+	stubActionRunServerCheck(t, func(context.Context, time.Duration) error {
+		return errors.New("no running tmux server; cmdk does not start one")
+	})
+	stubActionRunCurrentClient(t, func(context.Context, time.Duration) (tmux.ClientTarget, error) {
+		t.Error("current client should not be resolved in no-switch mode")
+		return tmux.ClientTarget{}, errors.New("unexpected")
+	})
+
+	oldResolve := resolveConfiguredActionLaunch
+	t.Cleanup(func() { resolveConfiguredActionLaunch = oldResolve })
+	resolveConfiguredActionLaunch = func([]item.Item, item.Item, string, config.Config) (execute.Launch, map[string]string, error) {
+		t.Error("launch was resolved despite the missing server")
+		return execute.Launch{}, nil, nil
+	}
+
+	cmd := newRootCommand()
+	cmd.SetOut(io.Discard)
+	var errOut bytes.Buffer
+	cmd.SetErr(&errOut)
+	cmd.SetArgs([]string{"action", "run", "headless action", "--no-switch"})
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), "no running tmux server") {
+		t.Fatalf("error = %v, want missing tmux server", err)
 	}
 }
 

@@ -900,6 +900,45 @@ func TestLaunchExecute_SessionWindowCreatesManagedWindow(t *testing.T) {
 	}
 }
 
+func TestLaunchExecute_SessionWindowWithoutSwitchClearsClientTarget(t *testing.T) {
+	dir := t.TempDir()
+	oldResolve := resolveSessionPlan
+	oldCreate := createResolvedSessionWindow
+	t.Cleanup(func() {
+		resolveSessionPlan = oldResolve
+		createResolvedSessionWindow = oldCreate
+	})
+
+	resolveSessionPlan = func(_ context.Context, path string, _ time.Duration) (resolver.Plan, error) {
+		return resolver.Plan{SessionKind: resolver.KindDirectory, SessionKey: path}, nil
+	}
+	var gotOpts tmux.SessionWindowOptions
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, _ string, opts tmux.SessionWindowOptions) (tmux.SessionWindowResult, error) {
+		gotOpts = opts
+		return tmux.SessionWindowResult{}, nil
+	}
+
+	selected := item.Item{Cmd: "true", MatchType: "dir"}
+	accumulated := []item.Item{{Type: "dir", Data: map[string]string{"path": dir}}}
+	launch, _, err := ResolveLaunch(accumulated, selected, "", config.DefaultConfig())
+	if err != nil {
+		t.Fatalf("ResolveLaunch: %v", err)
+	}
+	target := tmux.ClientTarget{Name: "/dev/pts/4", PaneID: "%17"}
+	if _, err := launch.ForClient(target).WithoutSwitch().ExecuteWithResult(func(string, []string, []string) error {
+		t.Fatal("execFn should not be called for session-window mode")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if gotOpts.Switch {
+		t.Error("Switch = true, want false")
+	}
+	if gotOpts.TargetClient != (tmux.ClientTarget{}) {
+		t.Errorf("TargetClient = %#v, want empty", gotOpts.TargetClient)
+	}
+}
+
 func TestExecuteWithResultRejectsInvalidUTF8BeforeSessionResolution(t *testing.T) {
 	oldResolve := resolveSessionPlan
 	t.Cleanup(func() { resolveSessionPlan = oldResolve })
@@ -1015,6 +1054,66 @@ func TestResolveLaunch_RelativeOutputWrapsAsCommandError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "absolute path") {
 		t.Errorf("Error() = %q, want absolute path violation", err.Error())
+	}
+}
+
+func TestResolveLaunch_PaneMentionFailsBeforeLaunchPathCommand(t *testing.T) {
+	tests := []struct {
+		name       string
+		cmd        string
+		windowName string
+		wantField  string
+	}{
+		{name: "cmd reference", cmd: "echo {{sq .launch_path}} {{.pane_id}}", wantField: "cmd template"},
+		{name: "window name reference", cmd: "true", windowName: "{{.launch_basename}}-{{.pane_id}}", wantField: "window_name template"},
+		{
+			name:      "launch-dependent branch",
+			cmd:       `{{if eq .launch_basename "repo"}}echo {{.pane_id}}{{else}}true{{end}}`,
+			wantField: "cmd template",
+		},
+		{name: "skipped branch", cmd: `{{if .use_pane}}echo {{.pane_id}}{{else}}true{{end}}`, wantField: "cmd template"},
+		{name: "indexed reference", cmd: `echo {{index . "pane_id"}}`, wantField: "cmd template"},
+		{name: "literal mention", cmd: "grep pane_id notes.txt", wantField: "cmd template"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			dir := t.TempDir()
+			marker := filepath.Join(t.TempDir(), "launch-path-command-ran")
+			selected := item.Item{
+				Cmd:           test.cmd,
+				MatchType:     "root",
+				LaunchPathCmd: "touch {{sq .marker}}; printf '%s\\n' {{sq .target}}",
+				WindowName:    test.windowName,
+				Data:          map[string]string{"marker": marker, "target": dir, "use_pane": ""},
+			}
+
+			_, _, err := ResolveLaunch(nil, selected, "", config.DefaultConfig())
+			if err == nil || !strings.Contains(err.Error(), test.wantField) || !strings.Contains(err.Error(), "pane_id") {
+				t.Fatalf("error = %v, want %s pane_id rejection", err, test.wantField)
+			}
+			if _, statErr := os.Stat(marker); !errors.Is(statErr, os.ErrNotExist) {
+				t.Fatalf("launch_path_cmd side effect exists; stat error = %v", statErr)
+			}
+		})
+	}
+}
+
+func TestResolveLaunch_PaneMentionAllowedWithInvokingPane(t *testing.T) {
+	dir := t.TempDir()
+	marker := filepath.Join(t.TempDir(), "launch-path-command-ran")
+	selected := item.Item{
+		Cmd:           "echo {{.pane_id}}",
+		MatchType:     "root",
+		LaunchPathCmd: "touch {{sq .marker}}; printf '%s\\n' {{sq .target}}",
+		WindowName:    "pane-{{.pane_id}}",
+		Data:          map[string]string{"marker": marker, "target": dir},
+	}
+
+	if _, _, err := ResolveLaunch(nil, selected, "%42", config.DefaultConfig()); err != nil {
+		t.Fatalf("ResolveLaunch: %v", err)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("launch_path_cmd marker: %v", err)
 	}
 }
 

@@ -194,7 +194,7 @@ TEMPLATE VARIABLES
 
   Available variables (from stack):
       {{.path}}           directory path (for dir-matching actions)
-      {{.pane_id}}        invoking tmux pane ID (from --pane-id in the TUI; resolved from the current client by action run)
+      {{.pane_id}}        invoking tmux pane ID (from --pane-id in the TUI; resolved from the current client by action run; unavailable with action run --no-switch)
       {{.session_id}}     stable tmux session ID (from window or session items)
       {{.session_key}}    cmdk-managed canonical session path when present (from window or session items)
       {{.session_name}}   display-safe tmux session name (from window or session items)
@@ -235,14 +235,23 @@ TEMPLATE VARIABLES
   cmdk.
 
 ACTION RUN
-  cmdk action run <exact-name> noninteractively runs a configured action by its
-  exact, case-sensitive name. No match is an error; multiple configured actions
-  with that exact name are ambiguous and also fail. This command supports only
-  root- and dir-matching actions whose effective launch mode is session-window.
-  Session-matching actions and effective shell-mode actions are unsupported.
-  Unsupported actions are rejected before launch_path_cmd runs or tmux is
-  mutated. The command must run from inside an attached tmux client because a
-  successful action switches that client.
+  cmdk action run <exact-name> [--no-switch] noninteractively runs a configured
+  action by its exact, case-sensitive name. No match is an error; multiple
+  configured actions with that exact name are ambiguous and also fail. This
+  command supports only root- and dir-matching actions whose effective launch
+  mode is session-window. Session-matching actions and effective shell-mode
+  actions are unsupported. Unsupported actions are rejected before
+  launch_path_cmd runs or tmux is mutated.
+
+  By default, the command must run from inside an attached tmux client and a
+  successful action switches that exact client. With --no-switch, cmdk requires
+  a running tmux server but not an attached client. It does not start a server,
+  and a missing server fails before action inputs are resolved or external
+  commands run. The window is created in the background, and cmdk never invokes
+  switch-client.
+  No-switch mode provides no invoking pane context: {{.pane_id}} is unavailable
+  and CMDK_PANE_ID is omitted. cmd and window_name templates that reference
+  pane_id fail before launch_path_cmd runs or tmux is mutated.
 
   A dir action requires --path <dir>, which supplies its selected directory
   context. A root action rejects --path. Action input keys are also exact and
@@ -262,10 +271,9 @@ ACTION RUN
   are bypassed. Stages collect action inputs, each stage's key names its input,
   and action templates consume those values as {{.<key>}}.
 
-  The command follows normal session-window action behavior: it creates a fresh
-  window and switches the current tmux client to it. It does not send text or
-  keys to the launched application. On success, stdout is exactly one JSON
-  object with these fields:
+  The command creates a fresh window and, unless --no-switch is set, switches
+  the invoking tmux client to it. It does not send text or keys to the launched
+  application. On success, stdout is exactly one JSON object with these fields:
 
       action       exact configured action name
       launchPath   absolute effective launch directory

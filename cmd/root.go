@@ -49,7 +49,7 @@ func newRootCommand() *cobra.Command {
 
 Run an existing configured session-window action noninteractively:
 
-  cmdk action run <exact-name> --path <dir> --input key=value
+  cmdk action run <exact-name> --path <dir> --input key=value [--no-switch]
 
 Or launch a shell or command in the cmdk-managed session for a directory:
 

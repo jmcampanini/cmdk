@@ -123,10 +123,18 @@ type Launch struct {
 	resolveTimeout   time.Duration
 	tmuxTimeouts     tmux.Timeouts
 	targetClient     tmux.ClientTarget
+	noSwitch         bool
 }
 
 func (l Launch) ForClient(target tmux.ClientTarget) Launch {
 	l.targetClient = target
+	l.noSwitch = false
+	return l
+}
+
+func (l Launch) WithoutSwitch() Launch {
+	l.noSwitch = true
+	l.targetClient = tmux.ClientTarget{}
 	return l
 }
 
@@ -143,6 +151,11 @@ func ResolveLaunch(accumulated []item.Item, selected item.Item, paneID string, c
 	mode := effectiveLaunchMode(selected)
 	if selected.NewShell && mode != launchModeSessionWindow {
 		return Launch{}, data, errors.New("new shell action requires session-window launch_mode")
+	}
+	if paneID == "" && selected.LaunchPathCmd != "" {
+		if err := validateNoPaneTemplatesBeforeLaunchPathCmd(selected); err != nil {
+			return Launch{}, data, err
+		}
 	}
 	launchPath, hasLaunchPath, err := resolveEffectiveLaunchPath(selected, data, mode, cfg.Timeout.Picker, paneID)
 	if err != nil {
@@ -245,7 +258,7 @@ func (l Launch) execute(execFn ExecFn, validateResultText bool) (LaunchResult, e
 			Name:          l.windowName,
 			NewShell:      l.newShell,
 			Command:       l.command,
-			Switch:        true,
+			Switch:        !l.noSwitch,
 			MaxNameLength: l.windowNameMaxLen,
 			Timeouts:      l.tmuxTimeouts,
 			TargetClient:  l.targetClient,
@@ -274,6 +287,25 @@ func (l Launch) execute(execFn ExecFn, validateResultText bool) (LaunchResult, e
 func effectiveLaunchMode(selected item.Item) launchMode {
 	hasLaunchPath := selected.LaunchPath != "" || selected.LaunchPathCmd != ""
 	return launchMode(config.EffectiveLaunchMode(selected.MatchType, selected.LaunchMode, hasLaunchPath))
+}
+
+// The check is deliberately blunt: rendering cannot prove pane_id safety
+// because branches taken can depend on the not-yet-known launch values, so any
+// mention fails loudly before the side-effectful launch_path_cmd runs.
+func validateNoPaneTemplatesBeforeLaunchPathCmd(selected item.Item) error {
+	fields := []struct {
+		name string
+		text string
+	}{
+		{name: "cmd", text: selected.Cmd},
+		{name: "window_name", text: selected.WindowName},
+	}
+	for _, field := range fields {
+		if strings.Contains(field.text, "pane_id") {
+			return fmt.Errorf("%s template references pane_id, which is unavailable without an invoking tmux pane", field.name)
+		}
+	}
+	return nil
 }
 
 func resolveEffectiveLaunchPath(selected item.Item, data map[string]string, mode launchMode, timeout time.Duration, paneID string) (string, bool, error) {
