@@ -8,7 +8,7 @@ require (
 	charm.land/lipgloss/v2 v2.0.5
 	charm.land/log/v2 v2.0.0
 	github.com/charmbracelet/x/ansi v0.11.7
-	github.com/jmcampanini/go-config-loader v0.1.0
+	github.com/jmcampanini/go-config-loader v0.2.0
 	github.com/rivo/uniseg v0.4.7
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/sys v0.47.0
