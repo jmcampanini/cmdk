@@ -37,8 +37,8 @@ github.com/go-logfmt/logfmt v0.6.0 h1:wGYYu3uicYdqXVgoYbvnkrPVXkuLM1p1ifugDMEdRi
 github.com/go-logfmt/logfmt v0.6.0/go.mod h1:WYhtIu8zTZfxdn5+rREduYbwxfcBr/Vr6KEVveWlfTs=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
-github.com/jmcampanini/go-config-loader v0.1.0 h1:rJMByv7y/GEbr5EEnExWV0NFydl7EUCii3lzUnkwf4s=
-github.com/jmcampanini/go-config-loader v0.1.0/go.mod h1:xJ18rX8Eeh2geQsgccW3Ma47Jr4984Anr7hF0f+WVaA=
+github.com/jmcampanini/go-config-loader v0.2.0 h1:KD2i/lmFH3fOnq62RUbbExtqk3HD1r7PT6C7fCuaj9Y=
+github.com/jmcampanini/go-config-loader v0.2.0/go.mod h1:xJ18rX8Eeh2geQsgccW3Ma47Jr4984Anr7hF0f+WVaA=
 github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=
 github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
 github.com/lucasb-eyer/go-colorful v1.4.0 h1:UtrWVfLdarDgc44HcS7pYloGHJUjHV/4FwW4TvVgFr4=
