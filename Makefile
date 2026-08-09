@@ -1,4 +1,4 @@
-.PHONY: help build test test-unit test-e2e test-gen-icons lint lint-fix fmt fmt-check tidy tidy-check check clean gen-icons
+.PHONY: help build test test-unit test-e2e test-gen-icons lint lint-fix fmt fmt-check tidy tidy-check vuln check clean gen-icons
 
 BUILD_DIR   := build
 BINARY      := $(BUILD_DIR)/cmdk
@@ -94,7 +94,10 @@ tidy-check: ## Fail if go mod tidy would change go.mod/go.sum.
 	if [ -n "$$out" ]; then echo "$$out"; echo "go mod tidy would change go.mod/go.sum"; exit 1; fi; \
 	echo "go mod tidy failed (rc=$$rc)"; exit $$rc
 
-check: fmt-check tidy-check lint test ## Run all non-mutating checks.
+vuln: ## Scan Go packages for reachable known vulnerabilities.
+	go tool govulncheck $(PKG)
+
+check: fmt-check tidy-check lint test vuln ## Run all non-mutating checks.
 
 clean: ## Remove build artifacts, coverage files, and test cache.
 	rm -rf $(BUILD_DIR) out dist coverage.out coverage.html *.coverprofile
