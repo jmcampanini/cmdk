@@ -1032,6 +1032,131 @@ stages = [
 	}
 }
 
+func TestE2E_ActionRunSwitchFailureReportsCreatedState(t *testing.T) {
+	useIsolatedTmuxSocket(t)
+
+	realTmux, err := exec.LookPath("tmux")
+	if err != nil {
+		t.Fatal("tmux not found")
+	}
+	shimDir := t.TempDir()
+	shimPath := filepath.Join(shimDir, "tmux")
+	shim := fmt.Sprintf(`#!/bin/sh
+if [ "$1" = "switch-client" ]; then
+  echo 'cmdk e2e forced switch-client failure' >&2
+  exit 42
+fi
+exec %s "$@"
+`, shellQuoteE2E(realTmux))
+	if err := os.WriteFile(shimPath, []byte(shim), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	actionName := "Issue 128 switch failure"
+	windowName := "issue-128-live"
+	actionDir := t.TempDir()
+	payloadMarker := filepath.Join(t.TempDir(), "payload-running")
+	payloadMarkerTmp := payloadMarker + ".tmp"
+	payloadScript := filepath.Join(actionDir, "payload.sh")
+	payload := fmt.Sprintf("#!/bin/sh\nprintf running > %s\nmv %s %s\nsleep 300\n",
+		shellQuoteE2E(payloadMarkerTmp), shellQuoteE2E(payloadMarkerTmp), shellQuoteE2E(payloadMarker))
+	if err := os.WriteFile(payloadScript, []byte(payload), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	payloadCommand := "sh " + shellQuoteE2E(payloadScript)
+	xdg := writeConfig(t, fmt.Sprintf(`
+[[actions]]
+name = %q
+matches = "root"
+launch_path = %q
+window_name = %q
+cmd = %q
+`, actionName, actionDir, windowName, payloadCommand))
+
+	captureDir := t.TempDir()
+	stdoutPath := filepath.Join(captureDir, "stdout")
+	stderrPath := filepath.Join(captureDir, "stderr")
+	statusPath := filepath.Join(captureDir, "status")
+	shellCmd := fmt.Sprintf("%s action run %s > %s 2> %s; printf '%%s\\n' $? > %s; sleep 300",
+		shellQuoteE2E(binaryPath), shellQuoteE2E(actionName), shellQuoteE2E(stdoutPath), shellQuoteE2E(stderrPath), shellQuoteE2E(statusPath))
+	callerSession := "cmdk-action-switch-failure-" + fmt.Sprintf("%d", time.Now().UnixNano())
+	clientCmd := tmuxCmd("-C", "new-session", "-s", callerSession, "-x", "120", "-y", "40",
+		"env",
+		"XDG_CONFIG_HOME="+xdg,
+		"HOME="+t.TempDir(),
+		"PATH="+shimDir+":"+os.Getenv("PATH"),
+		"sh", "-c", shellCmd)
+	clientInput, err := clientCmd.StdinPipe()
+	if err != nil {
+		t.Fatalf("create tmux control client stdin: %v", err)
+	}
+	if err := clientCmd.Start(); err != nil {
+		t.Fatalf("start attached tmux control client: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = clientInput.Close()
+		_ = clientCmd.Process.Kill()
+		_ = clientCmd.Wait()
+	})
+
+	status := strings.TrimSpace(waitForFile(t, statusPath, defaultTimeout))
+	stdout, err := os.ReadFile(stdoutPath)
+	if err != nil {
+		t.Fatalf("read action run stdout: %v", err)
+	}
+	stderr, err := os.ReadFile(stderrPath)
+	if err != nil {
+		t.Fatalf("read action run stderr: %v", err)
+	}
+	if status != "1" {
+		t.Fatalf("action run exit status = %q, want 1\nstdout:\n%s\nstderr:\n%s", status, stdout, stderr)
+	}
+	if len(stdout) != 0 {
+		t.Fatalf("action run stdout = %q, want empty", stdout)
+	}
+	if got := waitForFile(t, payloadMarker, defaultTimeout); got != "running" {
+		t.Fatalf("launched payload marker = %q, want running", got)
+	}
+
+	sessionKey := realPathE2E(t, actionDir)
+	session := findManagedSessionE2E(t, sessionKey)
+	liveOut, err := tmuxCmd("display-message", "-p", "-t", session.ID,
+		"#{session_id}\t#{@cmdk_session_key}\t#{window_id}\t#{window_name}\t#{pane_id}\t#{pane_current_path}\t#{pane_dead}").CombinedOutput()
+	if err != nil {
+		t.Fatalf("query launched pane: %v\n%s", err, liveOut)
+	}
+	live := strings.Split(strings.TrimRight(string(liveOut), "\r\n"), "\t")
+	if len(live) != 7 {
+		t.Fatalf("live tmux fields = %#v, want 7", live)
+	}
+	if live[0] != session.ID || live[1] != sessionKey || live[3] != windowName {
+		t.Fatalf("live tmux state = %#v, want session %q, key %q, window %q", live, session.ID, sessionKey, windowName)
+	}
+	if live[6] != "0" {
+		t.Fatalf("launched payload pane_dead = %q, want 0", live[6])
+	}
+
+	diagnostic := string(stderr)
+	for _, want := range []string{
+		`action "` + actionName + `" launched`,
+		"Do not rerun this action",
+		"Created tmux state:",
+		"Switch failure: tmux switch-client failed: exit status 42\n  stderr: cmdk e2e forced switch-client failure",
+		session.ID,
+		sessionKey,
+		live[2],
+		windowName,
+		live[4],
+		filepath.Clean(actionDir),
+		"tmux switch-client -t '" + session.ID + ":" + live[2] + "'",
+		"--no-switch",
+	} {
+		if !strings.Contains(diagnostic, want) {
+			t.Errorf("stderr missing %q:\n%s", want, diagnostic)
+		}
+	}
+}
+
 func TestE2E_ActionRunDetachedSourceRequiresNoSwitchAndPreservesUnrelatedClient(t *testing.T) {
 	useIsolatedTmuxSocket(t)
 

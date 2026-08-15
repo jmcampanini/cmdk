@@ -900,6 +900,58 @@ func TestLaunchExecute_SessionWindowCreatesManagedWindow(t *testing.T) {
 	}
 }
 
+func TestExecuteWithResultPreservesSwitchFailureClassificationAndCreatedState(t *testing.T) {
+	dir := t.TempDir()
+	oldResolve := resolveSessionPlan
+	oldCreate := createResolvedSessionWindow
+	t.Cleanup(func() {
+		resolveSessionPlan = oldResolve
+		createResolvedSessionWindow = oldCreate
+	})
+
+	plan := resolver.Plan{SessionKind: resolver.KindDirectory, SessionKey: dir}
+	resolveSessionPlan = func(context.Context, string, time.Duration) (resolver.Plan, error) {
+		return plan, nil
+	}
+	switchCause := errors.New("switch-client failed")
+	createResolvedSessionWindow = func(context.Context, resolver.Plan, string, tmux.SessionWindowOptions) (tmux.SessionWindowResult, error) {
+		return tmux.SessionWindowResult{
+			SessionID:  "$5",
+			SessionKey: dir,
+			WindowID:   "@18",
+			WindowName: "main",
+			PaneID:     "%51",
+		}, &tmux.SwitchClientError{Err: switchCause}
+	}
+
+	launch := Launch{
+		mode:           launchModeSessionWindow,
+		path:           dir,
+		windowName:     "main",
+		newShell:       true,
+		resolveTimeout: time.Second,
+	}
+	result, err := launch.ExecuteWithResult(func(string, []string, []string) error {
+		t.Fatal("execFn should not be called for session-window mode")
+		return nil
+	})
+	var switchErr *tmux.SwitchClientError
+	if !errors.As(err, &switchErr) || !errors.Is(err, switchCause) {
+		t.Fatalf("error = %T %[1]v, want wrapped *tmux.SwitchClientError", err)
+	}
+	want := LaunchResult{
+		LaunchPath: dir,
+		SessionID:  "$5",
+		SessionKey: dir,
+		WindowID:   "@18",
+		WindowName: "main",
+		PaneID:     "%51",
+	}
+	if result != want {
+		t.Errorf("result = %#v, want %#v", result, want)
+	}
+}
+
 func TestLaunchExecute_SessionWindowWithoutSwitchClearsClientTarget(t *testing.T) {
 	dir := t.TempDir()
 	oldResolve := resolveSessionPlan

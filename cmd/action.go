@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -110,8 +111,14 @@ switches to it unless --no-switch is set, and writes one JSON object to stdout:
     "paneId": "%51"
   }
 
-Diagnostics are written to stderr and return exit status 1. No --json flag is
-needed. cmdk does not send text or keys to the launched application.`,
+If the window and command are created but switching the client fails, cmdk
+exits 1 without writing success JSON. The stderr diagnostic identifies the
+created session, window, and pane. The action is already running, so do not
+rerun it. Automation that does not need the switch should pass --no-switch.
+
+Other diagnostics are also written to stderr and return exit status 1. No
+--json flag is needed. cmdk does not send text or keys to the launched
+application.`,
 		Args: cobra.ExactArgs(1),
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			prepared, err := prepareActionRunInvocation(cmd, args[0], options)
@@ -205,6 +212,10 @@ func runPreparedAction(cmd *cobra.Command, invocation actionRunInvocation) error
 	}
 	result, err := executeConfiguredActionLaunch(launch)
 	if err != nil {
+		var switchErr *tmux.SwitchClientError
+		if errors.As(err, &switchErr) && completeActionLaunchResult(result) {
+			return actionRunSwitchFailureError(invocation.actionName, result, switchErr)
+		}
 		return err
 	}
 
@@ -217,6 +228,60 @@ func runPreparedAction(cmd *cobra.Command, invocation actionRunInvocation) error
 		WindowName: result.WindowName,
 		PaneID:     result.PaneID,
 	})
+}
+
+func completeActionLaunchResult(result execute.LaunchResult) bool {
+	return result.LaunchPath != "" &&
+		result.SessionID != "" &&
+		result.SessionKey != "" &&
+		result.WindowID != "" &&
+		result.WindowName != "" &&
+		result.PaneID != ""
+}
+
+func actionRunSwitchFailureError(actionName string, result execute.LaunchResult, switchErr *tmux.SwitchClientError) error {
+	switchFailure := strings.ReplaceAll(strings.TrimRight(switchErr.Error(), "\n"), "\n", "\n  ")
+	message := fmt.Sprintf(`action %q launched, but switching the client failed.
+
+The action's side effects already happened: the launch path exists and the
+window is running its command. Do not rerun this action — rerunning launches
+it a second time.
+
+Created tmux state:
+  session:     %s  (%s)
+  window:      %s  %s
+  pane:        %s
+  launch path: %s
+
+Switch failure: %s
+
+To go there manually: tmux switch-client -t '%s:%s'
+Automation that does not need the switch should pass --no-switch`,
+		actionName,
+		result.SessionID,
+		result.SessionKey,
+		result.WindowID,
+		result.WindowName,
+		result.PaneID,
+		result.LaunchPath,
+		switchFailure,
+		result.SessionID,
+		result.WindowID,
+	)
+	return &actionRunSwitchFailureDiagnostic{message: message, cause: switchErr}
+}
+
+type actionRunSwitchFailureDiagnostic struct {
+	message string
+	cause   error
+}
+
+func (e *actionRunSwitchFailureDiagnostic) Error() string {
+	return e.message
+}
+
+func (e *actionRunSwitchFailureDiagnostic) Unwrap() error {
+	return e.cause
 }
 
 type actionRunError struct {
