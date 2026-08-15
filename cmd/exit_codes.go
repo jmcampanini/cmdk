@@ -47,8 +47,7 @@ func newExitCodesCommand() *cobra.Command {
       run --no-switch" instead leaves attached clients unchanged. On a
       successful action run in either mode, launch identifiers are written as
       JSON before exit. The payload runs inside tmux and its eventual exit
-      status is not propagated
-      to the cmdk process.
+      status is not propagated to the cmdk process.
 
 Subcommands follow the same convention: 0 on success, 1 on
 cmdk-detected errors. Empty results (e.g. "cmdk icons" with a filter

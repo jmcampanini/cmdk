@@ -1056,8 +1056,10 @@ exec %s "$@"
 	windowName := "issue-128-live"
 	actionDir := t.TempDir()
 	payloadMarker := filepath.Join(t.TempDir(), "payload-running")
+	payloadMarkerTmp := payloadMarker + ".tmp"
 	payloadScript := filepath.Join(actionDir, "payload.sh")
-	payload := fmt.Sprintf("#!/bin/sh\nprintf running > %s\nsleep 300\n", shellQuoteE2E(payloadMarker))
+	payload := fmt.Sprintf("#!/bin/sh\nprintf running > %s\nmv %s %s\nsleep 300\n",
+		shellQuoteE2E(payloadMarkerTmp), shellQuoteE2E(payloadMarkerTmp), shellQuoteE2E(payloadMarker))
 	if err := os.WriteFile(payloadScript, []byte(payload), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1139,7 +1141,7 @@ cmd = %q
 		`action "` + actionName + `" launched`,
 		"Do not rerun this action",
 		"Created tmux state:",
-		"cmdk e2e forced switch-client failure",
+		"Switch failure: tmux switch-client failed: exit status 42\n  stderr: cmdk e2e forced switch-client failure",
 		session.ID,
 		sessionKey,
 		live[2],

@@ -454,7 +454,7 @@ func TestRunPreparedActionReportsCreatedStateOnSwitchFailure(t *testing.T) {
 	resolveConfiguredActionLaunch = func([]item.Item, item.Item, string, config.Config) (execute.Launch, map[string]string, error) {
 		return execute.Launch{}, nil, nil
 	}
-	switchCause := errors.New("tmux switch-client failed: client disappeared")
+	switchCause := errors.New("tmux switch-client failed: exit status 1\nstderr: client disappeared")
 	executeConfiguredActionLaunch = func(execute.Launch) (execute.LaunchResult, error) {
 		return execute.LaunchResult{
 			LaunchPath: "/Users/me/Code/github.com/acme/api-wt/fix-login",
@@ -487,7 +487,7 @@ func TestRunPreparedActionReportsCreatedStateOnSwitchFailure(t *testing.T) {
 		"wt-fix-login",
 		"%51",
 		"/Users/me/Code/github.com/acme/api-wt/fix-login",
-		"tmux switch-client failed: client disappeared",
+		"Switch failure: tmux switch-client failed: exit status 1\n  stderr: client disappeared",
 		"tmux switch-client -t '$5:@18'",
 		"--no-switch",
 	} {
