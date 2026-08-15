@@ -30,8 +30,12 @@ func newExitCodesCommand() *cobra.Command {
       inputs, and for launch resolution or tmux failures. Its default mode also
       exits 1 when no invoking attached client can be established; --no-switch
       does not require one. Both modes require a running tmux server, and cmdk
-      does not start one. Errors and diagnostics are written to stderr rather
-      than as success JSON.
+      does not start one. If window creation succeeds but switching the client
+      fails, the action is already running: cmdk exits 1 without success JSON
+      and reports the created identifiers on stderr. Do not rerun the action;
+      automation that does not need the switch should pass --no-switch. Other
+      errors and diagnostics are also written to stderr rather than as success
+      JSON.
 
   *   Propagated for shell-mode actions. When a selected action runs in shell
       mode, cmdk replaces its own process with the action's command via an
@@ -40,9 +44,10 @@ func newExitCodesCommand() *cobra.Command {
 
       Configured session-window actions create a tmux window and normally
       switch to it, then cmdk exits 0 once that launch succeeds. "cmdk action
-      run --no-switch" instead leaves attached clients unchanged. In both
-      action-run modes, launch identifiers are written as JSON before exit. The
-      payload runs inside tmux and its eventual exit status is not propagated
+      run --no-switch" instead leaves attached clients unchanged. On a
+      successful action run in either mode, launch identifiers are written as
+      JSON before exit. The payload runs inside tmux and its eventual exit
+      status is not propagated
       to the cmdk process.
 
 Subcommands follow the same convention: 0 on success, 1 on

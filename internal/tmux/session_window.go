@@ -60,6 +60,23 @@ type SessionWindowResult struct {
 	PaneID     string
 }
 
+// SwitchClientError classifies a failure to switch the tmux client after a
+// session window was created successfully.
+type SwitchClientError struct {
+	Err error
+}
+
+func (e *SwitchClientError) Error() string {
+	if e.Err == nil {
+		return "tmux switch-client failed"
+	}
+	return e.Err.Error()
+}
+
+func (e *SwitchClientError) Unwrap() error {
+	return e.Err
+}
+
 // AttachOptions controls attaching the caller's terminal to a cmdk-managed
 // tmux session.
 type AttachOptions struct {
@@ -135,7 +152,9 @@ func (m sessionWindowManager) createResolvedWindow(ctx context.Context, plan res
 	}
 
 	if opts.Switch {
-		return result, m.switchClient(ctx, result.SessionID, result.WindowID, opts.TargetClient.Name)
+		if err := m.switchClient(ctx, result.SessionID, result.WindowID, opts.TargetClient.Name); err != nil {
+			return result, &SwitchClientError{Err: err}
+		}
 	}
 	return result, nil
 }

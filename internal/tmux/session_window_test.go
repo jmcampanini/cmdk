@@ -532,18 +532,22 @@ func TestCreateResolvedSessionWindowParsesNewSessionIDsForFollowupTargets(t *tes
 	}
 }
 
-func TestCreateResolvedSessionWindowReturnsCreatedResultOnSwitchFailure(t *testing.T) {
+func TestCreateResolvedSessionWindowReturnsCreatedResultOnExistingSessionSwitchFailure(t *testing.T) {
 	plan := repoSessionWindowPlan()
-	switchErr := errors.New("switch failed")
+	switchCause := errors.New("switch failed")
 	runner := newScriptedTmuxRunner(t,
 		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$2\t" + plan.SessionKey + "\n"},
 		scriptedTmuxCall{args: []string{"new-window", "-P", "-F", newWindowResultFormat, "-t", "$2:", "-n", "main", "-c", launchPathForPlan(plan)}, output: "@15\t%21\tmain\n"},
-		scriptedTmuxCall{args: []string{"switch-client", "-t", "$2:@15"}, err: switchErr},
+		scriptedTmuxCall{args: []string{"switch-client", "-t", "$2:@15"}, err: switchCause},
 	)
 
 	result, err := createWindowResultWithRunner(t, runner, plan, SessionWindowOptions{NewShell: true, Switch: true})
-	if !errors.Is(err, switchErr) {
-		t.Fatalf("error = %v, want switch error", err)
+	var switchErr *SwitchClientError
+	if !errors.As(err, &switchErr) {
+		t.Fatalf("error = %T %[1]v, want *SwitchClientError", err)
+	}
+	if !errors.Is(err, switchCause) || switchErr.Err != switchCause {
+		t.Fatalf("error = %v, want wrapped switch cause", err)
 	}
 	want := SessionWindowResult{
 		SessionID:  "$2",
@@ -555,6 +559,70 @@ func TestCreateResolvedSessionWindowReturnsCreatedResultOnSwitchFailure(t *testi
 	if result != want {
 		t.Errorf("result = %#v, want %#v", result, want)
 	}
+}
+
+func TestCreateResolvedSessionWindowReturnsCreatedResultOnNewSessionSwitchFailure(t *testing.T) {
+	plan := repoSessionWindowPlan()
+	switchCause := errors.New("switch failed after new session")
+	runner := newScriptedTmuxRunner(t,
+		scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}},
+		scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionResultFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", "main", "-c", launchPathForPlan(plan)}, output: "$7\t@15\t%21\tmain\n"},
+		scriptedTmuxCall{args: []string{"set-option", "-t", "$7", cmdkSessionKindOption, plan.SessionKind}},
+		scriptedTmuxCall{args: []string{"set-option", "-t", "$7", cmdkSessionKeyOption, plan.SessionKey}},
+		scriptedTmuxCall{args: []string{"switch-client", "-t", "$7:@15"}, err: switchCause},
+	)
+
+	result, err := createWindowResultWithRunner(t, runner, plan, SessionWindowOptions{NewShell: true, Switch: true})
+	var switchErr *SwitchClientError
+	if !errors.As(err, &switchErr) {
+		t.Fatalf("error = %T %[1]v, want *SwitchClientError", err)
+	}
+	if !errors.Is(err, switchCause) {
+		t.Fatalf("error = %v, want wrapped switch cause", err)
+	}
+	want := SessionWindowResult{
+		SessionID:  "$7",
+		SessionKey: plan.SessionKey,
+		WindowID:   "@15",
+		WindowName: "main",
+		PaneID:     "%21",
+	}
+	if result != want {
+		t.Errorf("result = %#v, want %#v", result, want)
+	}
+}
+
+func TestCreateResolvedSessionWindowDoesNotClassifyCreationOrMetadataFailuresAsSwitchFailures(t *testing.T) {
+	plan := repoSessionWindowPlan()
+
+	t.Run("window creation", func(t *testing.T) {
+		cause := errors.New("new-window failed")
+		runner := newScriptedTmuxRunner(t,
+			scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}, output: "$2\t" + plan.SessionKey + "\n"},
+			scriptedTmuxCall{args: []string{"new-window", "-P", "-F", newWindowResultFormat, "-t", "$2:", "-n", "main", "-c", launchPathForPlan(plan)}, err: cause},
+		)
+
+		_, err := createWindowResultWithRunner(t, runner, plan, SessionWindowOptions{NewShell: true, Switch: true})
+		var switchErr *SwitchClientError
+		if !errors.Is(err, cause) || errors.As(err, &switchErr) {
+			t.Fatalf("error = %T %[1]v, want unclassified creation failure", err)
+		}
+	})
+
+	t.Run("session metadata", func(t *testing.T) {
+		cause := errors.New("set-option failed")
+		runner := newScriptedTmuxRunner(t,
+			scriptedTmuxCall{args: []string{"list-sessions", "-F", cmdkSessionKeyListFormat}},
+			scriptedTmuxCall{args: []string{"new-session", "-d", "-P", "-F", newSessionResultFormat, "-s", tmuxSafeSessionName(plan.SessionKey), "-n", "main", "-c", launchPathForPlan(plan)}, output: "$7\t@15\t%21\tmain\n"},
+			scriptedTmuxCall{args: []string{"set-option", "-t", "$7", cmdkSessionKindOption, plan.SessionKind}, err: cause},
+		)
+
+		_, err := createWindowResultWithRunner(t, runner, plan, SessionWindowOptions{NewShell: true, Switch: true})
+		var switchErr *SwitchClientError
+		if !errors.Is(err, cause) || errors.As(err, &switchErr) {
+			t.Fatalf("error = %T %[1]v, want unclassified metadata failure", err)
+		}
+	})
 }
 
 func TestCreateResolvedSessionWindowRejectsMalformedNewSessionOutput(t *testing.T) {

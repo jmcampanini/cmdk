@@ -75,6 +75,9 @@ func TestActionRunHelpDocumentsContract(t *testing.T) {
 		"Picker inputs",
 		`"launchPath"`,
 		`"paneId"`,
+		"switching the client fails",
+		"already running",
+		"do not",
 		"stderr",
 	} {
 		if !strings.Contains(out.String(), want) {
@@ -441,7 +444,130 @@ func TestTerminalSafeActionRunErrorEscapesControlsAndPreservesCause(t *testing.T
 	}
 }
 
-func TestRunPreparedActionDoesNotWriteJSONOnLaunchError(t *testing.T) {
+func TestRunPreparedActionReportsCreatedStateOnSwitchFailure(t *testing.T) {
+	oldResolve := resolveConfiguredActionLaunch
+	oldExecute := executeConfiguredActionLaunch
+	t.Cleanup(func() {
+		resolveConfiguredActionLaunch = oldResolve
+		executeConfiguredActionLaunch = oldExecute
+	})
+	resolveConfiguredActionLaunch = func([]item.Item, item.Item, string, config.Config) (execute.Launch, map[string]string, error) {
+		return execute.Launch{}, nil, nil
+	}
+	switchCause := errors.New("tmux switch-client failed: client disappeared")
+	executeConfiguredActionLaunch = func(execute.Launch) (execute.LaunchResult, error) {
+		return execute.LaunchResult{
+			LaunchPath: "/Users/me/Code/github.com/acme/api-wt/fix-login",
+			SessionID:  "$5",
+			SessionKey: "/Users/me/Code/github.com/acme/api",
+			WindowID:   "@18",
+			WindowName: "wt-fix-login",
+			PaneID:     "%51",
+		}, &tmux.SwitchClientError{Err: switchCause}
+	}
+
+	var stdout bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetOut(&stdout)
+	err := runPreparedAction(cmd, actionRunInvocation{actionName: "pi worktree"})
+	if err == nil {
+		t.Fatal("expected switch failure")
+	}
+	var switchErr *tmux.SwitchClientError
+	if !errors.As(err, &switchErr) || !errors.Is(err, switchCause) {
+		t.Fatalf("error = %T %[1]v, want wrapped switch failure", err)
+	}
+	for _, want := range []string{
+		`action "pi worktree" launched`,
+		"Do not rerun this action",
+		"Created tmux state:",
+		"$5",
+		"/Users/me/Code/github.com/acme/api",
+		"@18",
+		"wt-fix-login",
+		"%51",
+		"/Users/me/Code/github.com/acme/api-wt/fix-login",
+		"tmux switch-client failed: client disappeared",
+		"tmux switch-client -t '$5:@18'",
+		"--no-switch",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error missing %q:\n%s", want, err)
+		}
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want empty", stdout.String())
+	}
+}
+
+func TestRunPreparedActionFallsBackToPlainSwitchErrorForIncompleteCreatedState(t *testing.T) {
+	oldResolve := resolveConfiguredActionLaunch
+	oldExecute := executeConfiguredActionLaunch
+	t.Cleanup(func() {
+		resolveConfiguredActionLaunch = oldResolve
+		executeConfiguredActionLaunch = oldExecute
+	})
+	resolveConfiguredActionLaunch = func([]item.Item, item.Item, string, config.Config) (execute.Launch, map[string]string, error) {
+		return execute.Launch{}, nil, nil
+	}
+	switchCause := errors.New("switch failed")
+	executeConfiguredActionLaunch = func(execute.Launch) (execute.LaunchResult, error) {
+		return execute.LaunchResult{WindowID: "@1"}, &tmux.SwitchClientError{Err: switchCause}
+	}
+
+	var stdout bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetOut(&stdout)
+	err := runPreparedAction(cmd, actionRunInvocation{actionName: "test"})
+	if !errors.Is(err, switchCause) || err.Error() != switchCause.Error() {
+		t.Fatalf("error = %v, want plain switch failure", err)
+	}
+	if strings.Contains(err.Error(), "Created tmux state") {
+		t.Fatalf("incomplete result produced created-state diagnostic: %v", err)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want empty", stdout.String())
+	}
+}
+
+func TestRunPreparedActionLeavesNonSwitchErrorsUnchanged(t *testing.T) {
+	oldResolve := resolveConfiguredActionLaunch
+	oldExecute := executeConfiguredActionLaunch
+	t.Cleanup(func() {
+		resolveConfiguredActionLaunch = oldResolve
+		executeConfiguredActionLaunch = oldExecute
+	})
+	resolveConfiguredActionLaunch = func([]item.Item, item.Item, string, config.Config) (execute.Launch, map[string]string, error) {
+		return execute.Launch{}, nil, nil
+	}
+	cause := errors.New("new-window failed")
+	executeConfiguredActionLaunch = func(execute.Launch) (execute.LaunchResult, error) {
+		return execute.LaunchResult{
+			LaunchPath: "/tmp/launch",
+			SessionID:  "$5",
+			SessionKey: "/tmp/repo",
+			WindowID:   "@18",
+			WindowName: "main",
+			PaneID:     "%51",
+		}, cause
+	}
+
+	var stdout bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetOut(&stdout)
+	err := runPreparedAction(cmd, actionRunInvocation{actionName: "test"})
+	if err != cause {
+		t.Fatalf("error = %v, want original creation error", err)
+	}
+	if strings.Contains(err.Error(), "Created tmux state") {
+		t.Fatalf("non-switch error produced created-state diagnostic: %v", err)
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout = %q, want empty", stdout.String())
+	}
+}
+
+func TestRunPreparedActionSwitchFailureDiagnosticEscapesTerminalControls(t *testing.T) {
 	oldResolve := resolveConfiguredActionLaunch
 	oldExecute := executeConfiguredActionLaunch
 	t.Cleanup(func() {
@@ -452,17 +578,30 @@ func TestRunPreparedActionDoesNotWriteJSONOnLaunchError(t *testing.T) {
 		return execute.Launch{}, nil, nil
 	}
 	executeConfiguredActionLaunch = func(execute.Launch) (execute.LaunchResult, error) {
-		return execute.LaunchResult{WindowID: "@1"}, errors.New("switch failed")
+		return execute.LaunchResult{
+			LaunchPath: "/tmp/launch\x1b]52;c;payload\a",
+			SessionID:  "$5\x1b",
+			SessionKey: "/tmp/repo\tkey",
+			WindowID:   "@18",
+			WindowName: "main\bname",
+			PaneID:     "%51",
+		}, &tmux.SwitchClientError{Err: errors.New("switch\a failed")}
 	}
 
-	var stdout bytes.Buffer
 	cmd := &cobra.Command{}
-	cmd.SetOut(&stdout)
-	err := runPreparedAction(cmd, actionRunInvocation{actionName: "test"})
-	if err == nil || !strings.Contains(err.Error(), "switch failed") {
-		t.Fatalf("error = %v, want switch failure", err)
+	cmd.SetOut(io.Discard)
+	err := terminalSafeActionRunError(runPreparedAction(cmd, actionRunInvocation{actionName: "pi\x1b action"}))
+	if err == nil {
+		t.Fatal("expected switch failure")
 	}
-	if stdout.Len() != 0 {
-		t.Errorf("stdout = %q, want empty", stdout.String())
+	for _, control := range []rune{'\x1b', '\a', '\t', '\b'} {
+		if strings.ContainsRune(err.Error(), control) {
+			t.Fatalf("unsafe control %U remains in %q", control, err.Error())
+		}
+	}
+	for _, want := range []string{`pi\x1b action`, `$5\x1b`, `repo\tkey`, `main\bname`, `switch\a failed`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("safe error missing %q:\n%s", want, err)
+		}
 	}
 }
