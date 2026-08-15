@@ -54,6 +54,20 @@ func stubActionRunTmux(t *testing.T, paneID string) {
 	})
 }
 
+func stubPreparedActionLaunch(t *testing.T, executeLaunch func(execute.Launch) (execute.LaunchResult, error)) {
+	t.Helper()
+	oldResolve := resolveConfiguredActionLaunch
+	oldExecute := executeConfiguredActionLaunch
+	t.Cleanup(func() {
+		resolveConfiguredActionLaunch = oldResolve
+		executeConfiguredActionLaunch = oldExecute
+	})
+	resolveConfiguredActionLaunch = func([]item.Item, item.Item, string, config.Config) (execute.Launch, map[string]string, error) {
+		return execute.Launch{}, nil, nil
+	}
+	executeConfiguredActionLaunch = executeLaunch
+}
+
 func TestActionRunHelpDocumentsContract(t *testing.T) {
 	cmd := newActionRunCommand()
 	var out bytes.Buffer
@@ -445,17 +459,8 @@ func TestTerminalSafeActionRunErrorEscapesControlsAndPreservesCause(t *testing.T
 }
 
 func TestRunPreparedActionReportsCreatedStateOnSwitchFailure(t *testing.T) {
-	oldResolve := resolveConfiguredActionLaunch
-	oldExecute := executeConfiguredActionLaunch
-	t.Cleanup(func() {
-		resolveConfiguredActionLaunch = oldResolve
-		executeConfiguredActionLaunch = oldExecute
-	})
-	resolveConfiguredActionLaunch = func([]item.Item, item.Item, string, config.Config) (execute.Launch, map[string]string, error) {
-		return execute.Launch{}, nil, nil
-	}
 	switchCause := errors.New("tmux switch-client failed: exit status 1\nstderr: client disappeared")
-	executeConfiguredActionLaunch = func(execute.Launch) (execute.LaunchResult, error) {
+	stubPreparedActionLaunch(t, func(execute.Launch) (execute.LaunchResult, error) {
 		return execute.LaunchResult{
 			LaunchPath: "/Users/me/Code/github.com/acme/api-wt/fix-login",
 			SessionID:  "$5",
@@ -464,7 +469,7 @@ func TestRunPreparedActionReportsCreatedStateOnSwitchFailure(t *testing.T) {
 			WindowName: "wt-fix-login",
 			PaneID:     "%51",
 		}, &tmux.SwitchClientError{Err: switchCause}
-	}
+	})
 
 	var stdout bytes.Buffer
 	cmd := &cobra.Command{}
@@ -501,19 +506,10 @@ func TestRunPreparedActionReportsCreatedStateOnSwitchFailure(t *testing.T) {
 }
 
 func TestRunPreparedActionFallsBackToPlainSwitchErrorForIncompleteCreatedState(t *testing.T) {
-	oldResolve := resolveConfiguredActionLaunch
-	oldExecute := executeConfiguredActionLaunch
-	t.Cleanup(func() {
-		resolveConfiguredActionLaunch = oldResolve
-		executeConfiguredActionLaunch = oldExecute
-	})
-	resolveConfiguredActionLaunch = func([]item.Item, item.Item, string, config.Config) (execute.Launch, map[string]string, error) {
-		return execute.Launch{}, nil, nil
-	}
 	switchCause := errors.New("switch failed")
-	executeConfiguredActionLaunch = func(execute.Launch) (execute.LaunchResult, error) {
+	stubPreparedActionLaunch(t, func(execute.Launch) (execute.LaunchResult, error) {
 		return execute.LaunchResult{WindowID: "@1"}, &tmux.SwitchClientError{Err: switchCause}
-	}
+	})
 
 	var stdout bytes.Buffer
 	cmd := &cobra.Command{}
@@ -531,17 +527,8 @@ func TestRunPreparedActionFallsBackToPlainSwitchErrorForIncompleteCreatedState(t
 }
 
 func TestRunPreparedActionLeavesNonSwitchErrorsUnchanged(t *testing.T) {
-	oldResolve := resolveConfiguredActionLaunch
-	oldExecute := executeConfiguredActionLaunch
-	t.Cleanup(func() {
-		resolveConfiguredActionLaunch = oldResolve
-		executeConfiguredActionLaunch = oldExecute
-	})
-	resolveConfiguredActionLaunch = func([]item.Item, item.Item, string, config.Config) (execute.Launch, map[string]string, error) {
-		return execute.Launch{}, nil, nil
-	}
 	cause := errors.New("new-window failed")
-	executeConfiguredActionLaunch = func(execute.Launch) (execute.LaunchResult, error) {
+	stubPreparedActionLaunch(t, func(execute.Launch) (execute.LaunchResult, error) {
 		return execute.LaunchResult{
 			LaunchPath: "/tmp/launch",
 			SessionID:  "$5",
@@ -550,7 +537,7 @@ func TestRunPreparedActionLeavesNonSwitchErrorsUnchanged(t *testing.T) {
 			WindowName: "main",
 			PaneID:     "%51",
 		}, cause
-	}
+	})
 
 	var stdout bytes.Buffer
 	cmd := &cobra.Command{}
@@ -568,16 +555,7 @@ func TestRunPreparedActionLeavesNonSwitchErrorsUnchanged(t *testing.T) {
 }
 
 func TestRunPreparedActionSwitchFailureDiagnosticEscapesTerminalControls(t *testing.T) {
-	oldResolve := resolveConfiguredActionLaunch
-	oldExecute := executeConfiguredActionLaunch
-	t.Cleanup(func() {
-		resolveConfiguredActionLaunch = oldResolve
-		executeConfiguredActionLaunch = oldExecute
-	})
-	resolveConfiguredActionLaunch = func([]item.Item, item.Item, string, config.Config) (execute.Launch, map[string]string, error) {
-		return execute.Launch{}, nil, nil
-	}
-	executeConfiguredActionLaunch = func(execute.Launch) (execute.LaunchResult, error) {
+	stubPreparedActionLaunch(t, func(execute.Launch) (execute.LaunchResult, error) {
 		return execute.LaunchResult{
 			LaunchPath: "/tmp/launch\x1b]52;c;payload\a",
 			SessionID:  "$5\x1b",
@@ -586,7 +564,7 @@ func TestRunPreparedActionSwitchFailureDiagnosticEscapesTerminalControls(t *test
 			WindowName: "main\bname",
 			PaneID:     "%51",
 		}, &tmux.SwitchClientError{Err: errors.New("switch\a failed")}
-	}
+	})
 
 	cmd := &cobra.Command{}
 	cmd.SetOut(io.Discard)
