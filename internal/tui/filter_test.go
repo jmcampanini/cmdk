@@ -221,7 +221,7 @@ func TestMultiTermFilter_Ranking(t *testing.T) {
 			targets: []string{
 				"~/Code/github.com/jmcampanini/cmdk/main",
 				"~/Code/github.com/jmcampanini/dotfiles/main",
-				"~/Code/github.com/jmcampanini/grove-cli/main",
+				"~/Code/github.com/jmcampanini/grove/main",
 			},
 			query:     "grove main",
 			wantFirst: 2,
@@ -269,7 +269,7 @@ func TestMultiTermFilter_Ranking(t *testing.T) {
 				"~/Code/github.com/jmcampanini/cmdk/main",
 				"~/Code/github.com/jmcampanini/cmdk/main/cmd",
 				"~/Code/github.com/jmcampanini/dotfiles/main",
-				"~/Code/github.com/jmcampanini/grove-cli/main",
+				"~/Code/github.com/jmcampanini/grove/main",
 			},
 			query:     "cmdk main cmd",
 			wantFirst: 0,
