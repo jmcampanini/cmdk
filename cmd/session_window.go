@@ -11,18 +11,24 @@ import (
 )
 
 type sessionWindowOptions struct {
-	newShell      bool
-	name          string
-	switchWindow  bool
-	nameSet       bool
-	dashSeen      bool
-	argsLenAtDash int
+	newShell     bool
+	name         string
+	switchWindow bool
+}
+
+// sessionWindowRequest is the result of grammar validation: the positional
+// path, the command argv after --, and whether --name was set explicitly.
+type sessionWindowRequest struct {
+	path        string
+	commandArgs []string
+	nameSet     bool
 }
 
 var createResolvedSessionWindow = tmux.CreateResolvedSessionWindow
 
 func newSessionWindowCommand() *cobra.Command {
 	options := sessionWindowOptions{}
+	var request sessionWindowRequest
 	cmd := &cobra.Command{
 		Use:   "window <path> [--name <name>] [--switch] (--new | -- <command> [args...])",
 		Short: "Create a new tmux window in a cmdk-managed session for a path",
@@ -55,13 +61,17 @@ literal by default; invoke a shell explicitly for shell features, for example:
 --switch must appear before --. Arguments after -- are always part of the window
 command. cmdk creates a fresh window every time and tracks it by the returned
 tmux window_id.`,
-		Args:    cobra.MinimumNArgs(1),
+		Args: func(cmd *cobra.Command, args []string) error {
+			parsed, err := parseSessionWindowGrammar(cmd, args, options)
+			if err != nil {
+				return err
+			}
+			request = parsed
+			return nil
+		},
 		PreRunE: requireTmux,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			options.nameSet = cmd.Flags().Changed("name")
-			options.argsLenAtDash = cmd.Flags().ArgsLenAtDash()
-			options.dashSeen = options.argsLenAtDash >= 0
-			return runSessionWindowCommand(cmd, args, options)
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runSessionWindowCommand(cmd, request, options)
 		},
 	}
 	cmd.Flags().BoolVar(&options.newShell, "new", false, "create a fresh interactive shell window")
@@ -70,29 +80,37 @@ tmux window_id.`,
 	return cmd
 }
 
-func runSessionWindowCommand(cmd *cobra.Command, args []string, options sessionWindowOptions) error {
+// parseSessionWindowGrammar validates the complete positional grammar before
+// any command work: exactly one path before --, exactly one of --new or a
+// nonempty command after --, and no empty explicit --name. Cobra runs it as
+// the Args validator, after flag parsing and before the tmux prerequisite.
+func parseSessionWindowGrammar(cmd *cobra.Command, args []string, options sessionWindowOptions) (sessionWindowRequest, error) {
 	if len(args) == 0 {
-		return errors.New("path is required")
+		return sessionWindowRequest{}, errors.New("path is required")
 	}
-	if options.nameSet && options.name == "" {
-		return errors.New("--name cannot be empty")
+	nameSet := cmd.Flags().Changed("name")
+	if nameSet && options.name == "" {
+		return sessionWindowRequest{}, errors.New("--name cannot be empty")
 	}
-	path, commandArgs, commandDelimiter, err := splitSessionWindowArgs(args, options)
+	path, commandArgs, commandDelimiter, err := splitSessionWindowArgs(args, cmd.Flags().ArgsLenAtDash())
 	if err != nil {
-		return err
+		return sessionWindowRequest{}, err
 	}
 	haveCommand := len(commandArgs) > 0
 	if haveCommand && !commandDelimiter {
-		return errors.New("command args must follow --")
+		return sessionWindowRequest{}, errors.New("command args must follow --")
 	}
 	if options.newShell && haveCommand {
-		return errors.New("--new cannot be used with command args")
+		return sessionWindowRequest{}, errors.New("--new cannot be used with command args")
 	}
 	if !options.newShell && !haveCommand {
-		return errors.New("session window requires --new or command args after --")
+		return sessionWindowRequest{}, errors.New("session window requires --new or command args after --")
 	}
+	return sessionWindowRequest{path: path, commandArgs: commandArgs, nameSet: nameSet}, nil
+}
 
-	launchPath, err := validateLaunchDirectory(path)
+func runSessionWindowCommand(cmd *cobra.Command, request sessionWindowRequest, options sessionWindowOptions) error {
+	launchPath, err := validateLaunchDirectory(request.path)
 	if err != nil {
 		return err
 	}
@@ -109,14 +127,14 @@ func runSessionWindowCommand(cmd *cobra.Command, args []string, options sessionW
 		return err
 	}
 	windowName := options.name
-	if !options.nameSet {
+	if !request.nameSet {
 		windowName = defaultWindowNameForLaunchPath(launchPath)
 	}
 
 	_, err = createResolvedSessionWindow(commandContext(cmd), plan, launchPath, tmux.SessionWindowOptions{
 		Name:          windowName,
 		NewShell:      options.newShell,
-		Command:       commandArgs,
+		Command:       request.commandArgs,
 		Switch:        options.switchWindow,
 		MaxNameLength: cfg.Behavior.WindowNameMaxLength,
 		Timeouts:      tmuxTimeouts(cfg),
@@ -124,13 +142,13 @@ func runSessionWindowCommand(cmd *cobra.Command, args []string, options sessionW
 	return err
 }
 
-func splitSessionWindowArgs(args []string, options sessionWindowOptions) (string, []string, bool, error) {
+func splitSessionWindowArgs(args []string, argsLenAtDash int) (string, []string, bool, error) {
 	if len(args) == 0 {
 		return "", nil, false, errors.New("path is required")
 	}
 
-	if options.dashSeen {
-		switch options.argsLenAtDash {
+	if argsLenAtDash >= 0 {
+		switch argsLenAtDash {
 		case 0:
 			path := args[0]
 			rest := args[1:]

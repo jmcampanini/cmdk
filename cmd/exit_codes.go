@@ -6,6 +6,8 @@ func newExitCodesCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "exit-codes",
 		Short: "Exit codes and error categories",
+		Args:  cobra.NoArgs,
+		RunE:  runHelp,
 		Long: `Exit codes returned by cmdk.
 
   0   Success. The TUI ran to completion and either executed a selected
@@ -24,6 +26,12 @@ func newExitCodesCommand() *cobra.Command {
       problems discovered in the default config path appear as a failed source
       row inside the TUI rather than causing a non-zero exit. Logging setup
       failures produce a stderr warning and do not cause exit 1.
+
+      Usage errors also exit 1 before any command work runs: an unknown
+      command or unexpected operand anywhere in the tree (including operands
+      passed to the root command or to this help topic), an invalid flag, or
+      malformed "cmdk session window" arguments. Bare command groups such as
+      "cmdk action", "cmdk session", and "cmdk window" show help and exit 0.
 
       "cmdk action run" also exits 1 for cmdk-detected errors such as an
       action that is missing, ambiguous, unsupported, or given invalid action
