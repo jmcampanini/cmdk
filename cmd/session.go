@@ -23,6 +23,8 @@ func newSessionCommand() *cobra.Command {
 
 Session commands turn existing directories into cmdk session plans and can
 create fresh tmux windows inside cmdk-managed sessions for those plans.`,
+		Args: rejectUnknownOperands,
+		RunE: runHelp,
 	}
 	cmd.AddCommand(newSessionResolveCommand(), newSessionWindowCommand())
 	return cmd

@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -32,15 +33,17 @@ func TestSessionWindowCommandUseDocumentsRequiredPath(t *testing.T) {
 	}
 }
 
-func TestRunSessionWindowCommandErrorsWithNoMode(t *testing.T) {
-	useTempConfigHome(t)
-	dir := filepath.Join(t.TempDir(), "scratch")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+func executeSessionWindow(t *testing.T, args ...string) error {
+	t.Helper()
+	cmd := newSessionWindowCommand()
+	cmd.SetOut(io.Discard)
+	cmd.SetErr(io.Discard)
+	cmd.SetArgs(args)
+	return cmd.Execute()
+}
 
-	cmd := &cobra.Command{}
-	err := runSessionWindowCommand(cmd, []string{dir}, sessionWindowOptions{})
+func TestSessionWindowCommandErrorsWithNoMode(t *testing.T) {
+	err := executeSessionWindow(t, filepath.Join(t.TempDir(), "scratch"))
 	if err == nil {
 		t.Fatal("expected mode error")
 	}
@@ -84,7 +87,7 @@ func TestRunSessionWindowCommandNewShellDefaultsToBackground(t *testing.T) {
 	}
 
 	cmd := &cobra.Command{}
-	if err := runSessionWindowCommand(cmd, []string{dir}, sessionWindowOptions{newShell: true}); err != nil {
+	if err := runSessionWindowCommand(cmd, sessionWindowRequest{path: dir}, sessionWindowOptions{newShell: true}); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -114,15 +117,13 @@ func TestRunSessionWindowCommandCommandModePassesArgvUnchanged(t *testing.T) {
 	}
 
 	cmd := &cobra.Command{}
-	args := append([]string{dir}, wantCommand...)
-	if err := runSessionWindowCommand(cmd, args, sessionWindowOptions{dashSeen: true, argsLenAtDash: 1}); err != nil {
+	if err := runSessionWindowCommand(cmd, sessionWindowRequest{path: dir, commandArgs: wantCommand}, sessionWindowOptions{}); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestRunSessionWindowCommandRejectsCommandWithoutDashDash(t *testing.T) {
-	cmd := &cobra.Command{}
-	err := runSessionWindowCommand(cmd, []string{".", "echo", "hi"}, sessionWindowOptions{})
+func TestSessionWindowCommandRejectsCommandWithoutDashDash(t *testing.T) {
+	err := executeSessionWindow(t, ".", "echo", "hi")
 	if err == nil {
 		t.Fatal("expected delimiter error")
 	}
@@ -132,10 +133,7 @@ func TestRunSessionWindowCommandRejectsCommandWithoutDashDash(t *testing.T) {
 }
 
 func TestSplitSessionWindowArgsAllowsFlagTerminatorBeforeDashPath(t *testing.T) {
-	path, commandArgs, commandDelimiter, err := splitSessionWindowArgs(
-		[]string{"-project"},
-		sessionWindowOptions{dashSeen: true, argsLenAtDash: 0},
-	)
+	path, commandArgs, commandDelimiter, err := splitSessionWindowArgs([]string{"-project"}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,10 +149,7 @@ func TestSplitSessionWindowArgsAllowsFlagTerminatorBeforeDashPath(t *testing.T) 
 }
 
 func TestSplitSessionWindowArgsAllowsDashPathAndCommandDelimiter(t *testing.T) {
-	path, commandArgs, commandDelimiter, err := splitSessionWindowArgs(
-		[]string{"-project", "--", "echo", "hi"},
-		sessionWindowOptions{dashSeen: true, argsLenAtDash: 0},
-	)
+	path, commandArgs, commandDelimiter, err := splitSessionWindowArgs([]string{"-project", "--", "echo", "hi"}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,10 +166,7 @@ func TestSplitSessionWindowArgsAllowsDashPathAndCommandDelimiter(t *testing.T) {
 }
 
 func TestSplitSessionWindowArgsRejectsExtraArgsBeforeDashDash(t *testing.T) {
-	_, _, _, err := splitSessionWindowArgs(
-		[]string{".", "extra", "echo"},
-		sessionWindowOptions{dashSeen: true, argsLenAtDash: 2},
-	)
+	_, _, _, err := splitSessionWindowArgs([]string{".", "extra", "echo"}, 2)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -201,14 +193,13 @@ func TestRunSessionWindowCommandNameOverride(t *testing.T) {
 	}
 
 	cmd := &cobra.Command{}
-	if err := runSessionWindowCommand(cmd, []string{dir}, sessionWindowOptions{newShell: true, name: "tests", nameSet: true}); err != nil {
+	if err := runSessionWindowCommand(cmd, sessionWindowRequest{path: dir, nameSet: true}, sessionWindowOptions{newShell: true, name: "tests"}); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestRunSessionWindowCommandNewPlusCommandErrors(t *testing.T) {
-	cmd := &cobra.Command{}
-	err := runSessionWindowCommand(cmd, []string{".", "echo", "hi"}, sessionWindowOptions{newShell: true, dashSeen: true, argsLenAtDash: 1})
+func TestSessionWindowCommandNewPlusCommandErrors(t *testing.T) {
+	err := executeSessionWindow(t, ".", "--new", "--", "echo", "hi")
 	if err == nil {
 		t.Fatal("expected mode conflict error")
 	}
@@ -217,9 +208,8 @@ func TestRunSessionWindowCommandNewPlusCommandErrors(t *testing.T) {
 	}
 }
 
-func TestRunSessionWindowCommandEmptyNameErrors(t *testing.T) {
-	cmd := &cobra.Command{}
-	err := runSessionWindowCommand(cmd, []string{"."}, sessionWindowOptions{newShell: true, nameSet: true})
+func TestSessionWindowCommandEmptyNameErrors(t *testing.T) {
+	err := executeSessionWindow(t, ".", "--name", "", "--new")
 	if err == nil {
 		t.Fatal("expected name error")
 	}
@@ -303,7 +293,7 @@ func TestRunSessionWindowCommandThreadsConfiguredWindowNameMaxLength(t *testing.
 	}
 
 	cmd := &cobra.Command{}
-	if err := runSessionWindowCommand(cmd, []string{dir}, sessionWindowOptions{newShell: true}); err != nil {
+	if err := runSessionWindowCommand(cmd, sessionWindowRequest{path: dir}, sessionWindowOptions{newShell: true}); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -331,7 +321,7 @@ func TestRunSessionWindowCommandDefaultsWindowNameMaxLength(t *testing.T) {
 	}
 
 	cmd := &cobra.Command{}
-	if err := runSessionWindowCommand(cmd, []string{dir}, sessionWindowOptions{newShell: true}); err != nil {
+	if err := runSessionWindowCommand(cmd, sessionWindowRequest{path: dir}, sessionWindowOptions{newShell: true}); err != nil {
 		t.Fatal(err)
 	}
 	if !called {

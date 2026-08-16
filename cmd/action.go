@@ -57,6 +57,8 @@ func newActionCommand() *cobra.Command {
 
 Only configured root and directory actions whose effective launch mode is
 session-window are supported.`,
+		Args: rejectUnknownOperands,
+		RunE: runHelp,
 	}
 	cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return terminalSafeActionRunError(err)

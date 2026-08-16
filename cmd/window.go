@@ -31,6 +31,8 @@ window to the pane that invoked the binding:
 
 If --pane-id is omitted, cmdk falls back to TMUX_PANE, then tmux's default
 current context.`,
+		Args: rejectUnknownOperands,
+		RunE: runHelp,
 	}
 	cmd.PersistentFlags().StringVar(&options.paneID, "pane-id", "", "tmux pane ID to use as the current-window anchor")
 	cmd.AddCommand(newWindowNextCommand(options), newWindowPreviousCommand(options))
