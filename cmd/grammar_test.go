@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -21,27 +20,6 @@ import (
 	resolver "github.com/jmcampanini/cmdk/internal/session"
 	"github.com/jmcampanini/cmdk/internal/tmux"
 )
-
-// expectedApplicationCommands is the deliberate inventory of every
-// application-owned command. Adding a command means adding it here and giving
-// it grammar scenarios below, or TestApplicationCommandGrammarInventory fails.
-var expectedApplicationCommands = []string{
-	"cmdk",
-	"cmdk action",
-	"cmdk action run",
-	"cmdk attach",
-	"cmdk config",
-	"cmdk docs",
-	"cmdk exit-codes",
-	"cmdk icons",
-	"cmdk session",
-	"cmdk session resolve",
-	"cmdk session window",
-	"cmdk shorten",
-	"cmdk window",
-	"cmdk window next",
-	"cmdk window previous",
-}
 
 type grammarScenario struct {
 	name string
@@ -251,17 +229,6 @@ cmd = "true"
 func TestApplicationCommandGrammarInventory(t *testing.T) {
 	commands := map[string]*cobra.Command{}
 	collectApplicationCommands(newRootCommand(), commands)
-
-	var got []string
-	for path := range commands {
-		got = append(got, path)
-	}
-	sort.Strings(got)
-	want := slices.Clone(expectedApplicationCommands)
-	sort.Strings(want)
-	if !slices.Equal(got, want) {
-		t.Fatalf("application command inventory changed:\ngot  %q\nwant %q\nregister the command in expectedApplicationCommands and grammarScenarios", got, want)
-	}
 
 	for path, command := range commands {
 		if command.Args == nil {

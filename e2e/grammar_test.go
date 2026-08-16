@@ -51,21 +51,22 @@ func TestE2E_RejectedOperandsLeaveStateUntouched(t *testing.T) {
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
+			invocation := strings.Join(row.args, " ")
 			code, stdout, stderr := runCmdkBinary(t, env, "", row.args...)
 			if code != 1 {
-				t.Errorf("cmdk %s: exit = %d, want 1\nstdout: %s\nstderr: %s", strings.Join(row.args, " "), code, stdout, stderr)
+				t.Errorf("cmdk %s: exit = %d, want 1\nstdout: %s\nstderr: %s", invocation, code, stdout, stderr)
 			}
 			if !strings.Contains(stderr, row.wantStderr) {
-				t.Errorf("cmdk %s: stderr = %q, want substring %q", strings.Join(row.args, " "), stderr, row.wantStderr)
+				t.Errorf("cmdk %s: stderr = %q, want substring %q", invocation, stderr, row.wantStderr)
 			}
 			if got := grammarTmuxSnapshot(t); got != tmuxBaseline {
-				t.Errorf("cmdk %s changed tmux state:\nbefore:\n%s\nafter:\n%s", strings.Join(row.args, " "), tmuxBaseline, got)
+				t.Errorf("cmdk %s changed tmux state:\nbefore:\n%s\nafter:\n%s", invocation, tmuxBaseline, got)
 			}
 			if got := dirSnapshot(t, canary) + dirSnapshot(t, cfgHome); got != fixtureBaseline {
-				t.Errorf("cmdk %s changed fixture files:\nbefore:\n%s\nafter:\n%s", strings.Join(row.args, " "), fixtureBaseline, got)
+				t.Errorf("cmdk %s changed fixture files:\nbefore:\n%s\nafter:\n%s", invocation, fixtureBaseline, got)
 			}
 			if _, err := os.Stat(marker); !errors.Is(err, fs.ErrNotExist) {
-				t.Errorf("cmdk %s: marker file %s exists; the configured action ran", strings.Join(row.args, " "), marker)
+				t.Errorf("cmdk %s: marker file %s exists; the configured action ran", invocation, marker)
 			}
 		})
 	}
@@ -99,12 +100,13 @@ func TestE2E_GrammarValidFlowsSmoke(t *testing.T) {
 	}
 	for _, row := range rows {
 		t.Run(row.name, func(t *testing.T) {
+			invocation := strings.Join(row.args, " ")
 			code, stdout, stderr := runCmdkBinary(t, env, row.stdin, row.args...)
 			if code != 0 {
-				t.Fatalf("cmdk %s: exit = %d\nstdout: %s\nstderr: %s", strings.Join(row.args, " "), code, stdout, stderr)
+				t.Fatalf("cmdk %s: exit = %d\nstdout: %s\nstderr: %s", invocation, code, stdout, stderr)
 			}
 			if !strings.Contains(stdout, row.wantOut) {
-				t.Errorf("cmdk %s: stdout missing %q\n%s", strings.Join(row.args, " "), row.wantOut, stdout)
+				t.Errorf("cmdk %s: stdout missing %q\n%s", invocation, row.wantOut, stdout)
 			}
 		})
 	}
@@ -194,14 +196,15 @@ func runCmdkBinary(t *testing.T, env []string, stdin string, args ...string) (in
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
+	invocation := strings.Join(args, " ")
 	if ctx.Err() != nil {
-		t.Fatalf("cmdk %s timed out\nstdout: %s\nstderr: %s", strings.Join(args, " "), stdout.String(), stderr.String())
+		t.Fatalf("cmdk %s timed out\nstdout: %s\nstderr: %s", invocation, stdout.String(), stderr.String())
 	}
 	code := 0
 	if err != nil {
 		var exitErr *exec.ExitError
 		if !errors.As(err, &exitErr) {
-			t.Fatalf("cmdk %s: %v", strings.Join(args, " "), err)
+			t.Fatalf("cmdk %s: %v", invocation, err)
 		}
 		code = exitErr.ExitCode()
 	}
