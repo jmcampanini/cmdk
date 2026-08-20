@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/jmcampanini/cmdk/internal/item"
@@ -240,29 +241,31 @@ func TestRootGenerator_PreservesSourceOrderWhenConcurrent(t *testing.T) {
 }
 
 func TestRootGenerator_TimeoutProducesErrorItem(t *testing.T) {
-	slow := Source{Name: "zoxide", Fetch: func(ctx context.Context) ([]item.Item, error) {
-		<-ctx.Done()
-		return nil, ctx.Err()
-	}}
-	fast := Source{Name: "windows", Fetch: func(context.Context) ([]item.Item, error) {
-		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
-	}}
+	synctest.Test(t, func(t *testing.T) {
+		slow := Source{Name: "zoxide", Fetch: func(ctx context.Context) ([]item.Item, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}}
+		fast := Source{Name: "windows", Fetch: func(context.Context) ([]item.Item, error) {
+			return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
+		}}
 
-	gen := NewRootGenerator(10*time.Millisecond, fast, slow)
-	items := gen(nil, Context{})
+		gen := NewRootGenerator(10*time.Millisecond, fast, slow)
+		items := gen(nil, Context{})
 
-	if len(items) != 2 {
-		t.Fatalf("got %d items, want 2", len(items))
-	}
-	if items[0].Display != "main:1 zsh" {
-		t.Errorf("items[0].Display = %q, want %q", items[0].Display, "main:1 zsh")
-	}
-	if items[1].Type != "error" {
-		t.Errorf("items[1].Type = %q, want error", items[1].Type)
-	}
-	if !strings.HasPrefix(items[1].Display, "zoxide error:") {
-		t.Errorf("items[1].Display = %q, want prefix %q", items[1].Display, "zoxide error:")
-	}
+		if len(items) != 2 {
+			t.Fatalf("got %d items, want 2", len(items))
+		}
+		if items[0].Display != "main:1 zsh" {
+			t.Errorf("items[0].Display = %q, want %q", items[0].Display, "main:1 zsh")
+		}
+		if items[1].Type != "error" {
+			t.Errorf("items[1].Type = %q, want error", items[1].Type)
+		}
+		if !strings.HasPrefix(items[1].Display, "zoxide error:") {
+			t.Errorf("items[1].Display = %q, want prefix %q", items[1].Display, "zoxide error:")
+		}
+	})
 }
 
 func TestRootGenerator_LimitTruncatesResults(t *testing.T) {
