@@ -68,10 +68,10 @@ test-e2e: ## Run required tmux end-to-end tests and validate their completion ma
 	exit $$validation_rc
 
 lint: ## Run golangci-lint.
-	golangci-lint run $(PKG)
+	go tool golangci-lint run $(PKG)
 
 lint-fix: ## Run golangci-lint with --fix.
-	golangci-lint run --fix $(PKG)
+	go tool golangci-lint run --fix $(PKG)
 
 fmt: ## Format tracked Go files.
 	@if [ -n "$(GOFMT_FILES)" ]; then gofmt -w $(GOFMT_FILES); fi
