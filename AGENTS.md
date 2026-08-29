@@ -11,4 +11,3 @@
 ## Security
 
 - This CLI is frequently invoked by AI/LLM agents
-- Always assume CLI inputs can be adversarial and handle parsing, validation, and execution defensively
