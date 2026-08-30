@@ -346,7 +346,7 @@ func (m timingsModel) Init() tea.Cmd {
 func (m timingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if _, ok := msg.(tea.WindowSizeMsg); ok && !m.sized {
 		m.sized = true
-		// Cmd is intentionally dropped — tea.Quit terminates the program immediately.
+		// Cmd is intentionally dropped - tea.Quit terminates the program immediately.
 		inner, _ := m.inner.Update(msg)
 		m.inner = inner
 		return m, tea.Quit

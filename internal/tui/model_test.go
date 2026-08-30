@@ -469,7 +469,7 @@ func TestNextListWithUnmappedType_StaysOnCurrentList(t *testing.T) {
 		t.Error("Selected() should be nil on resolve failure")
 	}
 	if len(m.Accumulated()) != 0 {
-		t.Error("Accumulated() should be empty — resolve failed, no navigation")
+		t.Error("Accumulated() should be empty - resolve failed, no navigation")
 	}
 	if len(m.list.Items()) != 1 {
 		t.Errorf("list should still have 1 item, got %d", len(m.list.Items()))
@@ -500,7 +500,7 @@ func TestEnterOnErrorItem_OpensDetails(t *testing.T) {
 		t.Error("Enter on error item should not quit")
 	}
 	if m.Selected() != nil {
-		t.Error("Selected() should be nil — error item is non-executable")
+		t.Error("Selected() should be nil - error item is non-executable")
 	}
 	if m.mode != viewErrorDetails {
 		t.Errorf("mode = %d, want viewErrorDetails (%d)", m.mode, viewErrorDetails)
@@ -1307,7 +1307,7 @@ func TestMultiPromptChain_SecondStage(t *testing.T) {
 	m = result.(Model)
 
 	if cmd != nil {
-		t.Error("should not quit after first stage — second stage remains")
+		t.Error("should not quit after first stage - second stage remains")
 	}
 	if m.mode != viewPrompt {
 		t.Fatal("expected viewPrompt mode for second stage")
@@ -1423,7 +1423,7 @@ func TestPromptRequired_EnterOnEmpty_ShowsError(t *testing.T) {
 		t.Errorf("stageError = %q, want %q", m.stageError, "required")
 	}
 	if m.Selected() != nil {
-		t.Error("Selected() should be nil — submission blocked")
+		t.Error("Selected() should be nil - submission blocked")
 	}
 	if cmd != nil {
 		t.Error("should not quit on blocked submission")
@@ -1490,7 +1490,7 @@ func TestPromptAllowEmpty_EnterOnEmpty_Submits(t *testing.T) {
 	m = result.(Model)
 
 	if m.Selected() == nil {
-		t.Fatal("Selected() should be set — allow_empty permits empty")
+		t.Fatal("Selected() should be set - allow_empty permits empty")
 	}
 	if cmd == nil {
 		t.Error("expected Quit command")
@@ -1524,7 +1524,7 @@ func TestPromptRequired_DefaultValueBypassesError(t *testing.T) {
 	m = result.(Model)
 
 	if m.Selected() == nil {
-		t.Fatal("Selected() should be set — default value is non-empty")
+		t.Fatal("Selected() should be set - default value is non-empty")
 	}
 	if cmd == nil {
 		t.Error("expected Quit command")
@@ -1540,14 +1540,14 @@ func TestPromptRequired_EscBackClearsError(t *testing.T) {
 	result, _ := m.Update(enterMsg)
 	m = result.(Model)
 
-	// Now on second stage — press Enter empty to trigger error
+	// Now on second stage - press Enter empty to trigger error
 	result, _ = m.Update(enterMsg)
 	m = result.(Model)
 	if m.stageError != "required" {
 		t.Fatal("expected error on second stage")
 	}
 
-	// Esc back to first stage — error should clear
+	// Esc back to first stage - error should clear
 	result, _ = m.Update(escMsg)
 	m = result.(Model)
 	if m.stageError != "" {
@@ -1573,7 +1573,7 @@ func TestPromptRequired_MixedAllowEmptyMultiStage(t *testing.T) {
 
 	m = selectStagedItem(t, m)
 
-	// First stage is required — empty blocked
+	// First stage is required - empty blocked
 	result, _ := m.Update(enterMsg)
 	m = result.(Model)
 	if m.stageError != "required" {
@@ -1585,11 +1585,11 @@ func TestPromptRequired_MixedAllowEmptyMultiStage(t *testing.T) {
 	result, _ = m.Update(enterMsg)
 	m = result.(Model)
 
-	// Second stage is allow_empty — empty accepted
+	// Second stage is allow_empty - empty accepted
 	result, cmd := m.Update(enterMsg)
 	m = result.(Model)
 	if m.Selected() == nil {
-		t.Fatal("Selected() should be set — second stage allows empty")
+		t.Fatal("Selected() should be set - second stage allows empty")
 	}
 	if cmd == nil {
 		t.Error("expected Quit command")
@@ -2144,7 +2144,7 @@ func TestAutoSelectSingle_SkipsActionList(t *testing.T) {
 	m = result.(Model)
 
 	if m.Selected() == nil {
-		t.Fatal("Selected() should be set — auto-select should have fired")
+		t.Fatal("Selected() should be set - auto-select should have fired")
 	}
 	if m.Selected().Display != "Only Action" {
 		t.Errorf("Selected().Display = %q, want 'Only Action'", m.Selected().Display)
@@ -2167,7 +2167,7 @@ func TestAutoSelectSingle_Disabled_ShowsList(t *testing.T) {
 	m = result.(Model)
 
 	if m.Selected() != nil {
-		t.Error("Selected() should be nil — auto-select disabled, list should be shown")
+		t.Error("Selected() should be nil - auto-select disabled, list should be shown")
 	}
 	if len(m.Accumulated()) != 1 {
 		t.Errorf("Accumulated() len = %d, want 1 (dir item)", len(m.Accumulated()))
@@ -2190,7 +2190,7 @@ func TestAutoSelectSingle_MultipleActions_ShowsList(t *testing.T) {
 	m = result.(Model)
 
 	if m.Selected() != nil {
-		t.Error("Selected() should be nil — multiple actions, no auto-select")
+		t.Error("Selected() should be nil - multiple actions, no auto-select")
 	}
 	if len(m.list.Items()) != 2 {
 		t.Errorf("list items = %d, want 2", len(m.list.Items()))
@@ -2216,7 +2216,7 @@ func TestPickerStage_EnterOnErrorItem_OpensDetails(t *testing.T) {
 		t.Error("Enter on picker error item should not quit")
 	}
 	if m.Selected() != nil {
-		t.Error("Selected() should be nil — error items are non-executable")
+		t.Error("Selected() should be nil - error items are non-executable")
 	}
 	if m.mode != viewErrorDetails {
 		t.Errorf("mode = %d, want viewErrorDetails (%d)", m.mode, viewErrorDetails)
@@ -2280,7 +2280,7 @@ func TestAutoSelectSingle_StagedAction_EntersPrompt(t *testing.T) {
 	m = result.(Model)
 
 	if cmd != nil {
-		t.Error("should not quit — staged action enters prompt")
+		t.Error("should not quit - staged action enters prompt")
 	}
 	if m.mode != viewPrompt {
 		t.Errorf("mode = %d, want viewPrompt (%d)", m.mode, viewPrompt)
@@ -2963,7 +2963,7 @@ func TestStartInFilterFalse_DrillDownStaysBrowseMode(t *testing.T) {
 	m := newTestModelWithConfig(testItems(), testRegistry(), cfg)
 	m.list.SetSize(80, 40)
 
-	// Navigate to the dir item (index 2) — already in browse mode, no need to exit filter.
+	// Navigate to the dir item (index 2) - already in browse mode, no need to exit filter.
 	result, _ := m.Update(downMsg)
 	m = result.(Model)
 	result, _ = m.Update(downMsg)

@@ -88,8 +88,8 @@ func ErrorItem(src Source, err error) item.Item {
 	return errItem
 }
 
-// logSourceError records a source failure with its full bounded detail —
-// CommandError.Error() carries the annotated captured streams — so the
+// logSourceError records a source failure with its full bounded detail -
+// CommandError.Error() carries the annotated captured streams - so the
 // headline-only list row never becomes the only trace of the cause.
 func logSourceError(source string, err error) {
 	log.Error("source failed", "source", source, "error", err)
