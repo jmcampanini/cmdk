@@ -246,7 +246,7 @@ func actionRunSwitchFailureError(actionName string, result execute.LaunchResult,
 	message := fmt.Sprintf(`action %q launched, but switching the client failed.
 
 The action's side effects already happened: the launch path exists and the
-window is running its command. Do not rerun this action — rerunning launches
+window is running its command. Do not rerun this action - rerunning launches
 it a second time.
 
 Created tmux state:

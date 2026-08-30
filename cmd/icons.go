@@ -189,9 +189,9 @@ func printIconHelp() {
 
   cmdk supports %d Nerdfont icon aliases from three icon sets:
 
-    cod   Codicons (VS Code icons)    — UI actions, terminals, files, debug
-    dev   Devicons                    — language and tool logos
-    oct   Octicons (GitHub icons)     — git workflows, project management
+    cod   Codicons (VS Code icons)    - UI actions, terminals, files, debug
+    dev   Devicons                    - language and tool logos
+    oct   Octicons (GitHub icons)     - git workflows, project management
 
   Use aliases in config with colon syntax: icon = ":nf-cod-terminal:"
   Or use raw unicode characters directly: icon = "`+"\uebc8"+`"

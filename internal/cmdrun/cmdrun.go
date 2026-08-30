@@ -7,21 +7,21 @@
 //
 // No other package may execute subprocesses (enforced by lint): every call
 // site picks one of the four entry points below, and each entry point forces
-// the caller to declare what it expects — output shape, byte limits, and
-// deadline — so an unclassified subprocess call cannot be written.
+// the caller to declare what it expects - output shape, byte limits, and
+// deadline - so an unclassified subprocess call cannot be written.
 //
 // Choosing an entry point:
 //
-//   - [Query] — a fixed-argv, repository-owned binary (tmux, git, zoxide)
+//   - [Query] - a fixed-argv, repository-owned binary (tmux, git, zoxide)
 //     whose output cmdk parses. Requires an output Shape, byte limits, and a
 //     timeout. Use this unless one of the cases below applies.
-//   - [Run] — a shell command string the user authored in their config
+//   - [Run] - a shell command string the user authored in their config
 //     (picker sources, launch_path_cmd), executed via sh -c. The only mode
 //     that invokes a shell; never route repository-owned commands through it.
-//   - [Stream] — a command that takes over the caller's terminal
+//   - [Stream] - a command that takes over the caller's terminal
 //     (tmux attach-session). Nothing is captured, no deadline is applied,
 //     and the caller injects the streams; package-global stdio is forbidden.
-//   - [Replace] — replaces the cmdk process entirely via exec(2), for
+//   - [Replace] - replaces the cmdk process entirely via exec(2), for
 //     shell-mode launches. Never returns on success.
 //
 // The capture modes (Query, Run) share one contract:
@@ -38,7 +38,7 @@
 //     descendant delays return by at most a short drain window instead of
 //     forever.
 //   - Failures are *CommandError values classified by [Kind], carrying the
-//     exit code and bounded captured streams — never unbounded content.
+//     exit code and bounded captured streams - never unbounded content.
 //
 // Stream inherits the caller's process group on purpose: moving a
 // terminal-takeover command like tmux attach out of the foreground process
@@ -70,7 +70,7 @@ import (
 type Kind string
 
 const (
-	// KindTimeout: a deadline elapsed before the command finished — the
+	// KindTimeout: a deadline elapsed before the command finished - the
 	// command's own timeout, or the caller's context deadline (in which
 	// case CommandError.Timeout is 0). The process group was killed (the
 	// child alone, for Stream).
@@ -79,14 +79,14 @@ const (
 	// SIGINT/SIGTERM arrived) before the command finished. The process
 	// group was killed (the child alone, for Stream).
 	KindCanceled Kind = "canceled"
-	// KindOutput: the command violated its declared output contract — too
+	// KindOutput: the command violated its declared output contract - too
 	// many stdout bytes, a second line in single-line mode, or any stdout
 	// in expect-empty mode. The process group was killed as soon as the
 	// violation was seen. Callers synthesizing contract violations for
 	// commands that exited zero (e.g. "returned no items") also use this
 	// Kind, with ExitCode 0.
 	KindOutput Kind = "output"
-	// KindExit: the command finished on its own but failed — a nonzero
+	// KindExit: the command finished on its own but failed - a nonzero
 	// exit, a signal death, or a start failure such as the binary missing
 	// from PATH (unwraps to *exec.Error in that case).
 	KindExit Kind = "exit"
@@ -104,8 +104,8 @@ type Shape int
 
 const (
 	// ShapeSingleLine: stdout is at most one line (a trailing newline is
-	// permitted, and so is empty output — callers must handle it). Use for
-	// small-result probes — an ID, a version string, a filesystem path. A
+	// permitted, and so is empty output - callers must handle it). Use for
+	// small-result probes - an ID, a version string, a filesystem path. A
 	// second line fails the command immediately.
 	ShapeSingleLine Shape = iota + 1
 	// ShapeEmpty: stdout is empty. Use for commands run purely for their
@@ -133,7 +133,7 @@ func (s Shape) String() string {
 	}
 }
 
-// Spec configures [Run] — the mode for shell command strings the user
+// Spec configures [Run] - the mode for shell command strings the user
 // authored in their config. If the command is repository-owned, use [Query]
 // with a fixed argv instead.
 type Spec struct {
@@ -159,7 +159,7 @@ type Spec struct {
 	MaxStderr int
 }
 
-// QuerySpec configures [Query] — the mode for fixed-argv, repository-owned
+// QuerySpec configures [Query] - the mode for fixed-argv, repository-owned
 // binaries whose output cmdk parses.
 type QuerySpec struct {
 	// Op labels the command in error text, e.g. "tmux list-sessions".
@@ -172,7 +172,7 @@ type QuerySpec struct {
 	Env []string
 	// Timeout is required and positive: a fresh deadline for this command,
 	// independent of whatever budget remains on ctx. A query that can wait
-	// forever is not representable. (The caller's ctx still applies too —
+	// forever is not representable. (The caller's ctx still applies too -
 	// whichever bound is reached first wins.)
 	Timeout time.Duration
 	// Shape declares what legitimate stdout looks like; see the Shape
@@ -184,7 +184,7 @@ type QuerySpec struct {
 	MaxStderr int
 }
 
-// StreamSpec configures [Stream] — the mode for commands that take over the
+// StreamSpec configures [Stream] - the mode for commands that take over the
 // caller's terminal.
 type StreamSpec struct {
 	// Op labels the command in error text, e.g. "tmux attach-session".
@@ -292,7 +292,7 @@ func (e *CommandError) Error() string {
 
 // Run executes a user-authored shell command string via sh -c under the
 // capture contract (see the package doc). It builds its own signal-aware
-// context — SIGINT/SIGTERM cancel the command — because its callers fire
+// context - SIGINT/SIGTERM cancel the command - because its callers fire
 // user commands from the TUI rather than carrying a request context.
 //
 // Use Run only for command strings that come from user configuration. A
@@ -508,7 +508,7 @@ func runCapture(ctx context.Context, req captureRequest) (Result, error) {
 	// A command that exited 0 with a contract-clean payload stays a success
 	// even when ctx expired while the bounded pipe drain was still running:
 	// os/exec injects ctx.Err() into waitErr whenever the deadline fires
-	// before Wait finishes, so the child's own exit status — not waitErr —
+	// before Wait finishes, so the child's own exit status - not waitErr -
 	// is the signal that the command actually completed.
 	if payload.err == nil && cmd.ProcessState != nil && cmd.ProcessState.Success() && isDrainNoise(waitErr) {
 		return res, nil
@@ -651,8 +651,8 @@ func (c *payloadCapture) fail(err error) error {
 }
 
 // truncatingCapture keeps the first limit bytes and drops the rest,
-// flagging that it did. It is only ever used for diagnostics (stderr) —
-// bytes read by humans — where a cut-and-annotated capture beats failing
+// flagging that it did. It is only ever used for diagnostics (stderr) -
+// bytes read by humans - where a cut-and-annotated capture beats failing
 // the command that is already being reported on.
 type truncatingCapture struct {
 	buf       bytes.Buffer

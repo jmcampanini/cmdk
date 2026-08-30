@@ -210,6 +210,6 @@ func TestTruncateParts_AbsolutePathLeadingSlash(t *testing.T) {
 func TestTruncateParts_AbsolutePathExactSegments(t *testing.T) {
 	got := truncateParts("/usr/local", Truncation{Length: 2, Symbol: "…"})
 	if got != "/usr/local" {
-		t.Errorf("got %q, want %q (no truncation — only 2 real segments)", got, "/usr/local")
+		t.Errorf("got %q, want %q (no truncation - only 2 real segments)", got, "/usr/local")
 	}
 }

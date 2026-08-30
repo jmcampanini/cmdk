@@ -12,7 +12,7 @@ import (
 
 func TestRunPickerSource_OverflowFailsInsteadOfTrimming(t *testing.T) {
 	// One byte past the 4 MiB cap: the source must fail with KindOutput and
-	// produce no items — never a silently shortened list.
+	// produce no items - never a silently shortened list.
 	result, err := runPickerSource(`yes x | head -c 4194305`, 10*time.Second, item.Stage{Key: "test"})
 	var cmdErr *cmdrun.CommandError
 	if !errors.As(err, &cmdErr) || cmdErr.Kind != cmdrun.KindOutput {

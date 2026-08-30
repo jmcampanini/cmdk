@@ -21,7 +21,7 @@ import (
 var testTmuxTimeouts = Timeouts{Query: time.Second, Mutation: 2 * time.Second}
 
 // tmuxCommandClass declares, per tmux subcommand, the shape and deadline
-// class every call site must use — the contract the runner seam exists to
+// class every call site must use - the contract the runner seam exists to
 // pin. The fake fails any query that deviates.
 var tmuxCommandClass = map[string]struct {
 	shape    cmdrun.Shape

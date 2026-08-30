@@ -189,7 +189,7 @@ func waitForExit(t *testing.T, sess string) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	t.Fatal("session still exists — process did not exit")
+	t.Fatal("session still exists - process did not exit")
 }
 
 func typeText(t *testing.T, sess string, text string) {
@@ -1385,7 +1385,7 @@ cmd = "printf '%%s\\n%%s\\n' \"$PWD\" {{sq .launch_path}} > '%s'; sleep 30"
 	if len(lines) != 2 {
 		t.Fatalf("marker lines = %#v, want 2", lines)
 	}
-	// $PWD reports the logical path the window was opened at — the launch
+	// $PWD reports the logical path the window was opened at - the launch
 	// path as configured, not symlink-resolved (on Darwin, t.TempDir() lives
 	// under the /var -> /private/var symlink).
 	wantLines := []string{dirClean, dirClean}
@@ -1629,7 +1629,7 @@ matches = "root"
 
 func TestE2E_ZoxideUnavailable_ErrorItem(t *testing.T) {
 	if !hasZoxide() {
-		t.Skip("zoxide not available — can't test unavailability scenario")
+		t.Skip("zoxide not available - can't test unavailability scenario")
 	}
 
 	path := restrictedPATH(t)
@@ -1649,7 +1649,7 @@ func TestE2E_ZoxideUnavailable_ErrorItem(t *testing.T) {
 
 func TestE2E_ErrorItemOpensDetails(t *testing.T) {
 	if !hasZoxide() {
-		t.Skip("zoxide not available — can't test error item scenario")
+		t.Skip("zoxide not available - can't test error item scenario")
 	}
 
 	path := restrictedPATH(t)
