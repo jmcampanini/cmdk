@@ -34,10 +34,10 @@ func newSessionWindowCommand() *cobra.Command {
 		Short: "Create a new tmux window in a cmdk-managed session for a path",
 		Long: `Create a fresh tmux window in the cmdk-managed session for a path.
 
-The path is required, must exist, and must be a directory. cmdk resolves the path
-using the same session resolver as "cmdk session resolve": repo/worktree paths
-share a managed repo/container session, while non-repo directories get one
-managed session per canonical directory.
+The path is required, must exist, and must be a directory. cmdk resolves the
+path using the same session resolver as "cmdk session resolve": repo/worktree
+paths share a managed repo/container session, while non-repo directories get
+one managed session per canonical directory.
 
 Exactly one mode is required:
   --new                    create an interactive shell window
@@ -50,9 +50,10 @@ to that many characters ending in …; set it to 0 to keep full names.
 By default, cmdk creates the window in the background without changing the
 current tmux window. --switch switches the current client to the new window.
 
-Command args after -- are treated as argv-style input and are shell-quoted before
-being passed to tmux as its shell-command string. Shell metacharacters are
-literal by default; invoke a shell explicitly for shell features, for example:
+Command args after -- are treated as argv-style input and are shell-quoted
+before being passed to tmux as its shell-command string. Shell metacharacters
+are literal by default; invoke a shell explicitly for shell features, for
+example:
 
   cmdk session window . --name tests -- sh -lc 'npm test | tee test.log'
   cmdk session window . --switch --new

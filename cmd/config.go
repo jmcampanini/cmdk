@@ -24,8 +24,12 @@ func newConfigCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
 		Short: "Show resolved configuration and validate a config file",
-		Long:  "Show resolved configuration after applying defaults and the config file. Exits non-zero if the config is invalid.\n\nSee \"cmdk docs\" for the configuration reference and \"cmdk icons\" for icon aliases.",
-		Args:  cobra.NoArgs,
+		Long: `Show resolved configuration after applying defaults and the config file.
+Exits non-zero if the config is invalid.
+
+See "cmdk docs" for the configuration reference and "cmdk icons" for icon
+aliases.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runConfigCommand(cmd, options)
 		},

@@ -24,7 +24,8 @@ How paths are formatted:
 
   1. Replace the $HOME prefix with display.shorten_home.
   2. Apply display.rules literal substring replacements.
-  3. Apply truncation using display.truncation_length and display.truncation_symbol.
+  3. Apply truncation using display.truncation_length and
+     display.truncation_symbol.
 
 Rules replace the first occurrence of each literal match. Longer rule keys run
 before shorter keys, with lexical ordering used as a tie-breaker. Replacement

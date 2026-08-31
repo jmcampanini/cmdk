@@ -29,8 +29,8 @@ With [path], cmdk resolves that directory using the same session resolver as
 required. If the managed session already exists, cmdk attaches to it. Otherwise
 cmdk creates the managed session and then attaches.
 
-This command refuses to run inside tmux because it is intended as the outer entry
-point into tmux, not as a nested tmux command.`,
+This command refuses to run inside tmux because it is intended as the outer
+entry point into tmux, not as a nested tmux command.`,
 		Args:    cobra.MaximumNArgs(1),
 		PreRunE: requireTmux,
 		RunE: func(cmd *cobra.Command, args []string) error {
