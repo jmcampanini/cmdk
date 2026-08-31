@@ -23,7 +23,18 @@ func newIconsCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "icons",
 		Short: "List supported icon aliases",
-		Args:  cobra.NoArgs,
+		Long: `List supported icon aliases.
+
+cmdk supports Nerdfont icon aliases from three icon sets:
+
+  cod   Codicons (VS Code icons)    - UI actions, terminals, files, debug
+  dev   Devicons                    - language and tool logos
+  oct   Octicons (GitHub icons)     - git workflows, project management
+
+Use aliases in config with colon syntax: icon = ":nf-cod-terminal:"
+
+Without flags, cmdk prints an overview with usage examples and icon counts.`,
+		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return runIconsCommand(options)
 		},
