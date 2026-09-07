@@ -1,3 +1,4 @@
+// Package session maps existing directories and Git worktrees to tmux session identities.
 package session
 
 import (
@@ -14,7 +15,9 @@ import (
 )
 
 const (
-	KindRepo      = "repo"
+	// KindRepo groups a Git checkout or Grove-managed repository into a session.
+	KindRepo = "repo"
+	// KindDirectory groups a non-repository directory into a session.
 	KindDirectory = "directory"
 )
 
@@ -26,6 +29,7 @@ const (
 
 var primaryBranchDirs = [...]string{"main", "develop", "master"}
 
+// Plan identifies a repository or directory session by its canonical grouping key.
 type Plan struct {
 	SessionKind string `json:"session_kind"`
 	SessionKey  string `json:"session_key"`

@@ -1,3 +1,4 @@
+// Package actionrun prepares configured actions for noninteractive execution.
 package actionrun
 
 import (
@@ -79,6 +80,7 @@ func Prepare(cfg config.Config, name, path, paneID string, rawInputs []string) (
 	}, nil
 }
 
+// ValidateAction selects one named action and rejects unsupported noninteractive launch modes.
 func ValidateAction(cfg config.Config, name string) (config.Action, error) {
 	action, err := findAction(cfg.Actions, name)
 	if err != nil {

@@ -1,3 +1,4 @@
+// Package theme resolves launcher colors and validates per-mode overrides.
 package theme
 
 import (
@@ -9,8 +10,10 @@ import (
 )
 
 const (
+	// NameLight selects the Catppuccin Latte base palette.
 	NameLight = "light"
-	NameDark  = "dark"
+	// NameDark selects the Catppuccin Frappe base palette.
+	NameDark = "dark"
 )
 
 // Config contains per-mode theme overrides loaded from config TOML.
@@ -50,6 +53,7 @@ type RoleConfig struct {
 	ErrorIcon   string `toml:"error_icon,omitempty"`
 }
 
+// Theme contains the resolved appearance mode, semantic colors, and icon roles.
 type Theme struct {
 	Name   string
 	IsDark bool
@@ -58,6 +62,7 @@ type Theme struct {
 	Roles  Roles
 }
 
+// Tokens assigns colors to semantic launcher elements and status meanings.
 type Tokens struct {
 	Accent     color.Color
 	AccentText color.Color
@@ -75,6 +80,7 @@ type Tokens struct {
 	Error      color.Color
 }
 
+// Roles assigns colors to launcher item and status icons.
 type Roles struct {
 	WindowIcon  color.Color
 	DirIcon     color.Color
@@ -90,10 +96,12 @@ var hexColor = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
 
 func c(hex string) color.Color { return lipgloss.Color(hex) }
 
+// Default returns the dark theme with any supplied overrides applied in order.
 func Default(configs ...Config) Theme {
 	return Dark(configs...)
 }
 
+// FromBackground selects the appearance matching the detected terminal background.
 func FromBackground(isDark bool, configs ...Config) Theme {
 	if isDark {
 		return Dark(configs...)
@@ -101,6 +109,7 @@ func FromBackground(isDark bool, configs ...Config) Theme {
 	return Light(configs...)
 }
 
+// Light returns the Catppuccin Latte palette with supplied overrides applied in order.
 func Light(configs ...Config) Theme {
 	return applyConfigs(Theme{
 		Name:   NameLight,
@@ -124,6 +133,7 @@ func Light(configs ...Config) Theme {
 	}, configs...)
 }
 
+// Dark returns the Catppuccin Frappe palette with supplied overrides applied in order.
 func Dark(configs ...Config) Theme {
 	return applyConfigs(Theme{
 		Name:   NameDark,
@@ -147,6 +157,7 @@ func Dark(configs ...Config) Theme {
 	}, configs...)
 }
 
+// Resolve selects light or dark by name, using the default for an empty name.
 func Resolve(name string, configs ...Config) (Theme, error) {
 	switch name {
 	case "":
@@ -223,6 +234,7 @@ func setColor(dst *color.Color, value string) {
 	*dst = c(value)
 }
 
+// Validate rejects unknown appearance modes and invalid color overrides.
 func (cfg Config) Validate() error {
 	for mode, overrides := range cfg {
 		switch mode {
@@ -237,6 +249,7 @@ func (cfg Config) Validate() error {
 	return nil
 }
 
+// Validate rejects nonempty colors that are not six-digit hexadecimal RGB values.
 func (m ModeConfig) Validate(prefix string) error {
 	for _, field := range m.colorFields(prefix) {
 		if err := validateColor(field.path, field.value); err != nil {

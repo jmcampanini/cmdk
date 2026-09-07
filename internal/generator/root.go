@@ -13,6 +13,7 @@ import (
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
+// Source describes a named fetch operation and its launcher presentation limits.
 type Source struct {
 	Name  string
 	Limit int
@@ -20,7 +21,8 @@ type Source struct {
 	Fetch func(context.Context) ([]item.Item, error)
 }
 
-func NewRootGenerator(timeout time.Duration, sources ...Source) GeneratorFunc {
+// NewRootGenerator returns a generator that fetches concurrently and emits results in source order.
+func NewRootGenerator(timeout time.Duration, sources ...Source) Func {
 	return func(_ []item.Item, _ Context) []item.Item {
 		results := make([][]item.Item, len(sources))
 		errs := make([]error, len(sources))
@@ -72,6 +74,7 @@ func NewRootGenerator(timeout time.Duration, sources ...Source) GeneratorFunc {
 	}
 }
 
+// ErrorItem creates a source failure row using a command error's headline when available.
 func ErrorItem(src Source, err error) item.Item {
 	// Command failures render their one-line headline in the list; the full
 	// bounded streams go to the log via logSourceError at the fetch sites.
@@ -95,6 +98,7 @@ func logSourceError(source string, err error) {
 	log.Error("source failed", "source", source, "error", err)
 }
 
+// LoadingItem creates a placeholder row for a source that has not completed.
 func LoadingItem(src Source) item.Item {
 	it := item.NewItem()
 	it.Type = "loading"

@@ -3,6 +3,7 @@ package e2e
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -1341,8 +1342,8 @@ cmd = "sleep 300"
 	runCmd := exec.Command(binaryPath, "action", "run", "no server action", "--no-switch")
 	runCmd.Env = env
 	out, err := runCmd.CombinedOutput()
-	exitErr, ok := err.(*exec.ExitError)
-	if !ok || exitErr.ExitCode() != 1 {
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
 		t.Fatalf("action run err = %v, want exit status 1\noutput:\n%s", err, out)
 	}
 	if !strings.Contains(string(out), "no running tmux server") {

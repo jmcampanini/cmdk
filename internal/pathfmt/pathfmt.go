@@ -1,3 +1,4 @@
+// Package pathfmt shortens paths for launcher display without changing their execution values.
 package pathfmt
 
 import (
@@ -5,16 +6,19 @@ import (
 	"strings"
 )
 
+// Rule replaces one literal match in a displayed path.
 type Rule struct {
 	Match   string
 	Replace string
 }
 
+// Truncation keeps the final Length path components with an optional leading symbol.
 type Truncation struct {
 	Length int
 	Symbol string
 }
 
+// CompileRules sorts literal replacements by longest match, then alphabetically.
 func CompileRules(rules map[string]string) []Rule {
 	compiled := make([]Rule, 0, len(rules))
 	for match, replace := range rules {
@@ -29,6 +33,7 @@ func CompileRules(rules map[string]string) []Rule {
 	return compiled
 }
 
+// DisplayPath applies home shortening, ordered replacements, and final-component truncation.
 func DisplayPath(path, home, shortenHome string, rules []Rule, trunc Truncation) string {
 	path = replaceHome(path, home, shortenHome)
 	for _, r := range rules {

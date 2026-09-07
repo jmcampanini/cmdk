@@ -1,3 +1,4 @@
+// Package config loads, validates, and documents cmdk's TOML configuration.
 package config
 
 import (
@@ -19,6 +20,7 @@ import (
 	"github.com/jmcampanini/cmdk/internal/theme"
 )
 
+// StageConfig defines one prompt or picker input collected before an action runs.
 type StageConfig struct {
 	Type       string `toml:"type"`
 	Key        string `toml:"key"`
@@ -31,6 +33,7 @@ type StageConfig struct {
 	AllowEmpty bool   `toml:"allow_empty"`
 }
 
+// Action declares a named command, its matching item type, and its launch inputs.
 type Action struct {
 	Name          string        `toml:"name"`
 	Matches       string        `toml:"matches"`
@@ -43,6 +46,7 @@ type Action struct {
 	Stages        []StageConfig `toml:"stages"`
 }
 
+// Behavior controls launcher navigation and tmux window naming.
 type Behavior struct {
 	AutoSelectSingle    bool `toml:"auto_select_single"`
 	BellToTop           bool `toml:"bell_to_top"`
@@ -52,6 +56,7 @@ type Behavior struct {
 	WindowNameMaxLength int  `toml:"window_name_max_length"`
 }
 
+// Timeout bounds external queries, picker commands, and tmux mutations.
 type Timeout struct {
 	Fetch    time.Duration `toml:"fetch"`
 	Picker   time.Duration `toml:"picker"`
@@ -85,11 +90,13 @@ func (t Timeout) EffectiveMutation() time.Duration {
 	return defaultMutationTimeout
 }
 
+// SourceConfig limits the count and minimum score of fetched source items.
 type SourceConfig struct {
 	Limit    int     `toml:"limit"`
 	MinScore float64 `toml:"min_score"`
 }
 
+// Display controls path substitutions and truncation in launcher labels.
 type Display struct {
 	ShortenHome                 string            `toml:"shorten_home"`
 	TruncationLength            int               `toml:"truncation_length"`
@@ -99,10 +106,12 @@ type Display struct {
 	Rules                       map[string]string `toml:"rules"`
 }
 
+// Startup supplies the default directory used when attaching outside tmux.
 type Startup struct {
 	Path string `toml:"path"`
 }
 
+// Config contains the effective settings shared by commands and the launcher.
 type Config struct {
 	Actions  []Action                `toml:"actions"`
 	Startup  Startup                 `toml:"startup"`
@@ -120,9 +129,12 @@ const (
 )
 
 const (
-	LaunchModeDetect        = "detect"
+	// LaunchModeDetect selects a launch mode from the action's matching type and path fields.
+	LaunchModeDetect = "detect"
+	// LaunchModeSessionWindow creates a window in a cmdk-managed tmux session.
 	LaunchModeSessionWindow = "session-window"
-	LaunchModeShell         = "shell"
+	// LaunchModeShell executes the action in the invoking shell.
+	LaunchModeShell = "shell"
 )
 
 var validMatchTypes = []string{matchTypeRoot, matchTypeDir, matchTypeSession}
@@ -173,6 +185,7 @@ func DefaultConfig() Config {
 	}
 }
 
+// Validate rejects inconsistent actions and unsupported configuration values.
 func (c Config) Validate() error {
 	if strings.ContainsFunc(c.Startup.Path, unicode.IsControl) {
 		return errors.New("startup.path cannot contain control characters")
@@ -496,6 +509,7 @@ func applyDefaultSources(cfg Config) Config {
 	return cfg
 }
 
+// DefaultPath resolves config.toml under XDG_CONFIG_HOME or the user's .config directory.
 func DefaultPath() string {
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
 		return filepath.Join(xdg, "cmdk", "config.toml")

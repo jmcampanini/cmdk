@@ -13,7 +13,7 @@ import (
 
 const rootTestFetchTimeout = time.Second
 
-func newRootTestGenerator(sources ...Source) GeneratorFunc {
+func newRootTestGenerator(sources ...Source) Func {
 	return NewRootGenerator(rootTestFetchTimeout, sources...)
 }
 

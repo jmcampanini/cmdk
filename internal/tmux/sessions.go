@@ -29,10 +29,12 @@ var sessionListFormat = tmuxFormatFields(
 	tmuxEscapedFormat(cmdkSessionKeyOption),
 )
 
+// ParseSessions converts tmux session rows to launcher items with default display settings.
 func ParseSessions(output string) ([]item.Item, error) {
 	return ParseSessionsWithDisplay(output, DisplayOptions{})
 }
 
+// ParseSessionsWithDisplay sorts valid session rows and reports malformed rows as diagnostics.
 func ParseSessionsWithDisplay(output string, display DisplayOptions) ([]item.Item, error) {
 	lines := tmuxLines(output)
 	entries := make([]sessionEntry, 0, len(lines))

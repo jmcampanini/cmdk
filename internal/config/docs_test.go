@@ -6,9 +6,9 @@ import (
 	"testing"
 )
 
-func TestConfigDocs_CoversAllFields(t *testing.T) {
+func TestDocs_CoversAllFields(t *testing.T) {
 	documented := make(map[string]bool)
-	for _, section := range ConfigDocs() {
+	for _, section := range Docs() {
 		for _, field := range section.Fields {
 			documented[section.Name+"."+field.Name] = true
 		}
@@ -17,7 +17,7 @@ func TestConfigDocs_CoversAllFields(t *testing.T) {
 	structPaths := collectTOMLPaths(reflect.TypeFor[Config](), "")
 	for _, path := range structPaths {
 		if !documented[path] {
-			t.Errorf("config field %q has no doc entry in ConfigDocs()", path)
+			t.Errorf("config field %q has no doc entry in Docs()", path)
 		}
 	}
 }
@@ -62,7 +62,7 @@ func joinTOMLPath(prefix string, key string) string {
 
 func TestRenderHelp_ContainsAllSections(t *testing.T) {
 	output := RenderHelp()
-	for _, section := range ConfigDocs() {
+	for _, section := range Docs() {
 		if !strings.Contains(output, strings.ToUpper(section.Name)) {
 			t.Errorf("RenderHelp() missing section %q", section.Name)
 		}

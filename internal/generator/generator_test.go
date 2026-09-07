@@ -9,7 +9,7 @@ import (
 func TestRegisterAndGet(t *testing.T) {
 	reg := NewRegistry()
 	called := false
-	reg.Register("test", func(accumulated []item.Item, ctx Context) []item.Item {
+	reg.Register("test", func(_ []item.Item, _ Context) []item.Item {
 		called = true
 		return nil
 	})
@@ -34,7 +34,7 @@ func TestGetUnknown(t *testing.T) {
 
 func TestResolveEmptyAccumulated(t *testing.T) {
 	reg := NewRegistry()
-	reg.Register("root", func(accumulated []item.Item, ctx Context) []item.Item {
+	reg.Register("root", func(_ []item.Item, _ Context) []item.Item {
 		return []item.Item{{Display: "from-root"}}
 	})
 	reg.MapType("", "root")

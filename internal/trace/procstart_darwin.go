@@ -10,6 +10,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// ProcessStartTime reads this process's start timestamp from the macOS kernel.
 func ProcessStartTime() (time.Time, error) {
 	kp, err := unix.SysctlKinfoProc("kern.proc.pid", os.Getpid())
 	if err != nil {

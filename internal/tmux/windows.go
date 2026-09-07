@@ -272,10 +272,12 @@ func itemsFromWindowEntries(entries []windowEntry) []item.Item {
 	return items
 }
 
+// ParseWindows converts tmux window rows to launcher items with default display settings.
 func ParseWindows(output string) ([]item.Item, error) {
 	return ParseWindowsWithDisplay(output, DisplayOptions{})
 }
 
+// ParseWindowsWithDisplay orders valid windows and reports malformed rows as diagnostics.
 func ParseWindowsWithDisplay(output string, display DisplayOptions) ([]item.Item, error) {
 	entries, malformedRows := parseWindowEntries(output, display)
 	if len(entries) == 0 {
@@ -335,10 +337,12 @@ type sessionWindowLine struct {
 	rawWindowName string
 }
 
+// ParseWindowsForSession parses a session's child windows with default display settings.
 func ParseWindowsForSession(output string, session item.Item) ([]item.Item, error) {
 	return ParseWindowsForSessionWithDisplay(output, session, DisplayOptions{})
 }
 
+// ParseWindowsForSessionWithDisplay orders child windows and preserves their parent session data.
 func ParseWindowsForSessionWithDisplay(output string, session item.Item, display DisplayOptions) ([]item.Item, error) {
 	entries, malformedRows := parseSessionWindowEntries(output, session, display)
 	if len(entries) == 0 {

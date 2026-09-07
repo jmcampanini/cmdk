@@ -18,8 +18,10 @@ import (
 type WindowDirection int
 
 const (
+	// WindowPrevious moves backward through the ordered window ring.
 	WindowPrevious WindowDirection = -1
-	WindowNext     WindowDirection = 1
+	// WindowNext moves forward through the ordered window ring.
+	WindowNext WindowDirection = 1
 )
 
 // WindowSwitchOptions controls relative tmux window navigation.

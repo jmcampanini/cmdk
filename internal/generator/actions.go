@@ -7,7 +7,8 @@ import (
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
-func NewActionsGenerator() GeneratorFunc {
+// NewActionsGenerator supplies configured actions and the built-in directory window action.
+func NewActionsGenerator() Func {
 	return func(accumulated []item.Item, ctx Context) []item.Item {
 		if len(accumulated) == 0 {
 			return nil

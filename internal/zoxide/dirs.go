@@ -1,3 +1,4 @@
+// Package zoxide queries scored directories and prepares launcher items.
 package zoxide
 
 import (
@@ -39,6 +40,7 @@ func splitScorePath(line string) (float64, string, bool) {
 	return score, path, true
 }
 
+// ParseDirs filters valid scored rows and orders directories by descending score.
 func ParseDirs(output string, minScore float64, home, shortenHome string, rules []pathfmt.Rule, trunc pathfmt.Truncation) []item.Item {
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) == 1 && lines[0] == "" {

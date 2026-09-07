@@ -1,3 +1,4 @@
+// Package execute resolves action templates and launches shell or tmux commands.
 package execute
 
 import (
@@ -23,6 +24,7 @@ import (
 	"github.com/jmcampanini/cmdk/internal/tmux"
 )
 
+// ExecFn replaces the process with an executable and explicit arguments and environment.
 type ExecFn func(argv0 string, argv []string, envv []string) error
 
 type launchMode string
@@ -51,6 +53,7 @@ var tmplFuncs = template.FuncMap{
 	},
 }
 
+// RenderCmd expands an action template with the sq helper and rejects missing keys.
 func RenderCmd(cmdTemplate string, data map[string]string) (string, error) {
 	tmpl, err := template.New("cmd").Funcs(tmplFuncs).Option("missingkey=error").Parse(cmdTemplate)
 	if err != nil {
@@ -63,6 +66,7 @@ func RenderCmd(cmdTemplate string, data map[string]string) (string, error) {
 	return buf.String(), nil
 }
 
+// FlattenData merges selection data, with later selections overriding earlier keys.
 func FlattenData(accumulated []item.Item) map[string]string {
 	merged := make(map[string]string)
 	for _, it := range accumulated {
@@ -73,14 +77,17 @@ func FlattenData(accumulated []item.Item) map[string]string {
 
 var nonAlphaNum = regexp.MustCompile(`[^a-zA-Z0-9]`)
 
+// NormalizeKey converts a template key to its CMDK_ environment variable name.
 func NormalizeKey(key string) string {
 	return "CMDK_" + strings.ToUpper(nonAlphaNum.ReplaceAllString(key, "_"))
 }
 
+// BuildCMDKEnvVars converts the selection stack and invoking pane to environment entries.
 func BuildCMDKEnvVars(accumulated []item.Item, paneID string) []string {
 	return BuildCMDKEnvVarsFromData(FlattenData(accumulated), paneID)
 }
 
+// BuildCMDKEnvVarsFromData normalizes keys and gives a nonempty paneID precedence over input data.
 func BuildCMDKEnvVarsFromData(data map[string]string, paneID string) []string {
 	normalized := make(map[string]string, len(data)+1)
 	for k, v := range data {
@@ -126,12 +133,14 @@ type Launch struct {
 	noSwitch         bool
 }
 
+// ForClient returns a launch that switches the specified tmux client after window creation.
 func (l Launch) ForClient(target tmux.ClientTarget) Launch {
 	l.targetClient = target
 	l.noSwitch = false
 	return l
 }
 
+// WithoutSwitch returns a launch that leaves all tmux clients in their current sessions.
 func (l Launch) WithoutSwitch() Launch {
 	l.noSwitch = true
 	l.targetClient = tmux.ClientTarget{}
@@ -216,6 +225,7 @@ func ResolveLaunch(accumulated []item.Item, selected item.Item, paneID string, c
 	}
 }
 
+// LaunchResult identifies the directory and tmux resources created by a launch.
 type LaunchResult struct {
 	LaunchPath string
 	SessionID  string
@@ -225,11 +235,13 @@ type LaunchResult struct {
 	PaneID     string
 }
 
+// Execute runs the resolved launch and reports failures without returning resource details.
 func (l Launch) Execute(execFn ExecFn) error {
 	_, err := l.execute(execFn, false)
 	return err
 }
 
+// ExecuteWithResult validates result text and reports any tmux resources created before failure.
 func (l Launch) ExecuteWithResult(execFn ExecFn) (LaunchResult, error) {
 	return l.execute(execFn, true)
 }

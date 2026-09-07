@@ -1,3 +1,4 @@
+// Package trace records startup phases and renders their timing reports.
 package trace
 
 import (
@@ -6,14 +7,17 @@ import (
 	"time"
 )
 
+// Span records the start and end of a named startup phase.
 type Span struct {
 	Name  string
 	Start time.Time
 	End   time.Time
 }
 
+// Duration returns the elapsed time between the phase boundaries.
 func (s Span) Duration() time.Duration { return s.End.Sub(s.Start) }
 
+// Tracer records named phases and returns their completed timing spans.
 type Tracer interface {
 	Begin(name string) func()
 	Spans() []Span
@@ -25,6 +29,7 @@ type realTracer struct {
 	spans        []Span
 }
 
+// New creates a concurrent-safe tracer that can include shell-to-process startup time.
 func New(processStart time.Time) Tracer {
 	return &realTracer{processStart: processStart}
 }
@@ -67,6 +72,7 @@ var noopStop = func() {}
 
 type noopTracer struct{}
 
+// Noop returns a tracer that ignores phases and produces no spans.
 func Noop() Tracer { return noopTracer{} }
 
 func (noopTracer) Begin(string) func() { return noopStop }

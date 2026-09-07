@@ -1,14 +1,11 @@
-.PHONY: help build test test-unit test-e2e test-gen-icons lint lint-fix fmt fmt-check tidy tidy-check vuln check clean gen-icons
+.PHONY: help build test test-unit test-e2e test-gen-icons lint lint-fix fmt fmt-check tidy tidy-check version-check vuln check clean gen-icons
 
 BUILD_DIR   := build
 BINARY      := $(BUILD_DIR)/cmdk
 CMD         := .
 PKG         := ./...
-GOFMT_FILES := $(shell git ls-files '*.go')
 
-# Version is injected at build time via ldflags so `cmdk --version` reports
-# the git describe of the working tree (or an RFC3339 timestamp as a fallback).
-VERSION := $(shell git describe --tags --dirty --always 2>/dev/null || date -u '+%Y-%m-%dT%H:%M:%SZ')
+VERSION := $(shell git describe --tags --dirty --always 2>/dev/null || printf 'unknown')
 LDFLAGS := -ldflags "-X github.com/jmcampanini/cmdk/cmd.Version=$(VERSION)"
 
 .DEFAULT_GOAL := help
@@ -18,21 +15,21 @@ help: ## Show this help.
 
 build: ## Build cmdk into ./build/cmdk.
 	@mkdir -p $(BUILD_DIR)
-	go build $(LDFLAGS) -o $(BINARY) $(CMD)
+	go build -trimpath -buildvcs=false $(LDFLAGS) -o $(BINARY) $(CMD)
 
 define run_unit_tests
 packages="$$(go list $(PKG))"; rc=$$?; \
 if [ $$rc -ne 0 ]; then exit $$rc; fi; \
 packages="$$(printf '%s\n' "$$packages" | grep -v '/e2e$$')"; \
 if [ -z "$$packages" ]; then echo "no unit test packages found" >&2; exit 1; fi; \
-go test -race $$packages
+go test -count=1 -race $$packages
 endef
 
-test: ## Run unit and required end-to-end tests with the race detector.
+test: ## Run all unit and required end-to-end tests uncached with the race detector.
 	@$(run_unit_tests)
 	@$(MAKE) --no-print-directory test-e2e
 
-test-unit: ## Run unit tests without end-to-end tests.
+test-unit: ## Run unit tests uncached with the race detector, without end-to-end tests.
 	@echo "CMDK_E2E_STATUS=OPTED_OUT"
 	@if [ -n "$${CI:-}" ]; then echo "required CI rejects the end-to-end opt-out" >&2; exit 1; fi
 	@$(run_unit_tests)
@@ -73,17 +70,11 @@ lint: ## Run golangci-lint.
 lint-fix: ## Run golangci-lint with --fix.
 	go tool golangci-lint run --fix $(PKG)
 
-fmt: ## Format tracked Go files.
-	@if [ -n "$(GOFMT_FILES)" ]; then gofmt -w $(GOFMT_FILES); fi
+fmt: ## Format Go source files.
+	go tool golangci-lint fmt
 
-fmt-check: ## Fail if tracked Go files need gofmt.
-	@files="$$(gofmt -l $(GOFMT_FILES))"; \
-	if [ -n "$$files" ]; then \
-		echo "gofmt needed:"; \
-		echo "$$files"; \
-		echo "Run: make fmt"; \
-		exit 1; \
-	fi
+fmt-check: ## Verify formatting without changing files.
+	go tool golangci-lint fmt --diff
 
 tidy: ## Apply go mod tidy.
 	go mod tidy
@@ -94,10 +85,18 @@ tidy-check: ## Fail if go mod tidy would change go.mod/go.sum.
 	if [ -n "$$out" ]; then echo "$$out"; echo "go mod tidy would change go.mod/go.sum"; exit 1; fi; \
 	echo "go mod tidy failed (rc=$$rc)"; exit $$rc
 
+version-check: build ## Verify the built binary reports the injected version.
+	@case "$(VERSION)" in unknown|n/a|"") echo "degenerate version identity: '$(VERSION)'"; exit 1;; esac
+	@out="$$($(BINARY) --version)" || exit $$?; \
+	if [ "$$out" != "cmdk version $(VERSION)" ]; then \
+		echo "version mismatch: got '$$out', want 'cmdk version $(VERSION)'"; \
+		exit 1; \
+	fi
+
 vuln: ## Check dependencies and reachable code for known vulnerabilities.
 	go tool govulncheck ./...
 
-check: fmt-check tidy-check lint test vuln ## Run all non-mutating checks.
+check: fmt-check tidy-check lint test build version-check vuln ## Run the complete local verification contract.
 
 clean: ## Remove build artifacts, coverage files, and test cache.
 	rm -rf $(BUILD_DIR) out dist coverage.out coverage.html *.coverprofile
@@ -106,5 +105,5 @@ clean: ## Remove build artifacts, coverage files, and test cache.
 gen-icons: ## Regenerate icon entries from Nerd Fonts glyphnames.json.
 	go run ./internal/icon/gen
 
-test-gen-icons: ## Run the icon generator tests.
-	go test -race ./internal/icon/gen
+test-gen-icons: ## Run the icon generator tests uncached with the race detector.
+	go test -count=1 -race ./internal/icon/gen

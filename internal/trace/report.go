@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+// WriteTable reports phase durations and total wall-clock time, omitting empty reports.
 func WriteTable(w io.Writer, spans []Span) error {
 	if len(spans) == 0 {
 		return nil
@@ -80,6 +81,7 @@ type jsonPhase struct {
 	DurationMS float64 `json:"duration_ms"`
 }
 
+// WriteJSON writes phase durations and total wall-clock time in milliseconds.
 func WriteJSON(w io.Writer, spans []Span) error {
 	phases := make([]jsonPhase, len(spans))
 	for i, s := range spans {

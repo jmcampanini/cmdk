@@ -63,7 +63,7 @@ func TestRunSessionWindowCommandNewShellDefaultsToBackground(t *testing.T) {
 	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
 
 	called := false
-	createResolvedSessionWindow = func(ctx context.Context, plan resolver.Plan, launchPath string, opts tmux.SessionWindowOptions) (tmux.SessionWindowResult, error) {
+	createResolvedSessionWindow = func(ctx context.Context, plan resolver.Plan, _ string, opts tmux.SessionWindowOptions) (tmux.SessionWindowResult, error) {
 		called = true
 		if _, ok := ctx.Deadline(); ok {
 			return tmux.SessionWindowResult{}, errors.New("window context unexpectedly inherited resolve timeout")
@@ -106,7 +106,7 @@ func TestRunSessionWindowCommandCommandModePassesArgvUnchanged(t *testing.T) {
 	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
 
 	wantCommand := []string{"echo", "hello $HOME", "|", "tee", "x"}
-	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, launchPath string, opts tmux.SessionWindowOptions) (tmux.SessionWindowResult, error) {
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, _ string, opts tmux.SessionWindowOptions) (tmux.SessionWindowResult, error) {
 		if opts.NewShell {
 			t.Error("NewShell = true, want false")
 		}
@@ -185,7 +185,7 @@ func TestRunSessionWindowCommandNameOverride(t *testing.T) {
 	oldCreate := createResolvedSessionWindow
 	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
 
-	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, launchPath string, opts tmux.SessionWindowOptions) (tmux.SessionWindowResult, error) {
+	createResolvedSessionWindow = func(_ context.Context, _ resolver.Plan, _ string, opts tmux.SessionWindowOptions) (tmux.SessionWindowResult, error) {
 		if opts.Name != "tests" {
 			t.Errorf("Name = %q, want tests", opts.Name)
 		}

@@ -70,23 +70,23 @@ import (
 type Kind string
 
 const (
-	// KindTimeout: a deadline elapsed before the command finished - the
+	// KindTimeout means a deadline elapsed before the command finished - the
 	// command's own timeout, or the caller's context deadline (in which
 	// case CommandError.Timeout is 0). The process group was killed (the
 	// child alone, for Stream).
 	KindTimeout Kind = "timeout"
-	// KindCanceled: the caller's context was canceled (or, for Run, a
+	// KindCanceled means the caller's context was canceled (or, for Run, a
 	// SIGINT/SIGTERM arrived) before the command finished. The process
 	// group was killed (the child alone, for Stream).
 	KindCanceled Kind = "canceled"
-	// KindOutput: the command violated its declared output contract - too
+	// KindOutput means the command violated its declared output contract - too
 	// many stdout bytes, a second line in single-line mode, or any stdout
 	// in expect-empty mode. The process group was killed as soon as the
 	// violation was seen. Callers synthesizing contract violations for
 	// commands that exited zero (e.g. "returned no items") also use this
 	// Kind, with ExitCode 0.
 	KindOutput Kind = "output"
-	// KindExit: the command finished on its own but failed - a nonzero
+	// KindExit means the command finished on its own but failed - a nonzero
 	// exit, a signal death, or a start failure such as the binary missing
 	// from PATH (unwraps to *exec.Error in that case).
 	KindExit Kind = "exit"
@@ -103,16 +103,16 @@ var signalNotifyContext = signal.NotifyContext
 type Shape int
 
 const (
-	// ShapeSingleLine: stdout is at most one line (a trailing newline is
+	// ShapeSingleLine requires stdout to be at most one line (a trailing newline is
 	// permitted, and so is empty output - callers must handle it). Use for
 	// small-result probes - an ID, a version string, a filesystem path. A
 	// second line fails the command immediately.
 	ShapeSingleLine Shape = iota + 1
-	// ShapeEmpty: stdout is empty. Use for commands run purely for their
+	// ShapeEmpty requires empty stdout. Use for commands run purely for their
 	// side effect (tmux set-option, switch-client); any stdout byte fails
 	// the command immediately. Stderr is still captured for diagnostics.
 	ShapeEmpty
-	// ShapeLines: stdout is a list of lines whose size scales with user
+	// ShapeLines accepts a list of stdout lines whose size scales with user
 	// state (tmux list-*, zoxide query). Choose MaxStdout well above the
 	// measured legitimate worst case: exceeding it fails the command
 	// rather than truncating, because a silently shortened list parses
@@ -361,7 +361,7 @@ func Query(ctx context.Context, spec QuerySpec) (Result, error) {
 // Stream executes a fixed-argv binary connected to caller-injected streams,
 // for commands that take over the terminal (tmux attach-session). Nothing
 // is captured and no deadline is applied: blocking until the user is done
-// is the point. Cancelling ctx terminates the child and returns its
+// is the point. Canceling ctx terminates the child and returns its
 // CommandError.
 //
 // Deliberate contract differences from the capture modes: the child stays

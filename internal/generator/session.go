@@ -17,7 +17,7 @@ const sessionSwitchCommand = `tmux switch-client -t {{sq .session_id}}`
 // session: built-in Switch to session, user-defined session actions, and windows
 // in that session. The TUI applies GroupAndOrder to the generated items, so the
 // shared type order controls whether windows or actions display first.
-func NewSessionGenerator(fetchWindows SessionWindowsFunc) GeneratorFunc {
+func NewSessionGenerator(fetchWindows SessionWindowsFunc) Func {
 	actions := NewActionsGenerator()
 
 	return func(accumulated []item.Item, ctx Context) []item.Item {
