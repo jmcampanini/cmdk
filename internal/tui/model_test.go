@@ -26,14 +26,14 @@ import (
 
 func testRegistry() *generator.Registry {
 	reg := generator.NewRegistry()
-	reg.Register("root", func(accumulated []item.Item, ctx generator.Context) []item.Item {
+	reg.Register("root", func(_ []item.Item, _ generator.Context) []item.Item {
 		return []item.Item{
 			{Type: "window", Display: "main:1 zsh", Action: item.ActionExecute, Cmd: "true"},
 			{Type: "window", Display: "dev:1 node", Action: item.ActionExecute, Cmd: "true"},
 			{Type: "dir", Display: "~/projects/foo", Action: item.ActionNextList, Data: map[string]string{"path": "~/projects/foo"}},
 		}
 	})
-	reg.Register("dir-actions", func(accumulated []item.Item, ctx generator.Context) []item.Item {
+	reg.Register("dir-actions", func(_ []item.Item, _ generator.Context) []item.Item {
 		// Two actions so drill-down shows a list instead of auto-selecting;
 		// back-navigation tests need a reachable drilled-in state.
 		return []item.Item{
@@ -446,7 +446,7 @@ func TestDrillDownThenExecute_SetsSelectedAndQuits(t *testing.T) {
 
 func TestNextListWithUnmappedType_StaysOnCurrentList(t *testing.T) {
 	reg := generator.NewRegistry()
-	reg.Register("root", func(accumulated []item.Item, ctx generator.Context) []item.Item {
+	reg.Register("root", func(_ []item.Item, _ generator.Context) []item.Item {
 		return nil
 	})
 	reg.MapType("", "root")
@@ -483,7 +483,7 @@ func TestEnterOnErrorItem_OpensDetails(t *testing.T) {
 		item.Item{Type: "error", Source: "zoxide", Display: errorText},
 	}
 	reg := generator.NewRegistry()
-	reg.Register("root", func(accumulated []item.Item, ctx generator.Context) []item.Item { return nil })
+	reg.Register("root", func(_ []item.Item, _ generator.Context) []item.Item { return nil })
 	reg.MapType("", "root")
 
 	m := newTestModel(items, reg)
@@ -2587,7 +2587,7 @@ func TestFinalizeSelection_InlineParentNotCommittedOnFailure(t *testing.T) {
 	cfg.Behavior.StartInFilter = false
 
 	reg := generator.NewRegistry()
-	reg.Register("dir-actions", func(accumulated []item.Item, ctx generator.Context) []item.Item {
+	reg.Register("dir-actions", func(accumulated []item.Item, _ generator.Context) []item.Item {
 		if len(accumulated) == 0 {
 			return nil
 		}
@@ -2978,7 +2978,7 @@ func TestStartInFilterFalse_DrillDownStaysBrowseMode(t *testing.T) {
 
 func inlineTestRegistry() *generator.Registry {
 	reg := generator.NewRegistry()
-	reg.Register("dir-actions", func(accumulated []item.Item, ctx generator.Context) []item.Item {
+	reg.Register("dir-actions", func(accumulated []item.Item, _ generator.Context) []item.Item {
 		if len(accumulated) == 0 {
 			return nil
 		}
@@ -3119,7 +3119,7 @@ func TestInline_SelectExecuteRendersCmd(t *testing.T) {
 
 func TestInline_SelectStagedPushesParent(t *testing.T) {
 	reg := generator.NewRegistry()
-	reg.Register("dir-actions", func(accumulated []item.Item, ctx generator.Context) []item.Item {
+	reg.Register("dir-actions", func(accumulated []item.Item, _ generator.Context) []item.Item {
 		if len(accumulated) == 0 {
 			return nil
 		}

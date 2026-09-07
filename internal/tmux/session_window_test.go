@@ -546,7 +546,7 @@ func TestCreateResolvedSessionWindowReturnsCreatedResultOnExistingSessionSwitchF
 	if !errors.As(err, &switchErr) {
 		t.Fatalf("error = %T %[1]v, want *SwitchClientError", err)
 	}
-	if !errors.Is(err, switchCause) || switchErr.Err != switchCause {
+	if !errors.Is(err, switchCause) || !errors.Is(switchErr.Err, switchCause) {
 		t.Fatalf("error = %v, want wrapped switch cause", err)
 	}
 	want := SessionWindowResult{

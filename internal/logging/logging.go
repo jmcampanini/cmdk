@@ -1,3 +1,4 @@
+// Package logging directs cmdk diagnostics to its persistent state-directory log.
 package logging
 
 import (
@@ -12,18 +13,22 @@ var defaultDir = filepath.Join(os.Getenv("HOME"), ".local", "state", "cmdk")
 
 const logFileName = "cmdk.log"
 
+// Logger owns the open file used by the process-wide structured logger.
 type Logger struct {
 	closer io.Closer
 }
 
+// Close releases the log file opened during setup.
 func (l *Logger) Close() error {
 	return l.closer.Close()
 }
 
+// Setup configures the process-wide logger under the user's local state directory.
 func Setup() (*Logger, error) {
 	return SetupWithDir(defaultDir)
 }
 
+// SetupWithDir appends logs to cmdk.log in dir and installs the process-wide logger.
 func SetupWithDir(dir string) (*Logger, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err

@@ -253,17 +253,17 @@ func validateWindowName(windowName string) error {
 
 const windowNameEllipsis = "…"
 
-// truncateWindowName end-truncates windowName to at most max runes, with the
-// appended ellipsis counting toward the limit. max <= 0 disables truncation.
-func truncateWindowName(windowName string, max int) string {
-	if max <= 0 {
+// truncateWindowName end-truncates windowName to at most limit runes, with the
+// appended ellipsis counting toward the limit. limit <= 0 disables truncation.
+func truncateWindowName(windowName string, limit int) string {
+	if limit <= 0 {
 		return windowName
 	}
 	runes := []rune(windowName)
-	if len(runes) <= max {
+	if len(runes) <= limit {
 		return windowName
 	}
-	return string(runes[:max-1]) + windowNameEllipsis
+	return string(runes[:limit-1]) + windowNameEllipsis
 }
 
 func validateLaunchPath(launchPath string) error {

@@ -124,7 +124,7 @@ func TestResolveLaunch_SelectedDataAvailableInTemplate(t *testing.T) {
 	}
 
 	var capturedArgv []string
-	mockExec := func(argv0 string, argv []string, envv []string) error {
+	mockExec := func(_ string, argv []string, _ []string) error {
 		capturedArgv = argv
 		return nil
 	}
@@ -184,7 +184,7 @@ func TestLaunchExecute_ExecFnError(t *testing.T) {
 		Data: map[string]string{},
 	}
 
-	mockExec := func(argv0 string, argv []string, envv []string) error {
+	mockExec := func(_ string, _ []string, _ []string) error {
 		return errors.New("exec failed")
 	}
 
@@ -201,7 +201,7 @@ func TestResolveLaunch_MissingKeyDoesNotCallExecFn(t *testing.T) {
 	}
 
 	called := false
-	mockExec := func(argv0 string, argv []string, envv []string) error {
+	mockExec := func(_ string, _ []string, _ []string) error {
 		called = true
 		return nil
 	}
@@ -226,7 +226,7 @@ func TestResolveLaunch_EmptyCmd(t *testing.T) {
 	}
 
 	called := false
-	mockExec := func(argv0 string, argv []string, envv []string) error {
+	mockExec := func(_ string, _ []string, _ []string) error {
 		called = true
 		return nil
 	}
@@ -358,7 +358,7 @@ func TestResolveLaunch_EnvVarsContainCMDK(t *testing.T) {
 	}
 
 	var capturedEnvv []string
-	mockExec := func(argv0 string, argv []string, envv []string) error {
+	mockExec := func(_ string, _ []string, envv []string) error {
 		capturedEnvv = envv
 		return nil
 	}
@@ -389,7 +389,7 @@ func TestResolveLaunch_StripsExistingCMDKVars(t *testing.T) {
 	}
 
 	var capturedEnvv []string
-	mockExec := func(argv0 string, argv []string, envv []string) error {
+	mockExec := func(_ string, _ []string, envv []string) error {
 		capturedEnvv = envv
 		return nil
 	}
@@ -421,7 +421,7 @@ func TestResolveLaunch_PaneIDAvailableInTemplate(t *testing.T) {
 	}
 
 	var capturedArgv []string
-	mockExec := func(argv0 string, argv []string, envv []string) error {
+	mockExec := func(_ string, argv []string, _ []string) error {
 		capturedArgv = argv
 		return nil
 	}
@@ -442,7 +442,7 @@ func TestResolveLaunch_PaneIDWithSq(t *testing.T) {
 	}
 
 	var capturedArgv []string
-	mockExec := func(argv0 string, argv []string, envv []string) error {
+	mockExec := func(_ string, argv []string, _ []string) error {
 		capturedArgv = argv
 		return nil
 	}
@@ -463,7 +463,7 @@ func TestResolveLaunch_EmptyPaneIDNotInTemplateData(t *testing.T) {
 		Data: map[string]string{},
 	}
 
-	mockExec := func(argv0 string, argv []string, envv []string) error {
+	mockExec := func(_ string, _ []string, _ []string) error {
 		return nil
 	}
 
@@ -715,7 +715,7 @@ func TestLaunchExecute_ShellLaunchPathChdirsAndSetsEnv(t *testing.T) {
 	var cwd string
 	var argv []string
 	var envv []string
-	mockExec := func(argv0 string, gotArgv []string, gotEnvv []string) error {
+	mockExec := func(_ string, gotArgv []string, gotEnvv []string) error {
 		var err error
 		cwd, err = os.Getwd()
 		if err != nil {
@@ -762,7 +762,7 @@ func TestLaunchExecute_ShellWithoutLaunchPathKeepsCwdAndOmitsLaunchEnv(t *testin
 	selected := item.Item{Cmd: "echo ok", MatchType: "root"}
 	var cwd string
 	var envv []string
-	mockExec := func(argv0 string, argv []string, gotEnvv []string) error {
+	mockExec := func(_ string, _ []string, gotEnvv []string) error {
 		var err error
 		cwd, err = os.Getwd()
 		envv = gotEnvv

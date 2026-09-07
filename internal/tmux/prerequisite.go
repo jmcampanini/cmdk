@@ -74,7 +74,7 @@ func prerequisiteError(parent context.Context, err error, timeout time.Duration)
 	case cmdrun.KindCanceled:
 		return fmt.Errorf("checking required tmux version: %w", cmdErr.Err)
 	case cmdrun.KindOutput:
-		return fmt.Errorf("tmux 3.2 or newer is required; tmux -V %v; %s", cmdErr.Err, prerequisiteRecovery)
+		return fmt.Errorf("tmux 3.2 or newer is required; tmux -V %w; %s", cmdErr.Err, prerequisiteRecovery)
 	default:
 		if cmdrun.IsNotFound(err) {
 			return errors.New("tmux 3.2 or newer is required; install tmux and ensure it is available in PATH")

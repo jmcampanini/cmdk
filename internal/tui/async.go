@@ -12,6 +12,7 @@ import (
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
+// AsyncSource describes a background fetch with optional count and timeout limits.
 type AsyncSource struct {
 	Name    string
 	Limit   int

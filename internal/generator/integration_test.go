@@ -15,7 +15,7 @@ import (
 
 const integrationTestFetchTimeout = time.Second
 
-func newIntegrationRootGenerator(sources ...Source) GeneratorFunc {
+func newIntegrationRootGenerator(sources ...Source) Func {
 	return NewRootGenerator(integrationTestFetchTimeout, sources...)
 }
 

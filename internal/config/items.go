@@ -6,6 +6,7 @@ import (
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
+// ToItem converts an action into a launcher item and preserves its stage pipeline.
 func (a Action) ToItem() item.Item {
 	stages := make([]item.Stage, len(a.Stages))
 	for i, s := range a.Stages {
@@ -43,6 +44,7 @@ func (a Action) ToItem() item.Item {
 	}
 }
 
+// MatchingActions returns a source that selects configured actions for matchType.
 func MatchingActions(cfg Config, matchType string) func(context.Context) ([]item.Item, error) {
 	return func(_ context.Context) ([]item.Item, error) {
 		var items []item.Item

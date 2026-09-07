@@ -1,3 +1,4 @@
+// Package cmd defines cmdk's commands and wires the interactive launcher.
 package cmd
 
 import (
@@ -97,7 +98,7 @@ Log file:
 	return cmd
 }
 
-func runRootCommand(cmd *cobra.Command, _ []string) error {
+func runRootCommand(_ *cobra.Command, _ []string) error {
 	timingsFlag = timingsFlag || timingsJSON
 
 	tr := trace.Noop()
@@ -360,6 +361,7 @@ func (m timingsModel) View() tea.View {
 	return m.inner.View()
 }
 
+// Execute runs the root command and exits with status 1 after reporting an error.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

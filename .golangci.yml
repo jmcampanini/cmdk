@@ -1,9 +1,18 @@
 version: "2"
 
+run:
+  timeout: 5m
+
 linters:
+  default: standard
   enable:
     - depguard
+    - errorlint
+    - misspell
+    - revive
   settings:
+    misspell:
+      locale: US
     depguard:
       rules:
         # internal/cmdrun owns every way cmdk starts another process
@@ -20,3 +29,12 @@ linters:
               desc: "subprocess execution is owned by internal/cmdrun; use cmdrun.Query/Run/Stream/Replace"
             - pkg: "syscall"
               desc: "process-control syscalls are owned by internal/cmdrun"
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

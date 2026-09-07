@@ -7,10 +7,12 @@ import (
 )
 
 var (
+	// TypeOrder sets the group order after status rows and promoted bell windows.
 	TypeOrder       = []string{"window", "session", "dir", "action"}
 	statusTypeOrder = []string{"error", "loading"}
 )
 
+// GroupAndOrder places status rows first and optionally promotes windows with bell activity.
 func GroupAndOrder(items []Item, bellToTop bool) []list.Item {
 	buckets := make(map[string][]Item)
 	var bellWindows []Item

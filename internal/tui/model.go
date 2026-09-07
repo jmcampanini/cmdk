@@ -1,3 +1,4 @@
+// Package tui implements cmdk's interactive lists, staged inputs, and error details.
 package tui
 
 import (
@@ -33,6 +34,7 @@ const (
 	viewErrorDetails
 )
 
+// Model tracks launcher navigation, staged inputs, and the accepted launch.
 type Model struct {
 	list              list.Model
 	paneID            string
@@ -69,6 +71,7 @@ type Model struct {
 
 const horizontalPadding = 1
 
+// NewModel initializes the launcher from items, configured behavior, and asynchronous sources.
 func NewModel(items []list.Item, paneID string, accumulated []item.Item, registry *generator.Registry, ctx generator.Context, t theme.Theme, asyncSources []AsyncSource, baseItems []item.Item) Model {
 	beh := ctx.Config.Behavior
 
@@ -94,6 +97,7 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 	return m
 }
 
+// WithAutoThemeDetection enables terminal-background detection during initialization.
 func (m Model) WithAutoThemeDetection() Model {
 	m.autoDetectTheme = true
 	return m
@@ -203,18 +207,22 @@ func applyListStyles(l *list.Model, t theme.Theme) {
 		SetString(" \u2022 ")
 }
 
+// Accumulated returns the selection stack used to resolve action inputs.
 func (m Model) Accumulated() []item.Item {
 	return m.accumulated
 }
 
+// Selected returns the accepted item, or nil when no item has been accepted.
 func (m Model) Selected() *item.Item {
 	return m.selected
 }
 
+// Launch returns the resolved action, or nil until a launch has been accepted.
 func (m Model) Launch() *execute.Launch {
 	return m.launch
 }
 
+// Init starts background source fetches and optional terminal-background detection.
 func (m Model) Init() tea.Cmd {
 	cmds := make([]tea.Cmd, 0, len(m.asyncSources)+1)
 	if m.autoDetectTheme {
@@ -226,6 +234,7 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// Update applies terminal and source events and returns any resulting commands.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Once a launch is committed the program is quitting; keys queued behind
 	// the blocking resolve must not mutate state or re-run user commands.
@@ -1306,6 +1315,7 @@ func (m Model) errorDetailsView() string {
 	return b.String()
 }
 
+// View renders the active launcher list, stage, or diagnostic screen.
 func (m Model) View() tea.View {
 	if m.mode == viewErrorDetails {
 		return tea.NewView(m.errorDetailsView())

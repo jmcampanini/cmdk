@@ -1,3 +1,4 @@
+// Package tmux queries and manages sessions, windows, and attached clients.
 package tmux
 
 import (
@@ -15,11 +16,13 @@ var currentClientFormat = tmuxFormatFields(
 	"#{pane_id}",
 )
 
+// ClientTarget identifies an attached client and the pane from which it invoked cmdk.
 type ClientTarget struct {
 	Name   string
 	PaneID string
 }
 
+// CurrentClient resolves and validates the attached client against the invoking pane.
 func CurrentClient(ctx context.Context, timeout time.Duration) (ClientTarget, error) {
 	return currentClient(ctx, timeout, execTmuxRunner{})
 }

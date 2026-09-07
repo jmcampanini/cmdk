@@ -1,3 +1,4 @@
+// Package safetext escapes terminal-control input for diagnostic display.
 package safetext
 
 import (
@@ -7,6 +8,7 @@ import (
 	"unicode/utf8"
 )
 
+// EscapeTerminalControls renders control bytes and invalid UTF-8 visibly while preserving newlines.
 func EscapeTerminalControls(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))

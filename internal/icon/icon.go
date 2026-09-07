@@ -1,3 +1,4 @@
+// Package icon resolves Nerd Font aliases and validates launcher glyphs.
 package icon
 
 import (
@@ -8,6 +9,7 @@ import (
 	"github.com/rivo/uniseg"
 )
 
+// Entry pairs a supported alias with its glyph and searchable description.
 type Entry struct {
 	Alias       string
 	Icon        string
@@ -26,6 +28,7 @@ func init() {
 	}
 }
 
+// Resolve expands a known alias or accepts exactly one grapheme cluster.
 func Resolve(raw string) (string, error) {
 	if raw == "" {
 		return "", fmt.Errorf("icon value cannot be empty")
@@ -41,6 +44,7 @@ func Resolve(raw string) (string, error) {
 	return raw, nil
 }
 
+// All returns a copy of the supported icon registry.
 func All() []Entry {
 	return slices.Clone(entries)
 }
@@ -79,6 +83,7 @@ func suggestAlias(invalid string) string {
 	return ""
 }
 
+// ResolveInline expands embedded Nerd Font aliases and rejects malformed or unknown aliases.
 func ResolveInline(s string) (string, error) {
 	if !strings.Contains(s, ":") {
 		return s, nil

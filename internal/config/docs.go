@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// FieldDoc describes a configuration field's type, meaning, and constraints.
 type FieldDoc struct {
 	Name        string
 	Type        string
@@ -12,6 +13,7 @@ type FieldDoc struct {
 	Validation  string
 }
 
+// SectionDoc groups configuration fields with their description and TOML example.
 type SectionDoc struct {
 	Name        string
 	Description string
@@ -25,7 +27,8 @@ func themeColorField(name string, description string) FieldDoc {
 	return FieldDoc{Name: name, Type: "string", Description: description, Validation: themeColorValidation}
 }
 
-func ConfigDocs() []SectionDoc {
+// Docs returns the configuration reference in its display order.
+func Docs() []SectionDoc {
 	reservedStageKeyValidation := "cannot be empty; must be unique within action; " +
 		"cannot be reserved (" + strings.Join(reservedStageKeys, ", ") +
 		"; session actions also reserve " + strings.Join(sessionActionExtraReservedStageKeys, ", ") + ")"
@@ -153,9 +156,10 @@ func ConfigDocs() []SectionDoc {
 	}
 }
 
+// RenderHelp renders the configuration reference with defaults and template guidance.
 func RenderHelp() string {
 	defaults := DefaultConfig()
-	docs := ConfigDocs()
+	docs := Docs()
 
 	var b strings.Builder
 	b.WriteString("CONFIGURATION REFERENCE\n\n")

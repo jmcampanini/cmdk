@@ -345,7 +345,7 @@ stages = [
 		executeConfiguredActionLaunch = oldExecute
 	})
 
-	resolveConfiguredActionLaunch = func(accumulated []item.Item, selected item.Item, paneID string, cfg config.Config) (execute.Launch, map[string]string, error) {
+	resolveConfiguredActionLaunch = func(accumulated []item.Item, selected item.Item, paneID string, _ config.Config) (execute.Launch, map[string]string, error) {
 		data := execute.FlattenData(accumulated)
 		if data["path"] != filepath.Clean(path) {
 			t.Errorf("path data = %q, want %q", data["path"], filepath.Clean(path))
@@ -543,7 +543,7 @@ func TestRunPreparedActionLeavesNonSwitchErrorsUnchanged(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.SetOut(&stdout)
 	err := runPreparedAction(cmd, actionRunInvocation{actionName: "test"})
-	if err != cause {
+	if !errors.Is(err, cause) {
 		t.Fatalf("error = %v, want original creation error", err)
 	}
 	if strings.Contains(err.Error(), "Created tmux state") {
