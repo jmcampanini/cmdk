@@ -29,11 +29,12 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
-      - name: Install tmux
+      - name: Ensure tmux is available
         run: |
-          sudo apt-get update
-          sudo apt-get install tmux --no-install-recommends --yes
-          apt-cache policy tmux
+          if ! command -v tmux >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes --no-install-recommends tmux
+          fi
           tmux -V
 
       - name: Record working tree state
