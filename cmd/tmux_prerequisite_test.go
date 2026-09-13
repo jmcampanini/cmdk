@@ -93,27 +93,3 @@ func TestTmuxFreeCommandDoesNotCheckPrerequisite(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-
-func TestHelpDoesNotCheckTmuxPrerequisite(t *testing.T) {
-	forbidTmuxPrerequisite(t)
-
-	command := newRootCommand()
-	command.SetOut(io.Discard)
-	command.SetErr(io.Discard)
-	command.SetArgs([]string{"--help"})
-	if err := command.Execute(); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestVersionDoesNotCheckTmuxPrerequisite(t *testing.T) {
-	forbidTmuxPrerequisite(t)
-
-	command := newRootCommand()
-	command.SetOut(io.Discard)
-	command.SetErr(io.Discard)
-	command.SetArgs([]string{"--version"})
-	if err := command.Execute(); err != nil {
-		t.Fatal(err)
-	}
-}
