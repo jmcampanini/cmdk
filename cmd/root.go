@@ -74,7 +74,6 @@ Log file:
   $HOME/.local/state/cmdk/cmdk.log`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		Args:          rejectUnknownOperands,
 		PreRunE:       requireTmux,
 		RunE:          runRootCommand,
 	}

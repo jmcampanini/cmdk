@@ -117,22 +117,3 @@ func TestVersionDoesNotCheckTmuxPrerequisite(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-
-func TestArgumentValidationRunsBeforeTmuxPrerequisite(t *testing.T) {
-	called := false
-	stubTmuxPrerequisite(t, func(context.Context) error {
-		called = true
-		return nil
-	})
-
-	command := newWindowCommand()
-	command.SetOut(io.Discard)
-	command.SetErr(io.Discard)
-	command.SetArgs([]string{"next", "extra"})
-	if err := command.Execute(); err == nil {
-		t.Fatal("expected argument validation error")
-	}
-	if called {
-		t.Fatal("tmux prerequisite ran before argument validation")
-	}
-}

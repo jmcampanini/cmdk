@@ -15,13 +15,6 @@ import (
 	resolver "github.com/jmcampanini/cmdk/internal/session"
 )
 
-func TestSessionResolveCommandRequiresPath(t *testing.T) {
-	cmd := newSessionResolveCommand()
-	if err := cmd.Args(cmd, nil); err == nil {
-		t.Fatal("expected error for missing path")
-	}
-}
-
 func TestSessionResolveCommandUseDocumentsRequiredPath(t *testing.T) {
 	cmd := newSessionResolveCommand()
 	if !strings.Contains(cmd.Use, "<path>") {

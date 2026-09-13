@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -16,13 +15,6 @@ import (
 	"github.com/jmcampanini/cmdk/internal/tmux"
 )
 
-func TestSessionWindowCommandRequiresPath(t *testing.T) {
-	cmd := newSessionWindowCommand()
-	if err := cmd.Args(cmd, nil); err == nil {
-		t.Fatal("expected error for missing path")
-	}
-}
-
 func TestSessionWindowCommandUseDocumentsRequiredPath(t *testing.T) {
 	cmd := newSessionWindowCommand()
 	if !strings.Contains(cmd.Use, "<path>") {
@@ -33,22 +25,55 @@ func TestSessionWindowCommandUseDocumentsRequiredPath(t *testing.T) {
 	}
 }
 
-func executeSessionWindow(t *testing.T, args ...string) error {
-	t.Helper()
-	cmd := newSessionWindowCommand()
-	cmd.SetOut(io.Discard)
-	cmd.SetErr(io.Discard)
-	cmd.SetArgs(args)
-	return cmd.Execute()
-}
-
-func TestSessionWindowCommandErrorsWithNoMode(t *testing.T) {
-	err := executeSessionWindow(t, filepath.Join(t.TempDir(), "scratch"))
-	if err == nil {
-		t.Fatal("expected mode error")
+// TestParseSessionWindowGrammar covers the operand rules no cobra validator
+// expresses: one path, exactly one of --new or a command after --, and a
+// leading-dash path placed after its own -- so pflag does not read it as a
+// flag. It parses flags the way cobra does before calling Args, without
+// running the tmux prerequisite or the runner.
+func TestParseSessionWindowGrammar(t *testing.T) {
+	tests := []struct {
+		name    string
+		argv    []string
+		want    sessionWindowRequest
+		wantErr string
+	}{
+		{name: "new shell", argv: []string{"dir", "--new"}, want: sessionWindowRequest{path: "dir"}},
+		{name: "command after delimiter", argv: []string{"dir", "--", "echo", "hi"}, want: sessionWindowRequest{path: "dir", commandArgs: []string{"echo", "hi"}}},
+		{name: "explicit name", argv: []string{"dir", "--name", "tests", "--new"}, want: sessionWindowRequest{path: "dir", nameSet: true}},
+		{name: "leading-dash path with command", argv: []string{"--", "-dir", "--", "echo", "hi"}, want: sessionWindowRequest{path: "-dir", commandArgs: []string{"echo", "hi"}}},
+		{name: "leading-dash path with new shell", argv: []string{"--new", "--", "-dir"}, want: sessionWindowRequest{path: "-dir"}},
+		{name: "missing path", argv: nil, wantErr: "path is required"},
+		{name: "missing mode", argv: []string{"dir"}, wantErr: "--new or command args after --"},
+		{name: "bare delimiter", argv: []string{"dir", "--"}, wantErr: "--new or command args after --"},
+		{name: "command without delimiter", argv: []string{"dir", "echo", "hi"}, wantErr: "command args must follow --"},
+		{name: "two paths before delimiter", argv: []string{"one", "two", "--", "true"}, wantErr: "exactly one path before --"},
+		{name: "new shell and command", argv: []string{"dir", "--new", "--", "echo"}, wantErr: "--new cannot be used with command args"},
+		{name: "empty name", argv: []string{"dir", "--name=", "--new"}, wantErr: "--name cannot be empty"},
 	}
-	if !strings.Contains(err.Error(), "--new or command args") {
-		t.Errorf("error = %q, want mode guidance", err.Error())
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cmd := newSessionWindowCommand()
+			if err := cmd.ParseFlags(test.argv); err != nil {
+				t.Fatalf("ParseFlags(%q): %v", test.argv, err)
+			}
+			newShell, _ := cmd.Flags().GetBool("new")
+			name, _ := cmd.Flags().GetString("name")
+
+			got, err := parseSessionWindowGrammar(cmd, cmd.Flags().Args(), sessionWindowOptions{name: name, newShell: newShell})
+
+			if test.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+					t.Fatalf("parseSessionWindowGrammar(%q) error = %v, want substring %q", test.argv, err, test.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseSessionWindowGrammar(%q): %v", test.argv, err)
+			}
+			if got.path != test.want.path || got.nameSet != test.want.nameSet || !slices.Equal(got.commandArgs, test.want.commandArgs) {
+				t.Errorf("parseSessionWindowGrammar(%q) = %+v, want %+v", test.argv, got, test.want)
+			}
+		})
 	}
 }
 
@@ -122,59 +147,6 @@ func TestRunSessionWindowCommandCommandModePassesArgvUnchanged(t *testing.T) {
 	}
 }
 
-func TestSessionWindowCommandRejectsCommandWithoutDashDash(t *testing.T) {
-	err := executeSessionWindow(t, ".", "echo", "hi")
-	if err == nil {
-		t.Fatal("expected delimiter error")
-	}
-	if !strings.Contains(err.Error(), "--") {
-		t.Errorf("error = %q, want -- guidance", err.Error())
-	}
-}
-
-func TestSplitSessionWindowArgsAllowsFlagTerminatorBeforeDashPath(t *testing.T) {
-	path, commandArgs, commandDelimiter, err := splitSessionWindowArgs([]string{"-project"}, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if path != "-project" {
-		t.Errorf("path = %q, want -project", path)
-	}
-	if len(commandArgs) != 0 {
-		t.Errorf("commandArgs = %q, want empty", commandArgs)
-	}
-	if commandDelimiter {
-		t.Error("commandDelimiter = true, want false")
-	}
-}
-
-func TestSplitSessionWindowArgsAllowsDashPathAndCommandDelimiter(t *testing.T) {
-	path, commandArgs, commandDelimiter, err := splitSessionWindowArgs([]string{"-project", "--", "echo", "hi"}, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if path != "-project" {
-		t.Errorf("path = %q, want -project", path)
-	}
-	want := []string{"echo", "hi"}
-	if !slices.Equal(commandArgs, want) {
-		t.Errorf("commandArgs = %q, want %q", commandArgs, want)
-	}
-	if !commandDelimiter {
-		t.Error("commandDelimiter = false, want true")
-	}
-}
-
-func TestSplitSessionWindowArgsRejectsExtraArgsBeforeDashDash(t *testing.T) {
-	_, _, _, err := splitSessionWindowArgs([]string{".", "extra", "echo"}, 2)
-	if err == nil {
-		t.Fatal("expected error")
-	}
-	if !strings.Contains(err.Error(), "exactly one path") {
-		t.Errorf("error = %q, want path count context", err.Error())
-	}
-}
-
 func TestRunSessionWindowCommandNameOverride(t *testing.T) {
 	useTempConfigHome(t)
 	dir := filepath.Join(t.TempDir(), "scratch")
@@ -195,26 +167,6 @@ func TestRunSessionWindowCommandNameOverride(t *testing.T) {
 	cmd := &cobra.Command{}
 	if err := runSessionWindowCommand(cmd, sessionWindowRequest{path: dir, nameSet: true}, sessionWindowOptions{newShell: true, name: "tests"}); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestSessionWindowCommandNewPlusCommandErrors(t *testing.T) {
-	err := executeSessionWindow(t, ".", "--new", "--", "echo", "hi")
-	if err == nil {
-		t.Fatal("expected mode conflict error")
-	}
-	if !strings.Contains(err.Error(), "--new") || !strings.Contains(err.Error(), "command") {
-		t.Errorf("error = %q, want --new command conflict", err.Error())
-	}
-}
-
-func TestSessionWindowCommandEmptyNameErrors(t *testing.T) {
-	err := executeSessionWindow(t, ".", "--name", "", "--new")
-	if err == nil {
-		t.Fatal("expected name error")
-	}
-	if !strings.Contains(err.Error(), "--name") || !strings.Contains(err.Error(), "empty") {
-		t.Errorf("error = %q, want empty --name context", err.Error())
 	}
 }
 
