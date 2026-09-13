@@ -41,9 +41,6 @@ entry point into tmux, not as a nested tmux command.`,
 }
 
 func runAttachCommand(cmd *cobra.Command, args []string) error {
-	if len(args) > 1 {
-		return errors.New("expected at most one path")
-	}
 	if isInsideTmux() {
 		return errors.New("cmdk attach cannot run inside tmux; it is intended to enter a cmdk-managed tmux session from outside tmux")
 	}

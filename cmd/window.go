@@ -33,7 +33,7 @@ func newWindowCommand() *cobra.Command {
 		Long: `Switch between tmux windows in a deterministic circular order.
 
 ` + windowOrderHelp,
-		Args: rejectUnknownOperands,
+		Args: cobra.NoArgs,
 		RunE: runHelp,
 	}
 	cmd.PersistentFlags().StringVar(&options.paneID, "pane-id", "", "tmux pane ID to use as the current-window anchor")

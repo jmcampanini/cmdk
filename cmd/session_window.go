@@ -60,8 +60,9 @@ example:
   cmdk session window . --switch -- make test
 
 --switch must appear before --. Arguments after -- are always part of the window
-command. cmdk creates a fresh window every time and tracks it by the returned
-tmux window_id.`,
+command. A path that starts with - must follow a leading --, for example
+"cmdk session window -- -dir -- make test". cmdk creates a fresh window every
+time and tracks it by the returned tmux window_id.`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			parsed, err := parseSessionWindowGrammar(cmd, args, options)
 			if err != nil {

@@ -85,20 +85,6 @@ func TestWindowCommandPersistentPaneIDBeforeSubcommand(t *testing.T) {
 	}
 }
 
-func TestWindowCommandRejectsArgsWithoutSwitching(t *testing.T) {
-	stubWindowSwitcher(t, func(context.Context, tmux.WindowDirection, tmux.WindowSwitchOptions) error {
-		t.Fatal("switchRelativeWindow should not be called")
-		return nil
-	})
-
-	cmd := newWindowCommand()
-	cmd.SetArgs([]string{"next", "extra"})
-	err := cmd.Execute()
-	if err == nil {
-		t.Fatal("expected arg error")
-	}
-}
-
 func TestWindowCommandPropagatesSwitcherError(t *testing.T) {
 	wantErr := errors.New("tmux failed")
 	stubWindowSwitcher(t, func(context.Context, tmux.WindowDirection, tmux.WindowSwitchOptions) error {

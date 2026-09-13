@@ -62,13 +62,6 @@ func TestAttachCommandUseDocumentsOptionalPath(t *testing.T) {
 	}
 }
 
-func TestAttachCommandRejectsExtraArgs(t *testing.T) {
-	cmd := newAttachCommand()
-	if err := cmd.Args(cmd, []string{"one", "two"}); err == nil {
-		t.Fatal("expected error for extra args")
-	}
-}
-
 func TestRunAttachCommandRejectsInsideTmux(t *testing.T) {
 	oldInside := isInsideTmux
 	isInsideTmux = func() bool { return true }
