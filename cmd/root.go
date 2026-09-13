@@ -83,6 +83,12 @@ Log file:
 	cmd.Flags().StringVar(&themeFlag, "theme", "", "color theme (light, dark)")
 	cmd.Flags().BoolVar(&timingsFlag, "timings", false, "measure and print startup phase durations")
 	cmd.Flags().BoolVar(&timingsJSON, "timings-json", false, "output timings as JSON (implies --timings)")
+	// Cobra registers --help and --version only when it executes the resolved
+	// command, but it resolves that command first by stripping the flags it
+	// already knows. Registering both here keeps "cmdk --help --config x"
+	// from treating "x" as an unknown command.
+	cmd.InitDefaultHelpFlag()
+	cmd.InitDefaultVersionFlag()
 	cmd.AddCommand(
 		newActionCommand(),
 		newAttachCommand(),
