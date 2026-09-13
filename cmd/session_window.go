@@ -76,10 +76,15 @@ time and tracks it by the returned tmux window_id.`,
 			return runSessionWindowCommand(cmd, request, options)
 		},
 	}
-	cmd.Flags().BoolVar(&options.newShell, "new", false, "create a fresh interactive shell window")
-	cmd.Flags().StringVar(&options.name, "name", "", "override the tmux window name")
-	cmd.Flags().BoolVar(&options.switchWindow, "switch", false, "switch the current tmux client to the new window")
+	options.bindFlags(cmd)
 	return cmd
+}
+
+// bindFlags registers the session window flags on cmd so parsing fills o.
+func (o *sessionWindowOptions) bindFlags(cmd *cobra.Command) {
+	cmd.Flags().BoolVar(&o.newShell, "new", false, "create a fresh interactive shell window")
+	cmd.Flags().StringVar(&o.name, "name", "", "override the tmux window name")
+	cmd.Flags().BoolVar(&o.switchWindow, "switch", false, "switch the current tmux client to the new window")
 }
 
 // parseSessionWindowGrammar validates the complete positional grammar before

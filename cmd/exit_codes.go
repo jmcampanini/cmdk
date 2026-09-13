@@ -32,6 +32,8 @@ func newExitCodesCommand() *cobra.Command {
       passed to the root command or to this help topic), an invalid flag, or
       malformed "cmdk session window" arguments. Bare command groups such as
       "cmdk action", "cmdk session", and "cmdk window" show help and exit 0.
+      "cmdk help <topic>" with an unknown topic prints "Unknown help topic"
+      and the root usage on stderr, then exits 0.
 
       "cmdk action run" also exits 1 for cmdk-detected errors such as an
       action that is missing, ambiguous, unsupported, or given invalid action

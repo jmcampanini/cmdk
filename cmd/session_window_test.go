@@ -52,14 +52,14 @@ func TestParseSessionWindowGrammar(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			cmd := newSessionWindowCommand()
+			cmd := &cobra.Command{}
+			var options sessionWindowOptions
+			options.bindFlags(cmd)
 			if err := cmd.ParseFlags(test.argv); err != nil {
 				t.Fatalf("ParseFlags(%q): %v", test.argv, err)
 			}
-			newShell, _ := cmd.Flags().GetBool("new")
-			name, _ := cmd.Flags().GetString("name")
 
-			got, err := parseSessionWindowGrammar(cmd, cmd.Flags().Args(), sessionWindowOptions{name: name, newShell: newShell})
+			got, err := parseSessionWindowGrammar(cmd, cmd.Flags().Args(), options)
 
 			if test.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), test.wantErr) {

@@ -72,10 +72,11 @@ Requirements:
 
 Log file:
   $HOME/.local/state/cmdk/cmdk.log`,
-		SilenceUsage:  true,
-		SilenceErrors: true,
-		PreRunE:       requireTmux,
-		RunE:          runRootCommand,
+		DisableSuggestions: true,
+		SilenceUsage:       true,
+		SilenceErrors:      true,
+		PreRunE:            requireTmux,
+		RunE:               runRootCommand,
 	}
 	cmd.Version = Version
 	cmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "path to config file (also validates; exits 1 on error)")
