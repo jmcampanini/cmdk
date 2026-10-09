@@ -9,14 +9,14 @@ tool (
 
 require (
 	charm.land/bubbles/v2 v2.2.1
-	charm.land/bubbletea/v2 v2.0.9
+	charm.land/bubbletea/v2 v2.0.10
 	charm.land/lipgloss/v2 v2.0.6
 	charm.land/log/v2 v2.0.1
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/jmcampanini/go-config-loader v0.2.0
 	github.com/rivo/uniseg v0.4.7
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/sys v0.48.0
+	golang.org/x/sys v0.49.0
 )
 
 require (
