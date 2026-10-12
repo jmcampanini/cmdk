@@ -52,8 +52,12 @@ if [ -n "${CI:-}" ]; then echo "required CI rejects the end-to-end opt-out" >&2;
 mise run unit-tests
 '''
 
+# The suite drives build/cmdk, so test-e2e depends on build and tells the
+# suite where the binary is instead of letting it build for itself.
 [tasks.test-e2e]
 description = "Run required tmux end-to-end tests and validate their completion markers."
+depends = ["build"]
+env = { CMDK_E2E_BINARY = "{{config_root}}/build/cmdk" }
 run = '''
 mkdir -p .sandbox
 output=".sandbox/test-e2e.$$.log"

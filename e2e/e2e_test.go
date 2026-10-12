@@ -57,22 +57,20 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	tmp, err := os.MkdirTemp("", "cmdk-e2e-*")
-	if err != nil {
-		panic(err)
+	// The mise test-e2e task builds the binary through the build task and
+	// passes its path in CMDK_E2E_BINARY, so the suite never builds for itself.
+	binaryPath = os.Getenv("CMDK_E2E_BINARY")
+	if binaryPath == "" {
+		fmt.Fprintln(os.Stderr, "ERROR: e2e tests: CMDK_E2E_BINARY is not set; run the suite with 'mise run test-e2e'")
+		os.Exit(1)
 	}
-	binaryPath = tmp + "/cmdk"
-	build := exec.Command("go", "build", "-o", binaryPath, "..")
-	build.Stderr = os.Stderr
-	if err := build.Run(); err != nil {
-		panic("failed to build binary: " + err.Error())
+	if _, err := os.Stat(binaryPath); err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: e2e tests: stat binary %q: %v\n", binaryPath, err)
+		os.Exit(1)
 	}
 
 	code := m.Run()
 	_ = tmuxCmd("kill-server").Run()
-	if err := os.RemoveAll(tmp); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to clean up %s: %v\n", tmp, err)
-	}
 	os.Exit(code)
 }
 
