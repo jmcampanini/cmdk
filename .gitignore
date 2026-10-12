@@ -15,3 +15,7 @@
 
 # Test fixture output
 testdata/fixtures/*/.generated/
+
+# mise personal overrides
+mise.local.toml
+.mise.local.toml

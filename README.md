@@ -35,16 +35,17 @@ brew upgrade --fetch-HEAD cmdk
 
 ### From source (Linux or macOS)
 
-With Git, Go, Make, and tmux 3.2 or newer installed:
+With Git, [mise](https://mise.jdx.dev), and tmux 3.2 or newer installed (mise supplies the pinned Go toolchain from `mise.toml`):
 
 ```sh
 git clone https://github.com/jmcampanini/cmdk.git
 cd cmdk
-make build
+mise install
+mise run build
 # Copy or symlink ./build/cmdk onto your PATH.
 ```
 
-To upgrade, run `git pull`, rebuild with `make build`, and replace the binary on your `PATH`.
+To upgrade, run `git pull`, rebuild with `mise install && mise run build`, and replace the binary on your `PATH`.
 
 ## Quickstart
 
