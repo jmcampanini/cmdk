@@ -59,14 +59,14 @@ Reload tmux (`tmux source-file ~/.tmux.conf`), then press `prefix + Space` insid
 
 ## Reference
 
-For the full command reference, run `cmdk --help`. See also:
+For the full command reference, run `cmdk --help` or add `--help` to any command below.
 
 - `cmdk help exit-codes` - exit codes and error categories
 - `cmdk config --provenance` - effective configuration and source provenance
-- `cmdk attach [path]` - from outside tmux, attach to a configured or explicit cmdk-managed session
+- `cmdk attach [path]` - attach to a cmdk-managed session
 - `cmdk session resolve <path>` - inspect the planned session for a path
-- `cmdk session window <path> --new` - create a background window in the cmdk-managed tmux session; add `--switch` to select it
-- `cmdk action run <exact-name> [--path <dir>] [--input key=value]... [--no-switch]` - noninteractively run a configured session-window action and print its launch identifiers as JSON; by default it switches the invoking attached client, while `--no-switch` supports detached or headless launches when a tmux server is already running and does not start one; see `cmdk action run --help`
+- `cmdk session window <path> --new` - create a window in a cmdk-managed session
+- `cmdk action run <exact-name>` - run a configured session-window action
 - `cmdk window next` / `cmdk window previous` - cycle through tmux windows across sessions
 - `cmdk docs` - configuration reference
 - `cmdk icons` - supported icon aliases
