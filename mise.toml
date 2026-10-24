@@ -30,6 +30,7 @@ go build -trimpath -buildvcs=false -ldflags "-X github.com/jmcampanini/cmdk/cmd.
 # Shared by test and test-unit; hidden so it does not show up as a target.
 [tasks.unit-tests]
 hide = true
+wait_for = ["test-unit-guard"]
 run = '''
 packages="$(go list ./...)" || exit $?
 packages="$(printf '%s\n' "$packages" | grep -v '/e2e$')"
@@ -39,17 +40,17 @@ go test -count=1 -race $packages
 
 [tasks.test]
 description = "Run all unit and required end-to-end tests uncached with the race detector."
-run = [
-  "mise run unit-tests",
-  "mise run test-e2e",
-]
+depends = ["unit-tests", "test-e2e"]
 
 [tasks.test-unit]
 description = "Run unit tests uncached with the race detector, without end-to-end tests."
+depends = ["test-unit-guard", "unit-tests"]
+
+[tasks.test-unit-guard]
+hide = true
 run = '''
 echo "CMDK_E2E_STATUS=OPTED_OUT"
 if [ -n "${CI:-}" ]; then echo "required CI rejects the end-to-end opt-out" >&2; exit 1; fi
-mise run unit-tests
 '''
 
 # The suite drives build/cmdk, so test-e2e depends on build and tells the
