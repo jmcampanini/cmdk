@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 
 func windowLeafCommand(t *testing.T, name string) *cobra.Command {
 	t.Helper()
-	parent := newWindowCommand()
+	parent := newWindowCommand(&rootOptions{})
 	for _, child := range parent.Commands() {
 		if child.Name() == name {
 			return child
@@ -62,9 +62,9 @@ cmd = "true"
 		args    []string
 	}{
 		{command: newRootCommand()},
-		{command: newActionRunCommand(), args: []string{"tmux prerequisite"}},
-		{command: newAttachCommand()},
-		{command: newSessionWindowCommand()},
+		{command: newActionRunCommand(&rootOptions{}), args: []string{"tmux prerequisite"}},
+		{command: newAttachCommand(&rootOptions{})},
+		{command: newSessionWindowCommand(&rootOptions{})},
 		{command: windowLeafCommand(t, "next")},
 		{command: windowLeafCommand(t, "previous")},
 	}

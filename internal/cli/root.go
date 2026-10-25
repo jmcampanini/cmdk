@@ -1,11 +1,9 @@
-// Package cmd defines cmdk's commands and wires the interactive launcher.
-package cmd
+// Package cli defines cmdk's commands and wires the interactive launcher.
+package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 
 	tea "charm.land/bubbletea/v2"
@@ -28,13 +26,13 @@ import (
 // Version is set at build time via ldflags.
 var Version = "n/a"
 
-var (
+type rootOptions struct {
 	configPath  string
 	paneID      string
 	themeFlag   string
 	timingsFlag bool
 	timingsJSON bool
-)
+}
 
 var rootCmd *cobra.Command
 
@@ -43,6 +41,7 @@ func init() {
 }
 
 func newRootCommand() *cobra.Command {
+	root := &rootOptions{}
 	cmd := &cobra.Command{
 		Use:   "cmdk",
 		Short: "Keyboard-driven tmux launcher",
@@ -76,14 +75,14 @@ Log file:
 		SilenceUsage:       true,
 		SilenceErrors:      true,
 		PreRunE:            requireTmux,
-		RunE:               runRootCommand,
+		RunE:               root.runRootCommand,
 	}
 	cmd.Version = Version
-	cmd.PersistentFlags().StringVarP(&configPath, "config", "c", "", "path to config file (also validates; exits 1 on error)")
-	cmd.Flags().StringVar(&paneID, "pane-id", "", "tmux pane ID")
-	cmd.Flags().StringVar(&themeFlag, "theme", "", "color theme (light, dark)")
-	cmd.Flags().BoolVar(&timingsFlag, "timings", false, "measure and print startup phase durations")
-	cmd.Flags().BoolVar(&timingsJSON, "timings-json", false, "output timings as JSON (implies --timings)")
+	cmd.PersistentFlags().StringVarP(&root.configPath, "config", "c", "", "path to config file (also validates; exits 1 on error)")
+	cmd.Flags().StringVar(&root.paneID, "pane-id", "", "tmux pane ID")
+	cmd.Flags().StringVar(&root.themeFlag, "theme", "", "color theme (light, dark)")
+	cmd.Flags().BoolVar(&root.timingsFlag, "timings", false, "measure and print startup phase durations")
+	cmd.Flags().BoolVar(&root.timingsJSON, "timings-json", false, "output timings as JSON (implies --timings)")
 	// Cobra registers --help and --version only when it executes the resolved
 	// command, but it resolves that command first by stripping the flags it
 	// already knows. Registering both here keeps "cmdk --help --config x"
@@ -91,24 +90,24 @@ Log file:
 	cmd.InitDefaultHelpFlag()
 	cmd.InitDefaultVersionFlag()
 	cmd.AddCommand(
-		newActionCommand(),
-		newAttachCommand(),
-		newConfigCommand(),
-		newDocsCommand(),
-		newExitCodesCommand(),
-		newIconsCommand(),
-		newSessionCommand(),
-		newShortenCommand(),
-		newWindowCommand(),
+		newActionCommand(root),
+		newAttachCommand(root),
+		newConfigCommand(root),
+		newDocsCommand(root),
+		newExitCodesCommand(root),
+		newIconsCommand(root),
+		newSessionCommand(root),
+		newShortenCommand(root),
+		newWindowCommand(root),
 	)
 	return cmd
 }
 
-func runRootCommand(_ *cobra.Command, _ []string) error {
-	timingsFlag = timingsFlag || timingsJSON
+func (root *rootOptions) runRootCommand(_ *cobra.Command, _ []string) error {
+	root.timingsFlag = root.timingsFlag || root.timingsJSON
 
 	tr := trace.Noop()
-	if timingsFlag {
+	if root.timingsFlag {
 		processStart, err := trace.ProcessStartTime()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: could not detect process start time: %v\n", err)
@@ -127,13 +126,13 @@ func runRootCommand(_ *cobra.Command, _ []string) error {
 	}
 
 	stop = tr.Begin("config")
-	cfgPath, err := resolveConfigPath()
+	cfgPath, err := config.ResolvePath(root.configPath)
 	if err != nil {
 		stop()
 		return err
 	}
 	cfg, cfgErr := config.Load(cfgPath)
-	if cfgErr != nil && configPath != "" {
+	if cfgErr != nil && root.configPath != "" {
 		stop()
 		return cfgErr
 	}
@@ -181,9 +180,9 @@ func runRootCommand(_ *cobra.Command, _ []string) error {
 	reg.MapType("dir", "dir-actions")
 	reg.MapType("session", "session-children")
 
-	ctx := generator.Context{PaneID: paneID, Config: cfg}
+	ctx := generator.Context{PaneID: root.paneID, Config: cfg}
 
-	if timingsFlag {
+	if root.timingsFlag {
 		reg.Register("root", generator.NewRootGenerator(fetchTimeout, sources...))
 		reg.MapType("", "root")
 		gen, err := reg.Resolve(nil)
@@ -198,13 +197,13 @@ func runRootCommand(_ *cobra.Command, _ []string) error {
 		listItems := item.GroupAndOrder(items, cfg.Behavior.BellToTop)
 		stop()
 
-		t, _, err := resolveTheme(tr, cfg)
+		t, _, err := root.resolveTheme(tr, cfg)
 		if err != nil {
 			return err
 		}
 
 		stop = tr.Begin("model")
-		model := tui.NewModel(listItems, paneID, nil, reg, ctx, t, nil, nil)
+		model := tui.NewModel(listItems, root.paneID, nil, reg, ctx, t, nil, nil)
 		stop()
 
 		// Timings mode writes reports to stdout, so avoid terminal probing commands
@@ -217,7 +216,7 @@ func runRootCommand(_ *cobra.Command, _ []string) error {
 		if err != nil {
 			return err
 		}
-		if timingsJSON {
+		if root.timingsJSON {
 			return trace.WriteJSON(os.Stdout, tr.Spans())
 		}
 		return trace.WriteTable(os.Stdout, tr.Spans())
@@ -252,7 +251,7 @@ func runRootCommand(_ *cobra.Command, _ []string) error {
 	listItems := item.GroupAndOrder(initialAll, cfg.Behavior.BellToTop)
 	stop()
 
-	t, autoDetectTheme, err := resolveTheme(tr, cfg)
+	t, autoDetectTheme, err := root.resolveTheme(tr, cfg)
 	if err != nil {
 		return err
 	}
@@ -268,7 +267,7 @@ func runRootCommand(_ *cobra.Command, _ []string) error {
 	}
 
 	stop = tr.Begin("model")
-	model := tui.NewModel(listItems, paneID, nil, reg, ctx, t, tuiAsync, syncItems)
+	model := tui.NewModel(listItems, root.paneID, nil, reg, ctx, t, tuiAsync, syncItems)
 	stop()
 
 	if autoDetectTheme {
@@ -300,27 +299,10 @@ func runRootCommand(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-func resolveConfigPath() (string, error) {
-	if configPath != "" {
-		fi, err := os.Stat(configPath)
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				return "", fmt.Errorf("config file not found: %s", configPath)
-			}
-			return "", fmt.Errorf("config file not accessible: %w", err)
-		}
-		if !fi.Mode().IsRegular() {
-			return "", fmt.Errorf("config path is not a regular file: %s", configPath)
-		}
-		return configPath, nil
-	}
-	return config.DefaultPath(), nil
-}
-
-func resolveTheme(tr trace.Tracer, cfg config.Config) (theme.Theme, bool, error) {
-	autoDetectTheme := themeFlag == ""
+func (root *rootOptions) resolveTheme(tr trace.Tracer, cfg config.Config) (theme.Theme, bool, error) {
+	autoDetectTheme := root.themeFlag == ""
 	stop := tr.Begin("theme")
-	t, err := theme.Resolve(themeFlag, cfg.Theme)
+	t, err := theme.Resolve(root.themeFlag, cfg.Theme)
 	stop()
 	if err != nil {
 		return theme.Theme{}, false, err
@@ -367,10 +349,11 @@ func (m timingsModel) View() tea.View {
 	return m.inner.View()
 }
 
-// Execute runs the root command and exits with status 1 after reporting an error.
-func Execute() {
+// Execute runs the root command and returns its process exit status.
+func Execute() int {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }

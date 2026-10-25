@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"fmt"
@@ -18,7 +18,7 @@ type iconOptions struct {
 	fzf    bool
 }
 
-func newIconsCommand() *cobra.Command {
+func newIconsCommand(_ *rootOptions) *cobra.Command {
 	var options iconOptions
 	cmd := &cobra.Command{
 		Use:   "icons",

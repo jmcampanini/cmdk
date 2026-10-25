@@ -9,7 +9,7 @@ class Cmdk < Formula
   def install
     ldflags = %W[
       -s -w
-      -X github.com/jmcampanini/cmdk/cmd.Version=#{version}
+      -X github.com/jmcampanini/cmdk/internal/cli.Version=#{version}
     ]
     system "go", "build", "-buildvcs=false", *std_go_args(output: bin/"cmdk", ldflags:)
     generate_completions_from_executable(bin/"cmdk", "completion")

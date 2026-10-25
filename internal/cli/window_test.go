@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"context"
@@ -11,13 +11,10 @@ import (
 func stubWindowSwitcher(t *testing.T, fn func(context.Context, tmux.WindowDirection, tmux.WindowSwitchOptions) error) {
 	t.Helper()
 	oldSwitch := switchRelativeWindow
-	oldPaneID := paneID
 	switchRelativeWindow = fn
-	paneID = ""
 	stubTmuxPrerequisite(t, func(context.Context) error { return nil })
 	t.Cleanup(func() {
 		switchRelativeWindow = oldSwitch
-		paneID = oldPaneID
 	})
 }
 
@@ -37,7 +34,7 @@ func TestWindowNextCommandCallsSwitcher(t *testing.T) {
 		return nil
 	})
 
-	cmd := newWindowCommand()
+	cmd := newWindowCommand(&rootOptions{})
 	cmd.SetArgs([]string{"next", "--pane-id", "%5"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
@@ -60,7 +57,7 @@ func TestWindowPreviousAliasCallsSwitcher(t *testing.T) {
 		return nil
 	})
 
-	cmd := newWindowCommand()
+	cmd := newWindowCommand(&rootOptions{})
 	cmd.SetArgs([]string{"prev"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
@@ -78,7 +75,7 @@ func TestWindowCommandPersistentPaneIDBeforeSubcommand(t *testing.T) {
 		return nil
 	})
 
-	cmd := newWindowCommand()
+	cmd := newWindowCommand(&rootOptions{})
 	cmd.SetArgs([]string{"--pane-id", "%7", "next"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
@@ -91,7 +88,7 @@ func TestWindowCommandPropagatesSwitcherError(t *testing.T) {
 		return wantErr
 	})
 
-	cmd := newWindowCommand()
+	cmd := newWindowCommand(&rootOptions{})
 	cmd.SetArgs([]string{"next"})
 	err := cmd.Execute()
 	if !errors.Is(err, wantErr) {

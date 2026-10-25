@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"bytes"
@@ -69,7 +69,7 @@ func stubPreparedActionLaunch(t *testing.T, executeLaunch func(execute.Launch) (
 }
 
 func TestActionRunHelpDocumentsContract(t *testing.T) {
-	cmd := newActionRunCommand()
+	cmd := newActionRunCommand(&rootOptions{})
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	if err := cmd.Help(); err != nil {

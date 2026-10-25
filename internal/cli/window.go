@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"github.com/spf13/cobra"
@@ -25,7 +25,7 @@ window to the pane that invoked the binding:
 If --pane-id is omitted, cmdk falls back to TMUX_PANE, then tmux's default
 current context.`
 
-func newWindowCommand() *cobra.Command {
+func newWindowCommand(root *rootOptions) *cobra.Command {
 	options := &windowCommandOptions{}
 	cmd := &cobra.Command{
 		Use:   "window",
@@ -37,50 +37,19 @@ func newWindowCommand() *cobra.Command {
 		RunE: runHelp,
 	}
 	cmd.PersistentFlags().StringVar(&options.paneID, "pane-id", "", "tmux pane ID to use as the current-window anchor")
-	cmd.AddCommand(newWindowNextCommand(options), newWindowPreviousCommand(options))
+	cmd.AddCommand(newWindowNextCommand(root, options), newWindowPreviousCommand(root, options))
 	return cmd
 }
 
-func newWindowNextCommand(options *windowCommandOptions) *cobra.Command {
-	return &cobra.Command{
-		Use:   "next",
-		Short: "Switch to the next tmux window",
-		Long: `Switch to the next tmux window.
-
-` + windowOrderHelp,
-		Args:    cobra.NoArgs,
-		PreRunE: requireTmux,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runWindowCommand(cmd, tmux.WindowNext, *options)
-		},
-	}
-}
-
-func newWindowPreviousCommand(options *windowCommandOptions) *cobra.Command {
-	return &cobra.Command{
-		Use:     "previous",
-		Aliases: []string{"prev"},
-		Short:   "Switch to the previous tmux window",
-		Long: `Switch to the previous tmux window.
-
-` + windowOrderHelp,
-		Args:    cobra.NoArgs,
-		PreRunE: requireTmux,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runWindowCommand(cmd, tmux.WindowPrevious, *options)
-		},
-	}
-}
-
-func runWindowCommand(cmd *cobra.Command, direction tmux.WindowDirection, options windowCommandOptions) error {
+func runWindowCommand(root *rootOptions, cmd *cobra.Command, direction tmux.WindowDirection, options windowCommandOptions) error {
 	pane := options.paneID
 	if pane == "" {
 		// Also honor the root TUI flag when Cobra accepts it before the subcommand,
 		// but keep this subcommand usable as: cmdk window next --pane-id=%1.
-		pane = paneID
+		pane = root.paneID
 	}
 
-	cfgPath, err := resolveConfigPath()
+	cfgPath, err := config.ResolvePath(root.configPath)
 	if err != nil {
 		return err
 	}
@@ -88,5 +57,5 @@ func runWindowCommand(cmd *cobra.Command, direction tmux.WindowDirection, option
 	// not break navigation, so use the defaults Load returns alongside its
 	// error, like the root TUI does.
 	cfg, _ := config.Load(cfgPath)
-	return switchRelativeWindow(commandContext(cmd), direction, tmux.WindowSwitchOptions{PaneID: pane, Timeouts: tmuxTimeouts(cfg)})
+	return switchRelativeWindow(commandContext(cmd), direction, tmux.WindowSwitchOptions{PaneID: pane, Timeouts: tmux.TimeoutsFromConfig(cfg)})
 }

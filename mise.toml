@@ -24,7 +24,7 @@ description = "Build build/cmdk with git-derived version metadata."
 run = '''
 version="$(git describe --tags --dirty --always 2>/dev/null || printf 'unknown')"
 mkdir -p build
-go build -trimpath -buildvcs=false -ldflags "-X github.com/jmcampanini/cmdk/cmd.Version=${version}" -o build/cmdk .
+go build -trimpath -buildvcs=false -ldflags "-X github.com/jmcampanini/cmdk/internal/cli.Version=${version}" -o build/cmdk .
 '''
 
 # Shared by test and test-unit; hidden so it does not show up as a target.
@@ -63,7 +63,7 @@ run = '''
 mkdir -p .sandbox
 output=".sandbox/test-e2e.$$.log"
 trap 'rm -f "$output"' EXIT HUP INT TERM
-go test -count=1 -race -v ./e2e >"$output" 2>&1; test_rc=$?
+go test -count=1 -race -v ./internal/e2e >"$output" 2>&1; test_rc=$?
 cat "$output"; cat_rc=$?
 validation_rc=0
 if [ $cat_rc -ne 0 ]; then

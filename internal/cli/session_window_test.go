@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 )
 
 func TestSessionWindowCommandUseDocumentsRequiredPath(t *testing.T) {
-	cmd := newSessionWindowCommand()
+	cmd := newSessionWindowCommand(&rootOptions{})
 	if !strings.Contains(cmd.Use, "<path>") {
 		t.Errorf("Use = %q, want required <path>", cmd.Use)
 	}
@@ -112,7 +112,7 @@ func TestRunSessionWindowCommandNewShellDefaultsToBackground(t *testing.T) {
 	}
 
 	cmd := &cobra.Command{}
-	if err := runSessionWindowCommand(cmd, sessionWindowRequest{path: dir}, sessionWindowOptions{newShell: true}); err != nil {
+	if err := runSessionWindowCommand(&rootOptions{}, cmd, sessionWindowRequest{path: dir}, sessionWindowOptions{newShell: true}); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -142,7 +142,7 @@ func TestRunSessionWindowCommandCommandModePassesArgvUnchanged(t *testing.T) {
 	}
 
 	cmd := &cobra.Command{}
-	if err := runSessionWindowCommand(cmd, sessionWindowRequest{path: dir, commandArgs: wantCommand}, sessionWindowOptions{}); err != nil {
+	if err := runSessionWindowCommand(&rootOptions{}, cmd, sessionWindowRequest{path: dir, commandArgs: wantCommand}, sessionWindowOptions{}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -165,7 +165,7 @@ func TestRunSessionWindowCommandNameOverride(t *testing.T) {
 	}
 
 	cmd := &cobra.Command{}
-	if err := runSessionWindowCommand(cmd, sessionWindowRequest{path: dir, nameSet: true}, sessionWindowOptions{newShell: true, name: "tests"}); err != nil {
+	if err := runSessionWindowCommand(&rootOptions{}, cmd, sessionWindowRequest{path: dir, nameSet: true}, sessionWindowOptions{newShell: true, name: "tests"}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -200,7 +200,7 @@ func TestSessionWindowCommandParsesFlagsOnlyBeforeDashDash(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			got = tmux.SessionWindowOptions{}
-			cmd := newSessionWindowCommand()
+			cmd := newSessionWindowCommand(&rootOptions{})
 			cmd.SetArgs(test.args)
 			if err := cmd.Execute(); err != nil {
 				t.Fatal(err)
@@ -245,7 +245,7 @@ func TestRunSessionWindowCommandThreadsConfiguredWindowNameMaxLength(t *testing.
 	}
 
 	cmd := &cobra.Command{}
-	if err := runSessionWindowCommand(cmd, sessionWindowRequest{path: dir}, sessionWindowOptions{newShell: true}); err != nil {
+	if err := runSessionWindowCommand(&rootOptions{}, cmd, sessionWindowRequest{path: dir}, sessionWindowOptions{newShell: true}); err != nil {
 		t.Fatal(err)
 	}
 	if !called {
@@ -273,7 +273,7 @@ func TestRunSessionWindowCommandDefaultsWindowNameMaxLength(t *testing.T) {
 	}
 
 	cmd := &cobra.Command{}
-	if err := runSessionWindowCommand(cmd, sessionWindowRequest{path: dir}, sessionWindowOptions{newShell: true}); err != nil {
+	if err := runSessionWindowCommand(&rootOptions{}, cmd, sessionWindowRequest{path: dir}, sessionWindowOptions{newShell: true}); err != nil {
 		t.Fatal(err)
 	}
 	if !called {

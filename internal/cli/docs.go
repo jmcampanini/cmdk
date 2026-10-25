@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 	"github.com/jmcampanini/cmdk/internal/config"
 )
 
-func newDocsCommand() *cobra.Command {
+func newDocsCommand(_ *rootOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "docs",
 		Short: "Show configuration reference",

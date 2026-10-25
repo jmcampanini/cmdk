@@ -35,7 +35,7 @@ type Timeouts struct {
 
 // TerminalIO carries the caller-injected streams for terminal-takeover
 // commands (attach-session). Reference os.Stdin/os.Stdout/os.Stderr only at
-// the composition root (the cmd package).
+// the composition root (the cli package).
 type TerminalIO struct {
 	Stdin  io.Reader
 	Stdout io.Writer

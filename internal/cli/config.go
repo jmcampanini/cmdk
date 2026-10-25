@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"fmt"
@@ -18,7 +18,7 @@ type configCommandOptions struct {
 	validatePath   string
 }
 
-func newConfigCommand() *cobra.Command {
+func newConfigCommand(root *rootOptions) *cobra.Command {
 	var options configCommandOptions
 
 	cmd := &cobra.Command{
@@ -31,7 +31,7 @@ See "cmdk docs" for the configuration reference and "cmdk icons" for icon
 aliases.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runConfigCommand(cmd, options)
+			return runConfigCommand(root, cmd, options)
 		},
 	}
 	cmd.Flags().BoolVar(&options.showProvenance, "provenance", false, "include config provenance")
@@ -39,7 +39,7 @@ aliases.`,
 	return cmd
 }
 
-func runConfigCommand(cmd *cobra.Command, options configCommandOptions) error {
+func runConfigCommand(root *rootOptions, cmd *cobra.Command, options configCommandOptions) error {
 	if options.validatePath != "" {
 		if err := config.ValidateFile(options.validatePath); err != nil {
 			return err
@@ -48,7 +48,7 @@ func runConfigCommand(cmd *cobra.Command, options configCommandOptions) error {
 		return err
 	}
 
-	path, err := resolveConfigPath()
+	path, err := config.ResolvePath(root.configPath)
 	if err != nil {
 		return err
 	}

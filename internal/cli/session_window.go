@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"errors"
@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/jmcampanini/cmdk/internal/config"
+	resolver "github.com/jmcampanini/cmdk/internal/session"
 	"github.com/jmcampanini/cmdk/internal/tmux"
 )
 
@@ -26,7 +27,7 @@ type sessionWindowRequest struct {
 
 var createResolvedSessionWindow = tmux.CreateResolvedSessionWindow
 
-func newSessionWindowCommand() *cobra.Command {
+func newSessionWindowCommand(root *rootOptions) *cobra.Command {
 	options := sessionWindowOptions{}
 	var request sessionWindowRequest
 	cmd := &cobra.Command{
@@ -73,7 +74,7 @@ time and tracks it by the returned tmux window_id.`,
 		},
 		PreRunE: requireTmux,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runSessionWindowCommand(cmd, request, options)
+			return runSessionWindowCommand(root, cmd, request, options)
 		},
 	}
 	options.bindFlags(cmd)
@@ -116,12 +117,12 @@ func parseSessionWindowGrammar(cmd *cobra.Command, args []string, options sessio
 	return sessionWindowRequest{path: path, commandArgs: commandArgs, nameSet: nameSet}, nil
 }
 
-func runSessionWindowCommand(cmd *cobra.Command, request sessionWindowRequest, options sessionWindowOptions) error {
-	launchPath, err := validateLaunchDirectory(request.path)
+func runSessionWindowCommand(root *rootOptions, cmd *cobra.Command, request sessionWindowRequest, options sessionWindowOptions) error {
+	launchPath, err := resolver.ValidateLaunchDirectory(request.path)
 	if err != nil {
 		return err
 	}
-	cfgPath, err := resolveConfigPath()
+	cfgPath, err := config.ResolvePath(root.configPath)
 	if err != nil {
 		return err
 	}
@@ -135,7 +136,7 @@ func runSessionWindowCommand(cmd *cobra.Command, request sessionWindowRequest, o
 	}
 	windowName := options.name
 	if !request.nameSet {
-		windowName = defaultWindowNameForLaunchPath(launchPath)
+		windowName = resolver.DefaultWindowNameForLaunchPath(launchPath)
 	}
 
 	_, err = createResolvedSessionWindow(commandContext(cmd), plan, launchPath, tmux.SessionWindowOptions{
@@ -144,7 +145,7 @@ func runSessionWindowCommand(cmd *cobra.Command, request sessionWindowRequest, o
 		Command:       request.commandArgs,
 		Switch:        options.switchWindow,
 		MaxNameLength: cfg.Behavior.WindowNameMaxLength,
-		Timeouts:      tmuxTimeouts(cfg),
+		Timeouts:      tmux.TimeoutsFromConfig(cfg),
 	})
 	return err
 }

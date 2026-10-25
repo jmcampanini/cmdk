@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"bufio"
@@ -11,7 +11,7 @@ import (
 	"github.com/jmcampanini/cmdk/internal/pathfmt"
 )
 
-func newShortenCommand() *cobra.Command {
+func newShortenCommand(root *rootOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "shorten [path]",
 		Short: "Preview display path shortening",
@@ -49,20 +49,22 @@ do not resolve aliases. See "cmdk docs" for the full display config reference.`,
   #   cmdk shorten /Users/me/Code/github.com/acme/project
   #   => …/gh/acme/project`,
 		Args: cobra.MaximumNArgs(1),
-		RunE: runShortenCommand,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runShortenCommand(root, cmd, args)
+		},
 	}
 	cmd.Flags().Int("truncate", 0, "number of rightmost path segments to display; 0 disables (overrides config)")
 	cmd.Flags().String("truncate-symbol", "", "string prepended (with implied trailing /) when truncation occurs (overrides config)")
 	return cmd
 }
 
-func runShortenCommand(cmd *cobra.Command, args []string) error {
+func runShortenCommand(root *rootOptions, cmd *cobra.Command, args []string) error {
 	path, err := shortenInputPath(args)
 	if err != nil {
 		return err
 	}
 
-	cfgPath, err := resolveConfigPath()
+	cfgPath, err := config.ResolvePath(root.configPath)
 	if err != nil {
 		return err
 	}

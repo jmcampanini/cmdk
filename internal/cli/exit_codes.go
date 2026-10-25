@@ -1,8 +1,8 @@
-package cmd
+package cli
 
 import "github.com/spf13/cobra"
 
-func newExitCodesCommand() *cobra.Command {
+func newExitCodesCommand(_ *rootOptions) *cobra.Command {
 	return &cobra.Command{
 		Use:   "exit-codes",
 		Short: "Exit codes and error categories",
