@@ -63,8 +63,10 @@ run = '''
 mkdir -p .sandbox
 output=".sandbox/test-e2e.$$.log"
 trap 'rm -f "$output"' EXIT HUP INT TERM
-go test -count=1 -race -v ./internal/e2e >"$output" 2>&1; test_rc=$?
-cat "$output"; cat_rc=$?
+test_rc=0
+go test -count=1 -race -v ./internal/e2e >"$output" 2>&1 || test_rc=$?
+cat_rc=0
+cat "$output" || cat_rc=$?
 validation_rc=0
 if [ $cat_rc -ne 0 ]; then
   echo "failed to read e2e test output" >&2
