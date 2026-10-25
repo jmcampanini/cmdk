@@ -1,6 +1,6 @@
 # cmdk
 
-cmdk is a keyboard-driven tmux launcher: a fuzzy-filterable popup for switching windows, opening directories, and running configured commands. Only commands written in the config go through a shell; cmdk runs tmux, git, and zoxide with fixed arguments, caps the output it reads from every subprocess, and kills a timed-out subprocess together with its process group.
+cmdk is a keyboard-driven tmux launcher: a fuzzy-filterable popup for switching windows, opening directories, and running configured commands. cmdk starts a shell only for commands written in the config, runs tmux, git, and zoxide without one, caps the output it reads from every subprocess, and kills a timed-out subprocess together with its process group.
 
 
 ## Install
@@ -41,16 +41,16 @@ To upgrade, run `git pull`, rebuild with `mise install && mise run build`, and r
 
 | Invocation | Result |
 | --- | --- |
-| `cmdk --pane-id=#{pane_id}` | Open the launcher in a tmux popup for the current pane. |
-| `cmdk attach [path]` | Attach to a cmdk-managed session. |
+| `cmdk --pane-id=#{pane_id}` | Open the launcher for a pane; the binding below runs it in a tmux popup. |
+| `cmdk attach [path]` | Attach to a cmdk-managed session from outside tmux. |
 | `cmdk session resolve <path>` | Inspect the planned session for a path. |
-| `cmdk session window <path> --new` | Create a window in a cmdk-managed session. |
+| `cmdk session window <path> --new` | Create a shell window in a cmdk-managed session. |
 | `cmdk action run <exact-name>` | Run a configured session-window action. |
 | `cmdk window next` / `cmdk window previous` | Cycle through tmux windows across sessions. |
 
 `cmdk --help`, each command's `--help`, and the help topics `cmdk help exit-codes`, `cmdk docs`, and `cmdk icons` are the canonical reference.
 
-The launcher is the usual entry point. Bind a key in `~/.tmux.conf` to open it in a tmux popup, reload tmux with `tmux source-file ~/.tmux.conf`, then press `prefix + Space` inside any tmux session:
+Bind a key in `~/.tmux.conf` to open the launcher in a tmux popup, reload tmux with `tmux source-file ~/.tmux.conf`, then press `prefix + Space` inside any tmux session:
 
 ```tmux
 bind-key Space display-popup -E "cmdk --pane-id=#{pane_id}"
@@ -60,14 +60,14 @@ bind-key Space display-popup -E "cmdk --pane-id=#{pane_id}"
 ## Required external programs
 
 - `tmux` 3.2 or newer: the launcher and every tmux-backed command run it.
-- `git`: resolving a directory inside a Git repository or worktree to its shared managed session runs it; directories outside a repository never need it.
+- `git`: resolving a repository, worktree, or worktree-container path to its shared managed session runs it.
 - [`zoxide`](https://github.com/ajeetdsouza/zoxide), optional: zoxide-backed directory entries in the launcher come from it.
 - `sh`: commands you configure (`cmd`, `launch_path_cmd`, and picker `source`) run through it.
 
 
 ## Configuration
 
-cmdk reads `$XDG_CONFIG_HOME/cmdk/config.toml`, or `~/.config/cmdk/config.toml` when `XDG_CONFIG_HOME` is unset. `cmdk config --help` shows how to inspect and validate the resolved configuration, and `cmdk docs` is the configuration reference.
+cmdk reads `$XDG_CONFIG_HOME/cmdk/config.toml`, or `~/.config/cmdk/config.toml` when `XDG_CONFIG_HOME` is unset or empty. `cmdk config --help` shows how to inspect and validate the resolved configuration, and `cmdk docs` is the configuration reference.
 
 A minimal config declares one action:
 
