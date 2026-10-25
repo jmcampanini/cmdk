@@ -69,6 +69,15 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
+	// tmux stops the server as soon as its last session closes. Each test ends
+	// its session, so the next test's new-session on the shared socket can
+	// connect to the stopping server and fail with "server exited
+	// unexpectedly". Keeping the empty server alive removes that race.
+	if out, err := tmuxCmd("start-server", ";", "set", "-s", "exit-empty", "off").CombinedOutput(); err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: e2e tests: start tmux server: %v\n%s", err, out)
+		os.Exit(1)
+	}
+
 	code := m.Run()
 	_ = tmuxCmd("kill-server").Run()
 	os.Exit(code)
