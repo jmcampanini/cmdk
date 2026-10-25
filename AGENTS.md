@@ -1,8 +1,9 @@
 ## Build & Verification
 
-- Run tasks with `mise run <task>`; do not call `go`, `golangci-lint`, `tmux`, or similar tools directly.
+- Run tasks with `mise run <task>`; do not call `go`, `golangci-lint`, `markdownlint-cli2`, `tmux`, or similar tools directly.
 - Run `mise run check` before declaring work done.
 - Bump a tool with `mise upgrade --bump <tool>`, run `mise lock`, and commit `mise.toml` and `mise.lock`.
+
 
 ## Documentation
 

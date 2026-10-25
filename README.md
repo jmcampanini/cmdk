@@ -2,6 +2,7 @@
 
 Keyboard-driven tmux launcher: a fuzzy-filterable popup TUI for switching windows, opening directories, and running shell commands.
 
+
 ## Requirements and support
 
 - tmux 3.2 or newer is required for the interactive launcher and tmux-backed commands.
@@ -18,7 +19,9 @@ sudo apt-get install tmux         # Debian or Ubuntu
 
 Use `brew upgrade tmux` on macOS or your Linux package manager's upgrade command when an installed version is older than 3.2.
 
+
 ## Installation
+
 
 ### Homebrew (macOS)
 
@@ -32,6 +35,7 @@ To upgrade to the latest commit:
 ```sh
 brew upgrade --fetch-HEAD cmdk
 ```
+
 
 ### From source (Linux or macOS)
 
@@ -47,6 +51,7 @@ mise run build
 
 To upgrade, run `git pull`, rebuild with `mise install && mise run build`, and replace the binary on your `PATH`.
 
+
 ## Quickstart
 
 Bind a key in `~/.tmux.conf` to launch cmdk in a tmux popup:
@@ -56,6 +61,7 @@ bind-key Space display-popup -E "cmdk --pane-id=#{pane_id}"
 ```
 
 Reload tmux (`tmux source-file ~/.tmux.conf`), then press `prefix + Space` inside any tmux session to open the launcher.
+
 
 ## Reference
 

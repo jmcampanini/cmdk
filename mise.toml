@@ -13,6 +13,10 @@ golangci-lint = "2.14.0"
 # tmux with their platform package manager as the README describes.
 tmux = "3.7c"
 
+# node is pinned only to run markdownlint-cli2 for the lint-markdown task.
+node = "24.21.0"
+"npm:markdownlint-cli2" = "0.24.0"
+
 [env]
 # Go's default GOTOOLCHAIN=auto lets it download and run whatever toolchain
 # go.mod asks for. local pins execution to the Go that mise installed, so
@@ -100,6 +104,10 @@ run = "golangci-lint run ./..."
 description = "Run static analysis with --fix."
 run = "golangci-lint run --fix ./..."
 
+[tasks.lint-markdown]
+description = "Lint tracked Markdown using the shared Markdown rules."
+run = "git ls-files -z -- '*.md' '*.markdown' | xargs -0 markdownlint-cli2"
+
 [tasks.fmt]
 description = "Format Go source files."
 run = "golangci-lint fmt"
@@ -140,7 +148,7 @@ run = "govulncheck ./..."
 # Add report-only tasks here; fixers (fmt, lint-fix, tidy) stay out.
 [tasks.check]
 description = "Run the complete local verification contract."
-depends = ["fmt-check", "tidy-check", "lint", "test", "version-check", "vuln"]
+depends = ["fmt-check", "tidy-check", "lint", "lint-markdown", "test", "version-check", "vuln"]
 
 [tasks.clean]
 description = "Remove build artifacts, coverage files, and the Go test cache."
