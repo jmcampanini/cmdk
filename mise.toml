@@ -10,7 +10,7 @@ golangci-lint = "2.14.0"
 "go:golang.org/x/vuln/cmd/govulncheck" = "1.6.0"
 # tmux is a runtime dependency of cmdk and of its unit and end-to-end tests.
 # Pinning it here gives local and CI runs the same tmux; users still install
-# tmux with their platform package manager as the README describes.
+# tmux with their platform package manager.
 tmux = "3.7c"
 
 # node is pinned only to run markdownlint-cli2 for the lint-markdown task.
