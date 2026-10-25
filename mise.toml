@@ -12,6 +12,8 @@ golangci-lint = "2.14.0"
 # Pinning it here gives local and CI runs the same tmux; users still install
 # tmux with their platform package manager as the README describes.
 tmux = "3.7c"
+
+# node is pinned only to run markdownlint-cli2 for the lint-markdown task.
 node = "24.21.0"
 "npm:markdownlint-cli2" = "0.24.0"
 
