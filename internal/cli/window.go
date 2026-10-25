@@ -42,13 +42,6 @@ func newWindowCommand(root *rootOptions) *cobra.Command {
 }
 
 func runWindowCommand(root *rootOptions, cmd *cobra.Command, direction tmux.WindowDirection, options windowCommandOptions) error {
-	pane := options.paneID
-	if pane == "" {
-		// Also honor the root TUI flag when Cobra accepts it before the subcommand,
-		// but keep this subcommand usable as: cmdk window next --pane-id=%1.
-		pane = root.paneID
-	}
-
 	cfgPath, err := config.ResolvePath(root.configPath)
 	if err != nil {
 		return err
@@ -57,5 +50,5 @@ func runWindowCommand(root *rootOptions, cmd *cobra.Command, direction tmux.Wind
 	// not break navigation, so use the defaults Load returns alongside its
 	// error, like the root TUI does.
 	cfg, _ := config.Load(cfgPath)
-	return switchRelativeWindow(commandContext(cmd), direction, tmux.WindowSwitchOptions{PaneID: pane, Timeouts: tmux.TimeoutsFromConfig(cfg)})
+	return switchRelativeWindow(commandContext(cmd), direction, tmux.WindowSwitchOptions{PaneID: options.paneID, Timeouts: tmux.TimeoutsFromConfig(cfg)})
 }

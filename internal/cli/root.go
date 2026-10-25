@@ -34,12 +34,6 @@ type rootOptions struct {
 	timingsJSON bool
 }
 
-var rootCmd *cobra.Command
-
-func init() {
-	rootCmd = newRootCommand()
-}
-
 func newRootCommand() *cobra.Command {
 	root := &rootOptions{}
 	cmd := &cobra.Command{
@@ -351,7 +345,7 @@ func (m timingsModel) View() tea.View {
 
 // Execute runs the root command and returns its process exit status.
 func Execute() int {
-	if err := rootCmd.Execute(); err != nil {
+	if err := newRootCommand().Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
