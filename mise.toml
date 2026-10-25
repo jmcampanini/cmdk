@@ -8,9 +8,7 @@ lockfile_platforms = ["linux-x64", "macos-arm64"]
 go = "1.27.3"
 golangci-lint = "2.14.0"
 "go:golang.org/x/vuln/cmd/govulncheck" = "1.6.0"
-# tmux is a runtime dependency of cmdk and of its unit and end-to-end tests.
-# Pinning it here gives local and CI runs the same tmux; users still install
-# tmux with their platform package manager.
+# tmux is a runtime dependency of cmdk and of its unit and end-to-end tests. Pinning it here gives local and CI runs the same tmux; users still install tmux with their platform package manager.
 tmux = "3.7c"
 
 # node is pinned only to run markdownlint-cli2 for the lint-markdown task.
@@ -18,9 +16,7 @@ node = "24.21.0"
 "npm:markdownlint-cli2" = "0.24.0"
 
 [env]
-# Go's default GOTOOLCHAIN=auto lets it download and run whatever toolchain
-# go.mod asks for. local pins execution to the Go that mise installed, so
-# mise.toml is the only place the toolchain version is decided.
+# Go's default GOTOOLCHAIN=auto lets it download and run whatever toolchain go.mod asks for. local pins execution to the Go that mise installed, so mise.toml is the only place the toolchain version is decided.
 GOTOOLCHAIN = "local"
 
 [tasks.build]
@@ -57,8 +53,7 @@ echo "CMDK_E2E_STATUS=OPTED_OUT"
 if [ -n "${CI:-}" ]; then echo "required CI rejects the end-to-end opt-out" >&2; exit 1; fi
 '''
 
-# The suite drives build/cmdk, so test-e2e depends on build and tells the
-# suite where the binary is instead of letting it build for itself.
+# The suite drives build/cmdk, so test-e2e depends on build and tells the suite where the binary is instead of letting it build for itself.
 [tasks.test-e2e]
 description = "Run required tmux end-to-end tests and validate their completion markers."
 depends = ["build"]
@@ -143,9 +138,7 @@ fi
 description = "Check dependencies and reachable code for known vulnerabilities."
 run = "govulncheck ./..."
 
-# check is read-only: it must leave the tracked tree unchanged and create
-# nothing outside ignored paths. CI asserts a clean checkout before and after it.
-# Add report-only tasks here; fixers (fmt, lint-fix, tidy) stay out.
+# check is read-only: it must leave the tracked tree unchanged and create nothing outside ignored paths. CI asserts a clean checkout before and after it. Add report-only tasks here; fixers (fmt, lint-fix, tidy) stay out.
 [tasks.check]
 description = "Run the complete local verification contract."
 depends = ["fmt-check", "tidy-check", "lint", "lint-markdown", "test", "version-check", "vuln"]
