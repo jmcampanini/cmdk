@@ -1,8 +1,12 @@
 // Command cmdk launches configurable actions and navigates tmux sessions.
 package main
 
-import "github.com/jmcampanini/cmdk/cmd"
+import (
+	"os"
+
+	"github.com/jmcampanini/cmdk/internal/cli"
+)
 
 func main() {
-	cmd.Execute()
+	os.Exit(cli.Execute())
 }

@@ -195,7 +195,7 @@ type StreamSpec struct {
 	Env []string
 	// Stdin, Stdout, and Stderr are the child's streams, injected by the
 	// caller. Reference os.Stdin/os.Stdout/os.Stderr only at the
-	// composition root (the cmd package), never here or in libraries, so
+	// composition root (the cli package), never here or in libraries, so
 	// streaming stays testable and redirectable. A nil stream reads from
 	// or writes to the null device, per os/exec.
 	Stdin  io.Reader

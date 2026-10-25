@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"bytes"
@@ -16,7 +16,7 @@ import (
 )
 
 func TestSessionResolveCommandUseDocumentsRequiredPath(t *testing.T) {
-	cmd := newSessionResolveCommand()
+	cmd := newSessionResolveCommand(&rootOptions{})
 	if !strings.Contains(cmd.Use, "<path>") {
 		t.Errorf("Use = %q, want required <path>", cmd.Use)
 	}
@@ -65,7 +65,7 @@ func TestRunSessionResolveCommandJSON(t *testing.T) {
 	var buf bytes.Buffer
 	cmd := &cobra.Command{}
 	cmd.SetOut(&buf)
-	if err := runSessionResolveCommand(cmd, dir, sessionResolveOptions{json: true}); err != nil {
+	if err := runSessionResolveCommand(&rootOptions{}, cmd, dir, sessionResolveOptions{json: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -111,7 +111,7 @@ func TestRunSessionResolveCommandUsesCanonicalSessionKey(t *testing.T) {
 	var buf bytes.Buffer
 	cmd := &cobra.Command{}
 	cmd.SetOut(&buf)
-	if err := runSessionResolveCommand(cmd, filepath.Join(linkHome, "project"), sessionResolveOptions{json: true}); err != nil {
+	if err := runSessionResolveCommand(&rootOptions{}, cmd, filepath.Join(linkHome, "project"), sessionResolveOptions{json: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -153,7 +153,7 @@ func TestRunSessionResolveCommandTimesOutGitProbe(t *testing.T) {
 	}
 
 	cmd := &cobra.Command{}
-	err := runSessionResolveCommand(cmd, dir, sessionResolveOptions{json: true})
+	err := runSessionResolveCommand(&rootOptions{}, cmd, dir, sessionResolveOptions{json: true})
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}

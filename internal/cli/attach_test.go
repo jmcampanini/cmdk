@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"context"
@@ -56,7 +56,7 @@ func realAttachPath(t *testing.T, path string) string {
 }
 
 func TestAttachCommandUseDocumentsOptionalPath(t *testing.T) {
-	cmd := newAttachCommand()
+	cmd := newAttachCommand(&rootOptions{})
 	if !strings.Contains(cmd.Use, "[path]") {
 		t.Errorf("Use = %q, want optional [path]", cmd.Use)
 	}
@@ -67,7 +67,7 @@ func TestRunAttachCommandRejectsInsideTmux(t *testing.T) {
 	isInsideTmux = func() bool { return true }
 	t.Cleanup(func() { isInsideTmux = oldInside })
 
-	err := runAttachCommand(&cobra.Command{}, []string{"."})
+	err := runAttachCommand(&rootOptions{}, &cobra.Command{}, []string{"."})
 	if err == nil {
 		t.Fatal("expected inside-tmux error")
 	}
@@ -80,7 +80,7 @@ func TestRunAttachCommandRequiresConfiguredOrExplicitPath(t *testing.T) {
 	useTempConfigHome(t)
 	called := useAttachTestHooks(t, nil)
 
-	err := runAttachCommand(&cobra.Command{}, nil)
+	err := runAttachCommand(&rootOptions{}, &cobra.Command{}, nil)
 	if err == nil {
 		t.Fatal("expected missing startup path error")
 	}
@@ -126,7 +126,7 @@ func TestRunAttachCommandUsesConfiguredStartupPath(t *testing.T) {
 		return nil
 	})
 
-	if err := runAttachCommand(&cobra.Command{}, nil); err != nil {
+	if err := runAttachCommand(&rootOptions{}, &cobra.Command{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !called() {
@@ -159,7 +159,7 @@ func TestRunAttachCommandPathArgOverridesConfiguredStartupPath(t *testing.T) {
 		return nil
 	})
 
-	if err := runAttachCommand(&cobra.Command{}, []string{explicit}); err != nil {
+	if err := runAttachCommand(&rootOptions{}, &cobra.Command{}, []string{explicit}); err != nil {
 		t.Fatal(err)
 	}
 	if !called() {
@@ -191,7 +191,7 @@ func TestRunAttachCommandExpandsHomeInConfiguredStartupPath(t *testing.T) {
 		return nil
 	})
 
-	if err := runAttachCommand(&cobra.Command{}, nil); err != nil {
+	if err := runAttachCommand(&rootOptions{}, &cobra.Command{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !called() {
@@ -221,7 +221,7 @@ func TestRunAttachCommandThreadsConfiguredWindowNameMaxLength(t *testing.T) {
 		return nil
 	})
 
-	if err := runAttachCommand(&cobra.Command{}, nil); err != nil {
+	if err := runAttachCommand(&rootOptions{}, &cobra.Command{}, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !called() {

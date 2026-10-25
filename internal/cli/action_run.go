@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"encoding/json"
@@ -12,7 +12,6 @@ import (
 	"github.com/jmcampanini/cmdk/internal/cmdrun"
 	"github.com/jmcampanini/cmdk/internal/config"
 	"github.com/jmcampanini/cmdk/internal/execute"
-	"github.com/jmcampanini/cmdk/internal/safetext"
 	"github.com/jmcampanini/cmdk/internal/tmux"
 )
 
@@ -49,25 +48,7 @@ var (
 	}
 )
 
-func newActionCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "action",
-		Short: "Run configured actions noninteractively",
-		Long: `Run configured actions without opening the interactive picker.
-
-Only configured root and directory actions whose effective launch mode is
-session-window are supported.`,
-		Args: cobra.NoArgs,
-		RunE: runHelp,
-	}
-	cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
-		return terminalSafeActionRunError(err)
-	})
-	cmd.AddCommand(newActionRunCommand())
-	return cmd
-}
-
-func newActionRunCommand() *cobra.Command {
+func newActionRunCommand(root *rootOptions) *cobra.Command {
 	options := actionRunOptions{}
 	var invocation *actionRunInvocation
 
@@ -123,7 +104,7 @@ Other diagnostics are also written to stderr and return exit status 1. No
 application.`,
 		Args: cobra.ExactArgs(1),
 		PreRunE: func(cmd *cobra.Command, args []string) error {
-			prepared, err := prepareActionRunInvocation(cmd, args[0], options)
+			prepared, err := prepareActionRunInvocation(root, cmd, args[0], options)
 			if err != nil {
 				return terminalSafeActionRunError(err)
 			}
@@ -143,8 +124,8 @@ application.`,
 	return cmd
 }
 
-func prepareActionRunInvocation(cmd *cobra.Command, name string, options actionRunOptions) (actionRunInvocation, error) {
-	cfgPath, err := resolveConfigPath()
+func prepareActionRunInvocation(root *rootOptions, cmd *cobra.Command, name string, options actionRunOptions) (actionRunInvocation, error) {
+	cfgPath, err := config.ResolvePath(root.configPath)
 	if err != nil {
 		return actionRunInvocation{}, err
 	}
@@ -284,25 +265,6 @@ func (e *actionRunSwitchFailureDiagnostic) Error() string {
 
 func (e *actionRunSwitchFailureDiagnostic) Unwrap() error {
 	return e.cause
-}
-
-type actionRunError struct {
-	cause error
-}
-
-func (e *actionRunError) Error() string {
-	return safetext.EscapeTerminalControls(e.cause.Error())
-}
-
-func (e *actionRunError) Unwrap() error {
-	return e.cause
-}
-
-func terminalSafeActionRunError(err error) error {
-	if err == nil {
-		return nil
-	}
-	return &actionRunError{cause: err}
 }
 
 func writeActionRunResult(cmd *cobra.Command, result actionRunResult) error {

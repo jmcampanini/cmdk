@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"errors"
@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/jmcampanini/cmdk/internal/config"
+	resolver "github.com/jmcampanini/cmdk/internal/session"
 	"github.com/jmcampanini/cmdk/internal/tmux"
 )
 
@@ -18,7 +19,7 @@ var (
 	isInsideTmux          = func() bool { return os.Getenv("TMUX") != "" }
 )
 
-func newAttachCommand() *cobra.Command {
+func newAttachCommand(root *rootOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "attach [path]",
 		Short: "Attach to a cmdk-managed tmux session from outside tmux",
@@ -34,18 +35,18 @@ entry point into tmux, not as a nested tmux command.`,
 		Args:    cobra.MaximumNArgs(1),
 		PreRunE: requireTmux,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAttachCommand(cmd, args)
+			return runAttachCommand(root, cmd, args)
 		},
 	}
 	return cmd
 }
 
-func runAttachCommand(cmd *cobra.Command, args []string) error {
+func runAttachCommand(root *rootOptions, cmd *cobra.Command, args []string) error {
 	if isInsideTmux() {
 		return errors.New("cmdk attach cannot run inside tmux; it is intended to enter a cmdk-managed tmux session from outside tmux")
 	}
 
-	cfgPath, err := resolveConfigPath()
+	cfgPath, err := config.ResolvePath(root.configPath)
 	if err != nil {
 		return err
 	}
@@ -63,7 +64,7 @@ func runAttachCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	launchPath, err := validateLaunchDirectory(path)
+	launchPath, err := resolver.ValidateLaunchDirectory(path)
 	if err != nil {
 		return err
 	}
@@ -72,9 +73,9 @@ func runAttachCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	return attachResolvedSession(commandContext(cmd), plan, launchPath, tmux.AttachOptions{
-		WindowName:    defaultWindowNameForLaunchPath(launchPath),
+		WindowName:    resolver.DefaultWindowNameForLaunchPath(launchPath),
 		MaxNameLength: cfg.Behavior.WindowNameMaxLength,
-		Timeouts:      tmuxTimeouts(cfg),
+		Timeouts:      tmux.TimeoutsFromConfig(cfg),
 		Terminal:      tmux.TerminalIO{Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr},
 	})
 }

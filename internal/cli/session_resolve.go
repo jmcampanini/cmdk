@@ -1,4 +1,4 @@
-package cmd
+package cli
 
 import (
 	"encoding/json"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/jmcampanini/cmdk/internal/config"
 	resolver "github.com/jmcampanini/cmdk/internal/session"
 )
 
@@ -14,7 +15,7 @@ type sessionResolveOptions struct {
 	json bool
 }
 
-func newSessionResolveCommand() *cobra.Command {
+func newSessionResolveCommand(root *rootOptions) *cobra.Command {
 	options := sessionResolveOptions{}
 	cmd := &cobra.Command{
 		Use:   "resolve <path>",
@@ -34,15 +35,15 @@ Repo sessions use a path-based session_key so sibling Grove-style worktrees
 path identity.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runSessionResolveCommand(cmd, args[0], options)
+			return runSessionResolveCommand(root, cmd, args[0], options)
 		},
 	}
 	cmd.Flags().BoolVar(&options.json, "json", false, "output the session plan as JSON")
 	return cmd
 }
 
-func runSessionResolveCommand(cmd *cobra.Command, path string, options sessionResolveOptions) error {
-	plan, err := resolveSessionPlanForCommand(cmd, path)
+func runSessionResolveCommand(root *rootOptions, cmd *cobra.Command, path string, options sessionResolveOptions) error {
+	plan, err := resolveSessionPlanForCommand(root, cmd, path)
 	if err != nil {
 		return err
 	}
@@ -69,4 +70,16 @@ func writeSessionPlan(out io.Writer, plan resolver.Plan) error {
 		}
 	}
 	return nil
+}
+
+func resolveSessionPlanForCommand(root *rootOptions, cmd *cobra.Command, path string) (resolver.Plan, error) {
+	cfgPath, err := config.ResolvePath(root.configPath)
+	if err != nil {
+		return resolver.Plan{}, err
+	}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return resolver.Plan{}, fmt.Errorf("loading config: %w", err)
+	}
+	return resolveSessionPlanWithConfig(cmd, path, cfg)
 }

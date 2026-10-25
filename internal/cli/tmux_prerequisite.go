@@ -1,8 +1,6 @@
-package cmd
+package cli
 
 import (
-	"context"
-
 	"github.com/spf13/cobra"
 
 	"github.com/jmcampanini/cmdk/internal/tmux"
@@ -11,9 +9,5 @@ import (
 var checkTmuxPrerequisite = tmux.CheckPrerequisite
 
 func requireTmux(cmd *cobra.Command, _ []string) error {
-	ctx := cmd.Context()
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return checkTmuxPrerequisite(ctx)
+	return checkTmuxPrerequisite(commandContext(cmd))
 }
