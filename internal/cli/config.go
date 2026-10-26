@@ -48,17 +48,13 @@ func runConfigCommand(root *rootOptions, cmd *cobra.Command, options configComma
 		return err
 	}
 
-	path, err := root.configFilePath(cmd)
-	if err != nil {
-		return err
-	}
-	cfg, report, err := config.LoadWithReport(path)
+	loaded, err := root.loadConfig(cmd)
 	if err != nil {
 		return err
 	}
 
-	reporter := configreporter.New(cfg, report)
-	return writeConfigReport(cmd.OutOrStdout(), path, reporter, options.showProvenance)
+	reporter := configreporter.New(loaded.config, loaded.report)
+	return writeConfigReport(cmd.OutOrStdout(), loaded.path, reporter, options.showProvenance)
 }
 
 func writeConfigReport(out io.Writer, path string, reporter configreporter.Reporter[config.Config], showProvenance bool) error {

@@ -24,9 +24,9 @@ func newExitCodesCommand(_ *rootOptions) *cobra.Command {
       selection (for example tmux window creation or exec failure), a
       missing tmux executable or unsupported tmux version when invoking
       tmux-backed functionality, or an internal error. Every command loads
-      the same configuration, so a broken config file exits 1 before any
-      command work runs. Logging setup failures produce a stderr warning and
-      do not cause exit 1.
+      the same configuration, so a broken config file exits 1 whichever
+      command runs. Logging setup failures produce a stderr warning and do
+      not cause exit 1.
 
       Usage errors also exit 1 before any command work runs: an unknown
       command or unexpected operand anywhere in the tree (including operands

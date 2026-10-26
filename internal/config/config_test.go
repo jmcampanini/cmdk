@@ -744,7 +744,7 @@ mutation = "7s"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -773,7 +773,7 @@ matches = "root"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -805,7 +805,7 @@ session_icon = "#81c8be"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -818,7 +818,7 @@ session_icon = "#81c8be"
 }
 
 func TestLoad_MissingFile_ReturnsDefaults(t *testing.T) {
-	cfg, err := Load("/nonexistent/path/config.toml")
+	cfg, _, err := Load("/nonexistent/path/config.toml")
 	if err != nil {
 		t.Fatalf("expected nil error, got: %v", err)
 	}
@@ -832,7 +832,7 @@ func TestLoad_MissingFile_ReturnsDefaults(t *testing.T) {
 }
 
 func TestLoad_DirectoryPathReturnsError(t *testing.T) {
-	cfg, err := Load(t.TempDir())
+	cfg, _, err := Load(t.TempDir())
 	if err == nil {
 		t.Fatal("expected error for directory config path")
 	}
@@ -858,7 +858,7 @@ func TestLoad_MalformedTOML(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err == nil {
 		t.Fatal("expected error for malformed TOML")
 	}
@@ -874,7 +874,7 @@ func TestLoad_EmptyFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -905,7 +905,7 @@ matches = "root"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -930,7 +930,7 @@ fetch = "-1s"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err == nil {
 		t.Fatal("expected validation error")
 	}
@@ -949,7 +949,7 @@ limit = 5
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -968,7 +968,7 @@ min_score = 2.5
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -977,7 +977,7 @@ min_score = 2.5
 	}
 }
 
-func TestLoadWithReport_TracksFileProvenance(t *testing.T) {
+func TestLoad_TracksFileProvenance(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(path, []byte(`
@@ -987,7 +987,7 @@ fetch = "3s"
 		t.Fatal(err)
 	}
 
-	cfg, report, err := LoadWithReport(path)
+	cfg, report, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1006,11 +1006,11 @@ fetch = "3s"
 	}
 }
 
-func TestLoadWithReport_IgnoresConfigEnvOverrides(t *testing.T) {
+func TestLoad_IgnoresConfigEnvOverrides(t *testing.T) {
 	t.Setenv("CMDK_FETCH_TIMEOUT", "5s")
 	t.Setenv("CMDK_WRAP_LIST", "false")
 
-	cfg, report, err := LoadWithReport("/nonexistent/path/config.toml")
+	cfg, report, err := Load("/nonexistent/path/config.toml")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1085,14 +1085,14 @@ limit = 10
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.Sources["fish"].Limit != 10 {
 		t.Errorf("Sources[fish].Limit = %d, want 10", cfg.Sources["fish"].Limit)
 	}
-	if _, ok := cfg.Sources["zoxide"]; !ok {
+	if zoxide, ok := cfg.Sources["zoxide"]; !ok || zoxide != DefaultConfig().Sources["zoxide"] {
 		t.Errorf("Sources = %v, want the zoxide default kept beside the configured fish source", cfg.Sources)
 	}
 }
@@ -1107,12 +1107,10 @@ func TestDefaultPath_XDGOverride(t *testing.T) {
 }
 
 func TestDefaultPath_FallsBackUnlessXDGIsAbsolute(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatal(err)
-	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 	want := filepath.Join(home, ".config", "cmdk", "config.toml")
-	for name, xdg := range map[string]string{"empty": "", "relative": "relative/xdg"} {
+	for name, xdg := range map[string]string{"empty": "", "relative": "relative/xdg", "dot": "."} {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv("XDG_CONFIG_HOME", xdg)
 			if got := DefaultPath(); got != want {
@@ -1174,7 +1172,7 @@ func TestLoad_DisplayRules(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1199,7 +1197,7 @@ shorten_home = ""
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1227,7 +1225,7 @@ truncation_symbol = "…"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1250,7 +1248,7 @@ tmux_session_truncation_symbol = "…"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1272,7 +1270,7 @@ shorten_home = "~"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1379,7 +1377,7 @@ icon = ":nf-dev-github:"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1395,7 +1393,7 @@ func TestLoad_ActionWithUnicodeIcon(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1416,7 +1414,7 @@ matches = "root"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1435,7 +1433,7 @@ wrap_list = false
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1454,7 +1452,7 @@ start_in_filter = false
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1475,7 +1473,7 @@ matches = "root"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1494,7 +1492,7 @@ bell_to_top = false
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1516,7 +1514,7 @@ icon = ":nf-cod-folder_opened:"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1542,7 +1540,7 @@ matches = "dir"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1567,7 +1565,7 @@ fetch = "2s"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1593,7 +1591,7 @@ matches = "dir"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1695,7 +1693,7 @@ func TestLoad_DisplayInlineIconResolution(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tt.toml), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			cfg, err := Load(path)
+			cfg, _, err := Load(path)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -1738,7 +1736,7 @@ func TestLoad_DisplayInvalidInlineIcon(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tt.toml), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			_, err := Load(path)
+			_, _, err := Load(path)
 			if err == nil {
 				t.Fatal("expected error")
 			}
@@ -1759,7 +1757,7 @@ auto_select_single = false
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1786,7 +1784,7 @@ default = "dev"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1829,7 +1827,7 @@ allow_empty = true
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1856,7 +1854,7 @@ text = "Name:"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

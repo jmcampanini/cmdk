@@ -389,15 +389,9 @@ func (c *Config) resolveIcons() error {
 }
 
 // Load loads the effective configuration from the file at path, which may be
-// absent. On error it returns the zero Config.
-func Load(path string) (Config, error) {
-	cfg, _, err := LoadWithReport(path)
-	return cfg, err
-}
-
-// LoadWithReport loads the effective configuration and reports where each
-// value came from. On error it returns the zero Config and an empty report.
-func LoadWithReport(path string) (Config, configloader.LoadReport, error) {
+// absent, and reports where each value came from. On error it returns the
+// zero Config and an empty report.
+func Load(path string) (Config, configloader.LoadReport, error) {
 	if err := validateOptionalRegularFile(path); err != nil {
 		return Config{}, configloader.LoadReport{}, err
 	}

@@ -2,7 +2,9 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -122,5 +124,49 @@ func TestPersistentConfigFlagReachesSubcommands(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "config file not found: "+missing) {
 			t.Errorf("cmdk %s: err = %v, want config file not found", strings.Join(args, " "), err)
 		}
+	}
+}
+
+func TestEveryCommandRejectsInvalidDiscoveredConfig(t *testing.T) {
+	stubTmuxPrerequisite(t, func(context.Context) error { return nil })
+	t.Setenv("TMUX", "")
+	dir := t.TempDir()
+	commands := [][]string{
+		{},
+		{"config"},
+		{"shorten", dir},
+		{"session", "resolve", dir},
+		{"session", "window", dir, "--new"},
+		{"attach", dir},
+		{"action", "run", "example", "--no-switch"},
+		{"window", "next"},
+	}
+	for name, content := range map[string]string{"malformed": "[[[broken", "invalid": "[timeout]\nfetch = '0s'"} {
+		t.Run(name, func(t *testing.T) {
+			xdg := useTempConfigHome(t)
+			path := filepath.Join(xdg, "cmdk", "config.toml")
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			for _, args := range commands {
+				root := newRootCommand()
+				var out bytes.Buffer
+				root.SetOut(&out)
+				root.SetErr(io.Discard)
+				root.SetArgs(args)
+
+				err := root.Execute()
+				if err == nil || !strings.Contains(err.Error(), "load config:") {
+					t.Errorf("cmdk %s: err = %v, want config load error", strings.Join(args, " "), err)
+				}
+				if out.Len() != 0 {
+					t.Errorf("cmdk %s: stdout = %q, want empty", strings.Join(args, " "), out.String())
+				}
+			}
+		})
 	}
 }

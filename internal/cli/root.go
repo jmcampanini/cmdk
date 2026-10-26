@@ -120,11 +120,12 @@ func (root *rootOptions) runRootCommand(cmd *cobra.Command, _ []string) error {
 	}
 
 	stop = tr.Begin("config")
-	cfg, err := root.loadConfig(cmd)
+	loaded, err := root.loadConfig(cmd)
 	if err != nil {
 		stop()
 		return err
 	}
+	cfg := loaded.config
 	zoxideCfg := cfg.Sources["zoxide"]
 	shortenHome := cfg.Display.ShortenHome
 	trunc := pathfmt.Truncation{Length: cfg.Display.TruncationLength, Symbol: cfg.Display.TruncationSymbol}

@@ -125,10 +125,11 @@ application.`,
 }
 
 func prepareActionRunInvocation(root *rootOptions, cmd *cobra.Command, name string, options actionRunOptions) (actionRunInvocation, error) {
-	cfg, err := root.loadConfig(cmd)
+	loaded, err := root.loadConfig(cmd)
 	if err != nil {
 		return actionRunInvocation{}, err
 	}
+	cfg := loaded.config
 
 	action, err := actionrun.ValidateAction(cfg, name)
 	if err != nil {

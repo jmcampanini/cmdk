@@ -72,9 +72,9 @@ func writeSessionPlan(out io.Writer, plan resolver.Plan) error {
 }
 
 func resolveSessionPlanForCommand(root *rootOptions, cmd *cobra.Command, path string) (resolver.Plan, error) {
-	cfg, err := root.loadConfig(cmd)
+	loaded, err := root.loadConfig(cmd)
 	if err != nil {
 		return resolver.Plan{}, err
 	}
-	return resolveSessionPlanWithConfig(cmd, path, cfg)
+	return resolveSessionPlanWithConfig(cmd, path, loaded.config)
 }

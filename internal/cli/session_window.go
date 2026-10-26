@@ -120,10 +120,11 @@ func runSessionWindowCommand(root *rootOptions, cmd *cobra.Command, request sess
 	if err != nil {
 		return err
 	}
-	cfg, err := root.loadConfig(cmd)
+	loaded, err := root.loadConfig(cmd)
 	if err != nil {
 		return err
 	}
+	cfg := loaded.config
 	plan, err := resolveSessionPlanWithConfig(cmd, launchPath, cfg)
 	if err != nil {
 		return err

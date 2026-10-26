@@ -41,9 +41,9 @@ func newWindowCommand(root *rootOptions) *cobra.Command {
 }
 
 func runWindowCommand(root *rootOptions, cmd *cobra.Command, direction tmux.WindowDirection, options windowCommandOptions) error {
-	cfg, err := root.loadConfig(cmd)
+	loaded, err := root.loadConfig(cmd)
 	if err != nil {
 		return err
 	}
-	return switchRelativeWindow(commandContext(cmd), direction, tmux.WindowSwitchOptions{PaneID: options.paneID, Timeouts: tmux.TimeoutsFromConfig(cfg)})
+	return switchRelativeWindow(commandContext(cmd), direction, tmux.WindowSwitchOptions{PaneID: options.paneID, Timeouts: tmux.TimeoutsFromConfig(loaded.config)})
 }
