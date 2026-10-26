@@ -206,7 +206,7 @@ func (c Config) Validate() error {
 
 func validateDeadline(name string, d time.Duration) error {
 	if d == 0 {
-		return fmt.Errorf("timeout.%s must be positive", name)
+		return fmt.Errorf("timeout.%s must be at least 1ms", name)
 	}
 	return validateTimeout(name, d)
 }

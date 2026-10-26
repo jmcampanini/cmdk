@@ -1423,22 +1423,27 @@ func TestE2E_NoConfigFile(t *testing.T) {
 
 func TestE2E_InvalidConfigExitsAtStartup(t *testing.T) {
 	for _, tt := range []struct {
-		name    string
-		content string
-		args    string
+		name         string
+		content      string
+		args         string
+		wantInStderr string
 	}{
-		{name: "malformed discovered file", content: "[[[broken toml"},
-		{name: "empty config flag", args: "--config ''"},
+		{name: "malformed discovered file", content: "[[[broken toml", wantInStderr: "toml"},
+		{name: "empty config flag", args: "--config ''", wantInStderr: "config path cannot be empty"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			xdg := writeConfig(t, tt.content)
+			xdg := t.TempDir()
+			if tt.content != "" {
+				xdg = writeConfig(t, tt.content)
+			}
 			dir := t.TempDir()
 			status := filepath.Join(dir, "status")
 			stdout := filepath.Join(dir, "stdout")
 			stderr := filepath.Join(dir, "stderr")
 			sess := "cmdk-test-" + strings.ReplaceAll(t.Name(), "/", "-")
-			shellCmd := fmt.Sprintf("%s %s > %s 2> %s; echo $? > %s",
-				shellQuoteE2E(binaryPath), tt.args, shellQuoteE2E(stdout), shellQuoteE2E(stderr), shellQuoteE2E(status))
+			shellCmd := fmt.Sprintf("%s %s > %s 2> %s; echo $? > %s.tmp && mv %s.tmp %s",
+				shellQuoteE2E(binaryPath), tt.args, shellQuoteE2E(stdout), shellQuoteE2E(stderr),
+				shellQuoteE2E(status), shellQuoteE2E(status), shellQuoteE2E(status))
 
 			out, err := tmuxCmd("new-session", "-d", "-s", sess,
 				"env", "XDG_CONFIG_HOME="+xdg, "sh", "-c", shellCmd).CombinedOutput()
@@ -1450,14 +1455,23 @@ func TestE2E_InvalidConfigExitsAtStartup(t *testing.T) {
 			if got := waitForFile(t, status, defaultTimeout); got != "1\n" {
 				t.Errorf("exit status = %q, want 1", got)
 			}
-			if got := waitForFile(t, stderr, defaultTimeout); !strings.Contains(got, "config") {
-				t.Errorf("stderr = %q, want a config error", got)
+			if got := readFileE2E(t, stderr); !strings.Contains(got, tt.wantInStderr) {
+				t.Errorf("stderr = %q, want it to mention %q", got, tt.wantInStderr)
 			}
-			if got := waitForFile(t, stdout, defaultTimeout); got != "" {
+			if got := readFileE2E(t, stdout); got != "" {
 				t.Errorf("stdout = %q, want empty", got)
 			}
 		})
 	}
+}
+
+func readFileE2E(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }
 
 func TestE2E_ConfigCommandOrder(t *testing.T) {

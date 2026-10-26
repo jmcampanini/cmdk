@@ -29,7 +29,7 @@ func (root *rootOptions) loadConfig(cmd *cobra.Command) (loadedConfig, error) {
 	}
 	cfg, report, err := config.Load(path)
 	if err != nil {
-		return loadedConfig{}, fmt.Errorf("load config: %w", err)
+		return loadedConfig{}, fmt.Errorf("loading config: %w", err)
 	}
 	return loadedConfig{config: cfg, path: path, report: report}, nil
 }

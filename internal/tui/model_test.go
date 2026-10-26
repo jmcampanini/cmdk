@@ -102,7 +102,7 @@ func TestNewModel_InitReturnsNil(t *testing.T) {
 }
 
 func TestNewModel_AutoThemeDetectionRequestsBackgroundColor(t *testing.T) {
-	m := newTestModel(testItems(), testRegistry()).WithAutoThemeDetection()
+	m := newTestModel(testItems(), testRegistry()).WithAutoThemeDetection(nil)
 	cmd := m.Init()
 	if cmd == nil {
 		t.Fatal("Init() should request background color when auto theme detection is enabled")
@@ -114,7 +114,7 @@ func TestNewModel_AutoThemeDetectionRequestsBackgroundColor(t *testing.T) {
 
 func TestAutoThemeDetection_SwitchesToLightBackground(t *testing.T) {
 	light := theme.Light()
-	m := newTestModel(testItems(), testRegistry()).WithAutoThemeDetection()
+	m := newTestModel(testItems(), testRegistry()).WithAutoThemeDetection(nil)
 
 	result, cmd := m.Update(tea.BackgroundColorMsg{Color: color.White})
 	if cmd != nil {
@@ -144,8 +144,9 @@ func TestAutoThemeDetection_AppliesConfigThemeOverrides(t *testing.T) {
 			Accent:  "#222222",
 		},
 	}
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{Config: cfg}, theme.Default(cfg.Theme.Overrides()), nil, nil).
-		WithAutoThemeDetection()
+	overrides := cfg.Theme.Overrides()
+	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{Config: cfg}, theme.Default(overrides), nil, nil).
+		WithAutoThemeDetection(overrides)
 
 	result, _ := m.Update(tea.BackgroundColorMsg{Color: color.White})
 	m = result.(Model)

@@ -96,6 +96,7 @@ func TestEmptyConfigFlagIsAnError(t *testing.T) {
 		{"--config", "", "config"},
 		{"config", "--config="},
 		{"--config=", "shorten", "/tmp"},
+		{"config", "--validate", ""},
 	} {
 		root := newRootCommand()
 		root.SetOut(io.Discard)
@@ -141,14 +142,22 @@ func TestEveryCommandRejectsInvalidDiscoveredConfig(t *testing.T) {
 		{"action", "run", "example", "--no-switch"},
 		{"window", "next"},
 	}
-	for name, content := range map[string]string{"malformed": "[[[broken", "invalid": "[timeout]\nfetch = '0s'"} {
-		t.Run(name, func(t *testing.T) {
+	tests := []struct {
+		name      string
+		content   string
+		wantInErr string
+	}{
+		{name: "malformed", content: "[[[broken", wantInErr: "toml"},
+		{name: "invalid", content: "[timeout]\nfetch = '0s'", wantInErr: "timeout.fetch"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			xdg := useTempConfigHome(t)
 			path := filepath.Join(xdg, "cmdk", "config.toml")
 			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			if err := os.WriteFile(path, []byte(tt.content), 0o644); err != nil {
 				t.Fatal(err)
 			}
 
@@ -160,8 +169,8 @@ func TestEveryCommandRejectsInvalidDiscoveredConfig(t *testing.T) {
 				root.SetArgs(args)
 
 				err := root.Execute()
-				if err == nil || !strings.Contains(err.Error(), "load config:") {
-					t.Errorf("cmdk %s: err = %v, want config load error", strings.Join(args, " "), err)
+				if err == nil || !strings.Contains(err.Error(), tt.wantInErr) {
+					t.Errorf("cmdk %s: err = %v, want error mentioning %q", strings.Join(args, " "), err, tt.wantInErr)
 				}
 				if out.Len() != 0 {
 					t.Errorf("cmdk %s: stdout = %q, want empty", strings.Join(args, " "), out.String())

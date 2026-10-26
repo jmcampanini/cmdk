@@ -52,43 +52,15 @@ var hexColor = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
 func (c ThemeConfig) Overrides() theme.Overrides {
 	overrides := make(theme.Overrides, len(c))
 	for mode, m := range c {
-		overrides[mode] = theme.ModeOverrides{
-			Tokens: theme.Tokens{
-				Accent:     themeColor(m.Accent),
-				AccentText: themeColor(m.AccentText),
-				Cursor:     themeColor(m.Cursor),
-				Text:       themeColor(m.Text),
-				Muted:      themeColor(m.Muted),
-				Subtle:     themeColor(m.Subtle),
-				SelectedBg: themeColor(m.SelectedBg),
-				InputBg:    themeColor(m.InputBg),
-				MatchBg:    themeColor(m.MatchBg),
-				Info:       themeColor(m.Info),
-				Success:    themeColor(m.Success),
-				Secondary:  themeColor(m.Secondary),
-				Warning:    themeColor(m.Warning),
-				Error:      themeColor(m.Error),
-			},
-			Roles: theme.Roles{
-				WindowIcon:  themeColor(m.Roles.WindowIcon),
-				DirIcon:     themeColor(m.Roles.DirIcon),
-				ActionIcon:  themeColor(m.Roles.ActionIcon),
-				SessionIcon: themeColor(m.Roles.SessionIcon),
-				UnknownIcon: themeColor(m.Roles.UnknownIcon),
-				LoadingIcon: themeColor(m.Roles.LoadingIcon),
-				BellIcon:    themeColor(m.Roles.BellIcon),
-				ErrorIcon:   themeColor(m.Roles.ErrorIcon),
-			},
+		var o theme.ModeOverrides
+		for _, field := range m.colorFields(&o) {
+			if field.value != "" {
+				*field.dst = theme.Color(field.value)
+			}
 		}
+		overrides[mode] = o
 	}
 	return overrides
-}
-
-func themeColor(hex string) color.Color {
-	if hex == "" {
-		return nil
-	}
-	return theme.Color(hex)
 }
 
 func (c ThemeConfig) validate() error {
@@ -98,43 +70,47 @@ func (c ThemeConfig) validate() error {
 		default:
 			return fmt.Errorf("theme.%s is not valid (valid: light, dark)", mode)
 		}
-		for _, field := range m.colorFields("theme." + mode) {
+		var unused theme.ModeOverrides
+		for _, field := range m.colorFields(&unused) {
 			if field.value != "" && !hexColor.MatchString(field.value) {
-				return fmt.Errorf("%s must be a #RRGGBB hex color", field.path)
+				return fmt.Errorf("theme.%s.%s must be a #RRGGBB hex color", mode, field.key)
 			}
 		}
 	}
 	return nil
 }
 
-type themeColorPath struct {
-	path  string
+// themeColorOverride ties one configuration key to its value and to the theme
+// color it overrides, so validation and conversion walk the same list.
+type themeColorOverride struct {
+	key   string
 	value string
+	dst   *color.Color
 }
 
-func (m ThemeModeConfig) colorFields(prefix string) []themeColorPath {
-	return []themeColorPath{
-		{prefix + ".accent", m.Accent},
-		{prefix + ".accent_text", m.AccentText},
-		{prefix + ".cursor", m.Cursor},
-		{prefix + ".text", m.Text},
-		{prefix + ".muted", m.Muted},
-		{prefix + ".subtle", m.Subtle},
-		{prefix + ".selected_bg", m.SelectedBg},
-		{prefix + ".input_bg", m.InputBg},
-		{prefix + ".match_bg", m.MatchBg},
-		{prefix + ".info", m.Info},
-		{prefix + ".success", m.Success},
-		{prefix + ".secondary", m.Secondary},
-		{prefix + ".warning", m.Warning},
-		{prefix + ".error", m.Error},
-		{prefix + ".roles.window_icon", m.Roles.WindowIcon},
-		{prefix + ".roles.dir_icon", m.Roles.DirIcon},
-		{prefix + ".roles.action_icon", m.Roles.ActionIcon},
-		{prefix + ".roles.session_icon", m.Roles.SessionIcon},
-		{prefix + ".roles.unknown_icon", m.Roles.UnknownIcon},
-		{prefix + ".roles.loading_icon", m.Roles.LoadingIcon},
-		{prefix + ".roles.bell_icon", m.Roles.BellIcon},
-		{prefix + ".roles.error_icon", m.Roles.ErrorIcon},
+func (m ThemeModeConfig) colorFields(o *theme.ModeOverrides) []themeColorOverride {
+	return []themeColorOverride{
+		{"accent", m.Accent, &o.Tokens.Accent},
+		{"accent_text", m.AccentText, &o.Tokens.AccentText},
+		{"cursor", m.Cursor, &o.Tokens.Cursor},
+		{"text", m.Text, &o.Tokens.Text},
+		{"muted", m.Muted, &o.Tokens.Muted},
+		{"subtle", m.Subtle, &o.Tokens.Subtle},
+		{"selected_bg", m.SelectedBg, &o.Tokens.SelectedBg},
+		{"input_bg", m.InputBg, &o.Tokens.InputBg},
+		{"match_bg", m.MatchBg, &o.Tokens.MatchBg},
+		{"info", m.Info, &o.Tokens.Info},
+		{"success", m.Success, &o.Tokens.Success},
+		{"secondary", m.Secondary, &o.Tokens.Secondary},
+		{"warning", m.Warning, &o.Tokens.Warning},
+		{"error", m.Error, &o.Tokens.Error},
+		{"roles.window_icon", m.Roles.WindowIcon, &o.Roles.WindowIcon},
+		{"roles.dir_icon", m.Roles.DirIcon, &o.Roles.DirIcon},
+		{"roles.action_icon", m.Roles.ActionIcon, &o.Roles.ActionIcon},
+		{"roles.session_icon", m.Roles.SessionIcon, &o.Roles.SessionIcon},
+		{"roles.unknown_icon", m.Roles.UnknownIcon, &o.Roles.UnknownIcon},
+		{"roles.loading_icon", m.Roles.LoadingIcon, &o.Roles.LoadingIcon},
+		{"roles.bell_icon", m.Roles.BellIcon, &o.Roles.BellIcon},
+		{"roles.error_icon", m.Roles.ErrorIcon, &o.Roles.ErrorIcon},
 	}
 }

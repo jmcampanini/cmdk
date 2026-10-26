@@ -66,6 +66,7 @@ type Model struct {
 	wrapList          bool
 	startInFilter     bool
 	autoDetectTheme   bool
+	themeOverrides    theme.Overrides
 	inline            bool
 }
 
@@ -97,9 +98,12 @@ func NewModel(items []list.Item, paneID string, accumulated []item.Item, registr
 	return m
 }
 
-// WithAutoThemeDetection enables terminal-background detection during initialization.
-func (m Model) WithAutoThemeDetection() Model {
+// WithAutoThemeDetection enables terminal-background detection during
+// initialization; overrides are applied to whichever built-in theme the
+// background selects.
+func (m Model) WithAutoThemeDetection(overrides theme.Overrides) Model {
 	m.autoDetectTheme = true
+	m.themeOverrides = overrides
 	return m
 }
 
@@ -297,7 +301,7 @@ func (m Model) handleBackgroundColor(msg tea.BackgroundColorMsg) Model {
 		return m
 	}
 
-	next := theme.FromBackground(msg.IsDark(), m.ctx.Config.Theme.Overrides())
+	next := theme.FromBackground(msg.IsDark(), m.themeOverrides)
 	log.Debug("theme auto-detected", "theme", next.Name, "background", msg.String())
 	if next.Name == m.theme.Name {
 		return m

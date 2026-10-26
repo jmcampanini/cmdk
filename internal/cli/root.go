@@ -72,7 +72,7 @@ Log file:
 		RunE:               root.runRootCommand,
 	}
 	cmd.Version = Version
-	cmd.PersistentFlags().StringVarP(&root.configPath, "config", "c", "", "path to config file")
+	cmd.PersistentFlags().StringVarP(&root.configPath, "config", "c", "", "path to config file (also validates; exits 1 on error)")
 	cmd.Flags().StringVar(&root.paneID, "pane-id", "", "tmux pane ID")
 	cmd.Flags().StringVar(&root.themeFlag, "theme", "", "color theme (light, dark)")
 	cmd.Flags().BoolVar(&root.timingsFlag, "timings", false, "measure and print startup phase durations")
@@ -182,7 +182,7 @@ func (root *rootOptions) runRootCommand(cmd *cobra.Command, _ []string) error {
 		listItems := item.GroupAndOrder(items, cfg.Behavior.BellToTop)
 		stop()
 
-		t, _, err := root.resolveTheme(tr, cfg)
+		t, _, err := root.resolveTheme(tr, cfg.Theme.Overrides())
 		if err != nil {
 			return err
 		}
@@ -236,7 +236,8 @@ func (root *rootOptions) runRootCommand(cmd *cobra.Command, _ []string) error {
 	listItems := item.GroupAndOrder(initialAll, cfg.Behavior.BellToTop)
 	stop()
 
-	t, autoDetectTheme, err := root.resolveTheme(tr, cfg)
+	themeOverrides := cfg.Theme.Overrides()
+	t, autoDetectTheme, err := root.resolveTheme(tr, themeOverrides)
 	if err != nil {
 		return err
 	}
@@ -257,7 +258,7 @@ func (root *rootOptions) runRootCommand(cmd *cobra.Command, _ []string) error {
 
 	if autoDetectTheme {
 		stop = tr.Begin("theme/auto-detect")
-		model = model.WithAutoThemeDetection()
+		model = model.WithAutoThemeDetection(themeOverrides)
 		stop()
 	}
 
@@ -284,10 +285,10 @@ func (root *rootOptions) runRootCommand(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func (root *rootOptions) resolveTheme(tr trace.Tracer, cfg config.Config) (theme.Theme, bool, error) {
+func (root *rootOptions) resolveTheme(tr trace.Tracer, overrides theme.Overrides) (theme.Theme, bool, error) {
 	autoDetectTheme := root.themeFlag == ""
 	stop := tr.Begin("theme")
-	t, err := theme.Resolve(root.themeFlag, cfg.Theme.Overrides())
+	t, err := theme.Resolve(root.themeFlag, overrides)
 	stop()
 	if err != nil {
 		return theme.Theme{}, false, err
