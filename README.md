@@ -36,8 +36,6 @@ mise run build
 # Copy or symlink ./build/cmdk onto your PATH.
 ```
 
-To upgrade, run `git pull`, rebuild with `mise install && mise run build`, and replace the binary on your `PATH`.
-
 
 ## Representative commands
 
