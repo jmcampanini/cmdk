@@ -48,7 +48,7 @@ func TestParseSessionWindowGrammar(t *testing.T) {
 		{name: "command without delimiter", argv: []string{"dir", "echo", "hi"}, wantErr: "command args must follow --"},
 		{name: "two paths before delimiter", argv: []string{"one", "two", "--", "true"}, wantErr: "exactly one path before --"},
 		{name: "new shell and command", argv: []string{"dir", "--new", "--", "echo"}, wantErr: "--new cannot be used with command args"},
-		{name: "empty name", argv: []string{"dir", "--name=", "--new"}, wantErr: "--name cannot be empty"},
+		{name: "empty name is not a grammar error", argv: []string{"dir", "--name=", "--new"}, want: sessionWindowRequest{path: "dir", nameSet: true}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -167,6 +167,21 @@ func TestRunSessionWindowCommandNameOverride(t *testing.T) {
 	cmd := &cobra.Command{}
 	if err := runSessionWindowCommand(&rootOptions{}, cmd, sessionWindowRequest{path: dir, nameSet: true}, sessionWindowOptions{newShell: true, name: "tests"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRunSessionWindowCommandRejectsEmptyNameBeforeWork(t *testing.T) {
+	forbidTmuxPrerequisite(t)
+	oldCreate := createResolvedSessionWindow
+	t.Cleanup(func() { createResolvedSessionWindow = oldCreate })
+	createResolvedSessionWindow = func(context.Context, resolver.Plan, string, tmux.SessionWindowOptions) (tmux.SessionWindowResult, error) {
+		t.Error("window must not be created with an empty --name")
+		return tmux.SessionWindowResult{}, nil
+	}
+
+	err := runSessionWindowCommand(&rootOptions{}, &cobra.Command{}, sessionWindowRequest{path: t.TempDir(), nameSet: true}, sessionWindowOptions{newShell: true})
+	if err == nil || err.Error() != "--name cannot be empty" {
+		t.Fatalf("err = %v, want --name cannot be empty", err)
 	}
 }
 

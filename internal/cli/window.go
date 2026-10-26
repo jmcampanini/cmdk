@@ -12,30 +12,37 @@ type windowCommandOptions struct {
 
 var switchRelativeWindow = tmux.SwitchRelativeWindow
 
-const windowOrderHelp = `Sessions are ordered by numeric tmux session_id. Windows within a session are
-ordered by numeric window_index. Navigation wraps at the ends.
+// windowOrderHelp is the ordering contract the window group and both of its
+// leaves share.
+const windowOrderHelp = `Sessions are ordered by numeric tmux session_id and the windows within a
+session by window_index; navigation wraps at both ends. --pane-id anchors the
+current window to the pane that invoked the command, which a tmux key binding
+passes as #{pane_id}; without it cmdk uses TMUX_PANE, then tmux's current
+client.`
 
-For tmux key bindings, pass --pane-id=#{pane_id} so cmdk can anchor the current
-window to the pane that invoked the binding:
+// windowLeafHelp is the stream and program contract both leaves share.
+const windowLeafHelp = `Stdout: nothing. Stderr: diagnostics; exit 1 when no tmux server or client
+can be found or the switch fails. The command runs tmux to list windows and
+switch the client, and never prompts.
 
-  bind-key n run-shell "cmdk window next --pane-id=#{pane_id}"
-  bind-key p run-shell "cmdk window previous --pane-id=#{pane_id}"
+` + tmuxPrerequisiteHelp + `
 
-If --pane-id is omitted, cmdk falls back to TMUX_PANE, then tmux's default
-current context.`
+` + configLoadingHelpWithKeys
 
 func newWindowCommand(root *rootOptions) *cobra.Command {
 	options := &windowCommandOptions{}
 	cmd := &cobra.Command{
 		Use:   "window",
 		Short: "Switch between tmux windows",
-		Long: `Switch between tmux windows in a deterministic circular order.
+		Long: `Switch between tmux windows in a fixed circular order.
 
-` + windowOrderHelp,
+` + windowOrderHelp + `
+
+A bare "cmdk window" prints this help and exits 0.`,
 		Args: cobra.NoArgs,
 		RunE: runHelp,
 	}
-	cmd.PersistentFlags().StringVar(&options.paneID, "pane-id", "", "tmux pane ID to use as the current-window anchor")
+	cmd.PersistentFlags().StringVar(&options.paneID, "pane-id", "", "tmux pane that anchors the current window")
 	cmd.AddCommand(newWindowNextCommand(root, options), newWindowPreviousCommand(root, options))
 	return cmd
 }

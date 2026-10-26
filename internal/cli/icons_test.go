@@ -188,39 +188,65 @@ func TestEmitIconsEmptyHint(t *testing.T) {
 	}
 }
 
+func TestRunIconsCommandWithoutFlagsListsEverySet(t *testing.T) {
+	bare := captureStdout(t, func() {
+		if err := runIconsCommand(iconOptions{}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	explicit := captureStdout(t, func() {
+		if err := runIconsCommand(iconOptions{cod: true, dev: true, oct: true}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if bare != explicit {
+		t.Error("bare icons output differs from listing every set")
+	}
+	for _, heading := range []string{"Codicons (cod)", "Devicons (dev)", "Octicons (oct)"} {
+		if !strings.Contains(bare, heading+"\n") {
+			t.Errorf("bare icons output missing heading %q", heading)
+		}
+	}
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	return captureStream(t, &os.Stdout, fn)
+}
+
 func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	return captureStream(t, &os.Stderr, fn)
+}
+
+func captureStream(t *testing.T, stream **os.File, fn func()) string {
 	t.Helper()
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("os.Pipe: %v", err)
 	}
-	orig := os.Stderr
-	os.Stderr = w
-	defer func() { os.Stderr = orig }()
+	orig := *stream
+	*stream = w
+	defer func() { *stream = orig }()
+
+	// Drain while fn writes, so output larger than the pipe buffer cannot
+	// block the writer.
+	type read struct {
+		data []byte
+		err  error
+	}
+	done := make(chan read, 1)
+	go func() {
+		data, err := io.ReadAll(r)
+		done <- read{data: data, err: err}
+	}()
 
 	fn()
 	_ = w.Close()
 
-	buf, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("read pipe: %v", err)
+	result := <-done
+	if result.err != nil {
+		t.Fatalf("read pipe: %v", result.err)
 	}
-	return string(buf)
-}
-
-func TestIconSetCounts(t *testing.T) {
-	counts := iconSetCounts()
-	total := counts["cod"] + counts["dev"] + counts["oct"]
-	if total != len(icon.All()) {
-		t.Errorf("set counts sum to %d, want %d", total, len(icon.All()))
-	}
-	if counts["cod"] == 0 {
-		t.Error("expected non-zero cod count")
-	}
-	if counts["dev"] == 0 {
-		t.Error("expected non-zero dev count")
-	}
-	if counts["oct"] == 0 {
-		t.Error("expected non-zero oct count")
-	}
+	return string(result.data)
 }

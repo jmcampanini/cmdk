@@ -18,26 +18,31 @@ func newSessionResolveCommand(root *rootOptions) *cobra.Command {
 	options := sessionResolveOptions{}
 	cmd := &cobra.Command{
 		Use:   "resolve <path>",
-		Short: "Resolve a path to a cmdk session plan",
-		Long: `Resolve a filesystem path to the cmdk session plan.
+		Short: "Resolve a path to its cmdk session plan",
+		Long: `Resolve a directory to the session plan cmdk would use for it.
 
-The path must exist and be a directory. The resolver classifies the path as a
-repo session or directory session and computes cmdk's logical session_key. This
-command does not create tmux sessions or windows.
+The path must be an existing directory. cmdk runs git under timeout.fetch to
+classify it as a repo session or a directory session. A repo session is keyed
+by the worktree container when the parent directory holds a main, develop, or
+master checkout of the same repository, and otherwise by the repository's own
+top level; a directory session is keyed by the canonical directory. See
+"cmdk help launching". The command reads no tmux state and creates no session
+or window.
 
-Fields:
-  session_kind                 repo or directory
-  session_key                  cmdk grouping key; not tmux #{session_id}
+Stdout: two lines, "session_kind:" (repo or directory) and "session_key:"
+(cmdk's grouping key, not a tmux session ID), or with --json one object with
+the fields session_kind and session_key. Stderr: diagnostics; a path that is
+not a directory or a git failure exits 1. The command never prompts.
 
-Repo sessions use a path-based session_key so sibling Grove-style worktrees
-(main, develop, master) share one cmdk session. Directory sessions use absolute
-path identity.`,
+` + configLoadingHelpWithKeys,
+		Example: `  cmdk session resolve ~/Code/github.com/me/project
+  cmdk session resolve --json .`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runSessionResolveCommand(root, cmd, args[0], options)
 		},
 	}
-	cmd.Flags().BoolVar(&options.json, "json", false, "output the session plan as JSON")
+	cmd.Flags().BoolVar(&options.json, "json", false, "print the plan as JSON")
 	return cmd
 }
 

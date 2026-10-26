@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"strings"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // FieldDoc describes a configuration field's type, meaning, and constraints.
@@ -15,7 +17,10 @@ type FieldDoc struct {
 
 // SectionDoc groups configuration fields with their description and TOML example.
 type SectionDoc struct {
+	// Name is the TOML key the fields live under and the key used by the
+	// documentation test; Table is the header the rendered reference shows.
 	Name        string
+	Table       string
 	Description string
 	Fields      []FieldDoc
 	Example     string
@@ -29,352 +34,269 @@ func themeColorField(name string, description string) FieldDoc {
 
 // Docs returns the configuration reference in its display order.
 func Docs() []SectionDoc {
-	reservedStageKeyValidation := "cannot be empty; must be unique within action; " +
-		"cannot be reserved (" + strings.Join(reservedStageKeys, ", ") +
+	reservedStageKeyValidation := "cannot be empty; must be an identifier (letters, digits, and underscores, " +
+		"not starting with a digit); compared case-insensitively, must be unique within the action " +
+		"and cannot be reserved (" + strings.Join(reservedStageKeys, ", ") +
 		"; session actions also reserve " + strings.Join(sessionActionExtraReservedStageKeys, ", ") + ")"
 
 	return []SectionDoc{
 		{
 			Name:        "startup",
+			Table:       "[startup]",
 			Description: "Defaults for entering a cmdk-managed tmux session from outside tmux.",
 			Fields: []FieldDoc{
 				{
 					Name:        "path",
 					Type:        "string",
-					Description: "Default directory used by \"cmdk attach\" when no path argument is provided. Leading ~/ is expanded to the current user's home directory.",
-					Validation:  "optional; cannot contain control characters; must resolve to an existing directory when cmdk attach is run",
+					Description: "Default directory used by \"cmdk attach\" when no path operand is given. A leading ~/ expands to the current user's home directory.",
+					Validation:  "optional; cannot contain control characters; must resolve to an existing directory when \"cmdk attach\" runs",
 				},
 			},
 			Example: "[startup]\npath = \"~/Code/github.com/me/project\"",
 		},
 		{
 			Name:        "actions",
-			Description: "Actions shown in the launcher. Each action declares which item type\n  it matches, how it launches, and an optional stage pipeline to collect action inputs before execution.",
+			Table:       "[[actions]]",
+			Description: "Actions shown in the launcher. Each action declares which item type it matches, how it launches, and an optional stage pipeline that collects action inputs before it runs. See \"cmdk help templates\" for the template variables cmd and the other template fields accept, and \"cmdk help launching\" for launch modes.",
 			Fields: []FieldDoc{
-				{Name: "name", Type: "string", Description: "Display name in the launcher.", Validation: "cannot be empty"},
-				{Name: "matches", Type: "string", Description: "Item type this action appears for: \"root\" (top-level), \"dir\" (after selecting a directory), or \"session\" (after selecting a tmux session).", Validation: "cannot be empty; must be \"root\", \"dir\", or \"session\""},
-				{Name: "cmd", Type: "string", Description: "Shell command or Go template to run after all stages complete. In session-window mode this is the window payload, not a tmux new-window wrapper.", Validation: "cannot be empty"},
-				{Name: "icon", Type: "string", Description: "Nerdfont icon: alias like :nf-dev-github:, raw glyph, or \\uXXXX escape. Run \"cmdk icons --filter <term>\" to search aliases.", Validation: "if :nf-*: alias, must be in supported set; otherwise must be a single grapheme cluster"},
-				{Name: "launch_mode", Type: "string", Description: "Launch mode: \"detect\" (default), \"session-window\" (create a cmdk-managed tmux window), or \"shell\" (exec in this pane). Detect makes dir actions and actions with launch_path/launch_path_cmd session-window; root/session actions without path fields stay shell.", Validation: "optional; must be \"detect\", \"session-window\", or \"shell\""},
-				{Name: "launch_path", Type: "string", Description: "Path template for the action's effective launch directory. Supports safe leading ~, $VAR, and ${VAR} expansion before Go template rendering; no command substitution, globbing, or word splitting.", Validation: "mutually exclusive with launch_path_cmd; rendered path must resolve to an existing directory"},
-				{Name: "launch_path_cmd", Type: "string", Description: "Shell command template run via sh -c after stages; stdout must be exactly one absolute existing directory path (at most one line of 8 KiB). Use {{sq ...}} around template variables. Runs under timeout.picker. Failures (nonzero exit, timeout, invalid output) open an in-app error screen showing the rendered command, exit code, stdout, and stderr, and write the same details to the log file.", Validation: "mutually exclusive with launch_path; output must be one absolute existing directory path"},
-				{Name: "window_name", Type: "string", Description: "Tmux window name template for session-window actions. Defaults to {{.launch_basename}}. Rendered names longer than behavior.window_name_max_length are end-truncated with a trailing ….", Validation: "only valid for effective session-window actions; rendered name cannot be empty or contain control characters"},
-				{Name: "stages", Type: "array", Description: "Optional pipeline of data-collection stages to run before executing cmd. See STAGES section."},
+				{Name: "name", Type: "string", Description: "Display name in the launcher and the exact name \"cmdk action run\" takes.", Validation: "cannot be empty"},
+				{Name: "matches", Type: "string", Description: "Item type this action appears for: \"root\" (top level), \"dir\" (after selecting a directory), or \"session\" (after selecting a tmux session).", Validation: "cannot be empty; must be \"root\", \"dir\", or \"session\""},
+				{Name: "cmd", Type: "string", Description: "Shell command template to run after all stages complete. In session-window mode this is the window payload, not a tmux new-window wrapper.", Validation: "cannot be empty"},
+				{Name: "icon", Type: "string", Description: "Nerd Font icon: an alias like :nf-dev-github:, a raw glyph, or a \\uXXXX escape. Run \"cmdk icons --filter <term>\" to search aliases.", Validation: "a :nf-*: alias must be in the supported set; anything else must be a single grapheme cluster"},
+				{Name: "launch_mode", Type: "string", Description: "\"detect\" (default), \"session-window\" (create a window in a cmdk-managed tmux session), or \"shell\" (replace the cmdk process in the current pane). detect makes dir actions and actions with launch_path or launch_path_cmd session-window; root and session actions without a path field stay shell.", Validation: "optional; must be \"detect\", \"session-window\", or \"shell\""},
+				{Name: "launch_path", Type: "string", Description: "Path template for the action's launch directory. A leading ~, $VAR, and ${VAR} expand before template rendering; there is no command substitution, globbing, or word splitting.", Validation: "mutually exclusive with launch_path_cmd; the rendered path must resolve to an existing directory"},
+				{Name: "launch_path_cmd", Type: "string", Description: "Shell command template run through sh -c after the stages; its stdout must be exactly one absolute path to an existing directory (at most one line, 8 KiB). Wrap template variables in {{sq ...}}. Runs under timeout.picker. A failure (nonzero exit, timeout, invalid output) opens an error screen in the launcher showing the rendered command, exit status, stdout, and stderr, and writes the same details to the log file.", Validation: "mutually exclusive with launch_path; output must be one absolute existing directory path"},
+				{Name: "window_name", Type: "string", Description: "tmux window name template for session-window actions. Defaults to {{.launch_basename}}. Rendered names longer than behavior.window_name_max_length are end-truncated with a trailing ….", Validation: "only valid when the effective launch mode is session-window; the rendered name cannot be empty or contain control characters"},
+				{Name: "stages", Type: "array", Description: "Optional pipeline of input stages run before cmd. See the stages table below."},
 			},
-			Example: "[[actions]]\nname = \"Yazi\"\nmatches = \"root\"\nlaunch_mode = \"shell\"\ncmd = \"tmux split-window -h yazi\"\nicon = \":nf-cod-folder:\"\n\n[[actions]]\nname = \"Claude\"\nmatches = \"dir\"\ncmd = \"direnv exec {{sq .launch_path}} claude\"\n\n[[actions]]\nname = \"Dotfiles pi\"\nmatches = \"root\"\nlaunch_path = \"$HOME/Code/github.com/me/dotfiles/main\"\ncmd = \"pi\"\n\n[[actions]]\nname = \"Rename Session\"\nmatches = \"session\"\ncmd = \"tmux rename-session -t {{sq .session_id}} {{sq .new_name}}\"\nstages = [\n  { type = \"prompt\", text = \"New name for {{.session_name}}:\", key = \"new_name\" },\n]",
+			Example: "[[actions]]\nname = \"Yazi\"\nmatches = \"root\"\nlaunch_mode = \"shell\"\ncmd = \"tmux split-window -h yazi\"\nicon = \":nf-cod-folder:\"\n\n[[actions]]\nname = \"Claude\"\nmatches = \"dir\"\ncmd = \"direnv exec {{sq .launch_path}} claude\"\n\n[[actions]]\nname = \"Dotfiles pi\"\nmatches = \"root\"\nlaunch_path = \"$HOME/Code/github.com/me/dotfiles/main\"\ncmd = \"pi\"\n\n[[actions]]\nname = \"Rename Session\"\nmatches = \"session\"\ncmd = \"tmux rename-session -t {{sq .session_id}} {{sq .new_name}}\"\nstages = [\n  { type = \"prompt\", text = \"New name:\", key = \"new_name\" },\n]",
 		},
 		{
 			Name:        "stages",
-			Description: "Stages are declared inline within an action's stages array.\n  Each stage collects one action input before the action executes.",
+			Table:       "[[actions]] stages",
+			Description: "Stages are declared inline in an action's stages array. Each stage collects one action input before the action runs; templates read the value as {{.<key>}}.",
 			Fields: []FieldDoc{
-				{Name: "type", Type: "string", Description: "Stage type: \"prompt\" (text input) or \"picker\" (shell command → fuzzy list).", Validation: "must be \"prompt\" or \"picker\""},
-				{Name: "key", Type: "string", Description: "Name of the action input. Templates consume its value as {{.<key>}}.", Validation: reservedStageKeyValidation},
-				{Name: "text", Type: "string", Description: "Prompt label (Go template). Only for type = \"prompt\".", Validation: "required for prompt; forbidden for picker"},
-				{Name: "default", Type: "string", Description: "Default value pre-filled in prompt (Go template). Only for type = \"prompt\"."},
-				{Name: "source", Type: "string", Description: "Shell command run via sh -c that produces newline-separated entries (Go template). Only for type = \"picker\". stdout is capped at 4 MiB and stderr at 64 KiB; stdout beyond the cap fails the source with an error screen instead of showing a partial list.", Validation: "required for picker; forbidden for prompt"},
-				{Name: "delimiter", Type: "string", Description: "Field delimiter for splitting source lines into parts. Only for type = \"picker\". Defaults to \"|\" when display or pass is set.", Validation: "forbidden for prompt"},
-				{Name: "display", Type: "int", Description: "1-based field index to display and match against. 0 = whole line (default). Only for type = \"picker\".", Validation: "forbidden for prompt; cannot be negative"},
-				{Name: "pass", Type: "int", Description: "1-based field index to pass as the stage result value. 0 = whole line (default). Only for type = \"picker\".", Validation: "forbidden for prompt; cannot be negative"},
-				{Name: "allow_empty", Type: "bool", Description: "Allow empty input for prompt stages. When false (default), pressing Enter on an empty or whitespace-only prompt shows an error. Only for type = \"prompt\".", Validation: "forbidden for picker"},
+				{Name: "type", Type: "string", Description: "\"prompt\" (text input) or \"picker\" (shell command output shown as a fuzzy list).", Validation: "must be \"prompt\" or \"picker\""},
+				{Name: "key", Type: "string", Description: "Name of the action input.", Validation: reservedStageKeyValidation},
+				{Name: "text", Type: "string", Description: "Prompt label template. Only for type = \"prompt\".", Validation: "required for prompt; forbidden for picker"},
+				{Name: "default", Type: "string", Description: "Default value template pre-filled in the prompt. Only for type = \"prompt\".", Validation: "forbidden for picker"},
+				{Name: "source", Type: "string", Description: "Shell command template run through sh -c that prints newline-separated entries. Only for type = \"picker\". stdout is capped at 4 MiB and stderr at 64 KiB; stdout beyond the cap fails the source with an error screen instead of a partial list.", Validation: "required for picker; forbidden for prompt"},
+				{Name: "delimiter", Type: "string", Description: "Field delimiter that splits each source line into parts. Only for type = \"picker\". Defaults to \"|\" when display or pass is set.", Validation: "forbidden for prompt"},
+				{Name: "display", Type: "int", Description: "1-based field shown and matched in the list; 0 (default) uses the whole line. Only for type = \"picker\".", Validation: "forbidden for prompt; cannot be negative"},
+				{Name: "pass", Type: "int", Description: "1-based field passed as the stage's value; 0 (default) passes the whole line. Only for type = \"picker\".", Validation: "forbidden for prompt; cannot be negative"},
+				{Name: "allow_empty", Type: "bool", Description: "Accept an empty prompt value. When false (default), Enter on an empty or whitespace-only prompt shows an error. Only for type = \"prompt\".", Validation: "forbidden for picker"},
 			},
-			Example: "stages = [\n  { type = \"prompt\", text = \"Branch name:\", key = \"branch\", default = \"feature/\" },\n  { type = \"picker\", source = \"find {{.path}} -type f\", key = \"file\" },\n  { type = \"picker\", source = \"printf 'Alice|alice@co\\nBob|bob@co'\", key = \"user\", delimiter = \"|\", display = 1, pass = 2 },\n]",
+			Example: "stages = [\n  { type = \"prompt\", text = \"Branch:\", key = \"branch\", default = \"feat/\" },\n  { type = \"picker\", source = \"find {{sq .path}} -type f\", key = \"file\" },\n  { type = \"picker\", source = \"cat users.psv\", key = \"user\", pass = 2 },\n]",
 		},
 		{
 			Name:        "behavior",
-			Description: "Global behavior settings.",
+			Table:       "[behavior]",
+			Description: "Launcher navigation and tmux window naming.",
 			Fields: []FieldDoc{
-				{Name: "auto_select_single", Type: "bool", Description: "Skip the action list when only one action matches. Default: true."},
-				{Name: "bell_to_top", Type: "bool", Description: "Sort tmux windows with bell activity above normal items, after errors and loading placeholders. Default: true."},
-				{Name: "wrap_list", Type: "bool", Description: "Wrap cursor to the opposite end when navigating past the first or last item. Default: true."},
-				{Name: "start_in_filter", Type: "bool", Description: "Open lists in filter mode, ready for typing. When false, lists open in browse mode; press / to filter. Default: true."},
-				{Name: "inline_actions", Type: "bool", Description: "Expand directory actions inline in the root list instead of requiring drill-down. Each directory gets one entry per action, displayed as \"path » action\". Default: false."},
-				{Name: "window_name_max_length", Type: "int", Description: "Maximum length in characters for tmux window names created by cmdk; longer names are end-truncated with a trailing …, which counts toward the limit. Applies to default names, --name values, and rendered window_name templates. 0 disables truncation. Default: 20.", Validation: "cannot be negative"},
+				{Name: "auto_select_single", Type: "bool", Description: "Skip the action list when only one action matches."},
+				{Name: "bell_to_top", Type: "bool", Description: "Sort tmux windows with bell activity above normal items, after errors and loading placeholders."},
+				{Name: "wrap_list", Type: "bool", Description: "Wrap the cursor to the opposite end when moving past the first or last item."},
+				{Name: "start_in_filter", Type: "bool", Description: "Open lists in filter mode, ready for typing. When false, lists open in browse mode and / starts filtering."},
+				{Name: "inline_actions", Type: "bool", Description: "Expand directory actions inline in the root list instead of requiring drill-down. Each directory gets one entry per action, shown as \"path » action\"."},
+				{Name: "window_name_max_length", Type: "int", Description: "Maximum length in characters of tmux window names cmdk creates; longer names are end-truncated with a trailing …, which counts toward the limit. Applies to default names, --name values, and rendered window_name templates. 0 disables truncation.", Validation: "cannot be negative"},
 			},
 			Example: "[behavior]\nauto_select_single = false\nbell_to_top = true\nwrap_list = false\nstart_in_filter = true\ninline_actions = false\nwindow_name_max_length = 20",
 		},
 		{
 			Name:        "theme",
-			Description: "Per-mode color overrides. cmdk starts from the active built-in theme\n  (light = Catppuccin Latte, dark = Catppuccin Frappe) and applies\n  [theme.light] or [theme.dark] overrides. Empty --theme auto-detects\n  light/dark from the terminal background when supported. cmdk does not\n  paint a full-screen background; the terminal/tmux popup background remains visible.\n\n  To apply an arbitrary palette:\n  1. Pick the table for the palette appearance: [theme.dark] for dark\n     palettes or [theme.light] for light palettes. Pass --theme=dark or\n     --theme=light when auto-detection is unreliable.\n  2. Fill the semantic tokens from the source palette: accent = primary\n     accent; accent_text = a base/background color that contrasts with accent;\n     cursor = cursor or secondary accent; text = main foreground; muted =\n     comments/overlay text; subtle = divider or dim surface; selected_bg =\n     selection surface; input_bg = input/background surface; match_bg =\n     low-contrast highlight, often a surface tinted toward accent; info = blue;\n     success = green; secondary = teal/cyan; warning = yellow/orange; error = red.\n  3. Leave roles unset unless a specific icon needs to differ. Roles derive\n     from semantic tokens: window <- accent, dir <- info, action <- success,\n     session <- secondary, unknown/loading <- muted, bell <- warning, error <- error.\n  4. Use #RRGGBB hex values only and validate with\n     cmdk config --validate /path/to/config.toml.",
+			Table:       "[theme.light] and [theme.dark]",
+			Description: "Per-mode color overrides. cmdk starts from the active built-in theme (light is Catppuccin Latte, dark is Catppuccin Frappe) and applies [theme.light] or [theme.dark] on top. See \"cmdk --help\" for how --theme and --color select the mode. cmdk does not paint a full-screen background; the terminal or tmux popup background stays visible.\n\nTo apply another palette:\n1. Pick the table for the palette's appearance: [theme.dark] for dark palettes or [theme.light] for light ones. Pass --theme=dark or --theme=light when auto-detection is unreliable.\n2. Fill the tokens from the source palette: accent = primary accent; accent_text = a base color that contrasts with accent; cursor = cursor or secondary accent; text = main foreground; muted = comment or overlay text; subtle = divider or dim surface; selected_bg = selection surface; input_bg = input surface; match_bg = low-contrast highlight, often a surface tinted toward accent; info = blue; success = green; secondary = teal or cyan; warning = yellow or orange; error = red.\n3. Leave roles unset unless one icon needs to differ. Roles derive from the tokens: window from accent, dir from info, action from success, session from secondary, unknown and loading from muted, bell from warning, error from error.\n4. Use #RRGGBB values only and check the file with \"cmdk config --validate <path>\".",
 			Fields: []FieldDoc{
-				themeColorField("accent", "Primary accent for the cmdk badge. Window icons derive from this unless roles.window_icon is set."),
-				themeColorField("accent_text", "Text color used on top of accent backgrounds, such as the cmdk badge."),
+				themeColorField("accent", "Primary accent for the cmdk badge. Window icons derive from it unless roles.window_icon is set."),
+				themeColorField("accent_text", "Text color on accent backgrounds, such as the cmdk badge."),
 				themeColorField("cursor", "Filter input cursor color."),
 				themeColorField("text", "Primary item and active-filter text color."),
-				themeColorField("muted", "Muted/status text color. Unknown, loading, and picker icons derive from this unless role overrides are set."),
-				themeColorField("subtle", "Subtle divider, count, and inactive pagination color."),
-				themeColorField("selected_bg", "Selected row background color."),
-				themeColorField("input_bg", "Filter input background color."),
-				themeColorField("match_bg", "Background color for fuzzy-match highlights."),
-				themeColorField("info", "Informational color. Directory icons derive from this unless roles.dir_icon is set."),
-				themeColorField("success", "Success/action color. Action icons derive from this unless roles.action_icon is set."),
-				themeColorField("secondary", "Secondary accent. Session icons derive from this unless roles.session_icon is set."),
-				themeColorField("warning", "Warning color. Bell icons derive from this unless roles.bell_icon is set."),
-				themeColorField("error", "Error text color. Error icons derive from this unless roles.error_icon is set."),
-				themeColorField("roles.window_icon", "Optional explicit color for tmux window icons."),
-				themeColorField("roles.dir_icon", "Optional explicit color for directory icons."),
-				themeColorField("roles.action_icon", "Optional explicit color for action icons."),
-				themeColorField("roles.session_icon", "Optional explicit color for tmux session icons."),
-				themeColorField("roles.unknown_icon", "Optional explicit color for unknown item and picker icons."),
-				themeColorField("roles.loading_icon", "Optional explicit color for loading placeholder icons."),
-				themeColorField("roles.bell_icon", "Optional explicit color for tmux bell icons."),
-				themeColorField("roles.error_icon", "Optional explicit color for error item icons."),
+				themeColorField("muted", "Muted and status text color. Unknown, loading, and picker icons derive from it unless role overrides are set."),
+				themeColorField("subtle", "Divider, count, and inactive pagination color."),
+				themeColorField("selected_bg", "Selected row background."),
+				themeColorField("input_bg", "Filter input background."),
+				themeColorField("match_bg", "Background of fuzzy-match highlights."),
+				themeColorField("info", "Informational color. Directory icons derive from it unless roles.dir_icon is set."),
+				themeColorField("success", "Success and action color. Action icons derive from it unless roles.action_icon is set."),
+				themeColorField("secondary", "Secondary accent. Session icons derive from it unless roles.session_icon is set."),
+				themeColorField("warning", "Warning color. Bell icons derive from it unless roles.bell_icon is set."),
+				themeColorField("error", "Error text color. Error icons derive from it unless roles.error_icon is set."),
+				themeColorField("roles.window_icon", "Explicit color for tmux window icons."),
+				themeColorField("roles.dir_icon", "Explicit color for directory icons."),
+				themeColorField("roles.action_icon", "Explicit color for action icons."),
+				themeColorField("roles.session_icon", "Explicit color for tmux session icons."),
+				themeColorField("roles.unknown_icon", "Explicit color for unknown item and picker icons."),
+				themeColorField("roles.loading_icon", "Explicit color for loading placeholder icons."),
+				themeColorField("roles.bell_icon", "Explicit color for tmux bell icons."),
+				themeColorField("roles.error_icon", "Explicit color for error item icons."),
 			},
-			Example: "[theme.dark]\n# Catppuccin Frappe-style semantic mapping. For another dark theme,\n# replace these with that palette's equivalent slots.\naccent = \"#ca9ee6\"      # mauve / primary accent\naccent_text = \"#303446\" # base/background that contrasts with accent\ncursor = \"#babbf1\"      # lavender / cursor\ntext = \"#c6d0f5\"        # main foreground\nmuted = \"#838ba7\"       # comments / overlay text\nsubtle = \"#626880\"      # divider / dim surface\nselected_bg = \"#51576d\" # selected row surface\ninput_bg = \"#414559\"    # input/background surface\nmatch_bg = \"#5b4b8a\"    # low-contrast accent-tinted highlight\ninfo = \"#8caaee\"        # blue\nsuccess = \"#a6d189\"     # green\nsecondary = \"#81c8be\"   # teal/cyan\nwarning = \"#e5c890\"     # yellow/orange\nerror = \"#e78284\"       # red\n\n# Optional: override roles only when an icon should break derivation.\n[theme.dark.roles]\n# session_icon = \"#81c8be\"",
+			Example: "[theme.dark]\n# Catppuccin Frappe-style mapping. For another dark theme, replace\n# these with that palette's equivalent slots.\naccent = \"#ca9ee6\"      # mauve, primary accent\naccent_text = \"#303446\" # base that contrasts with accent\ncursor = \"#babbf1\"      # lavender\ntext = \"#c6d0f5\"        # main foreground\nmuted = \"#838ba7\"       # comments, overlay text\nsubtle = \"#626880\"      # divider, dim surface\nselected_bg = \"#51576d\" # selected row surface\ninput_bg = \"#414559\"    # input surface\nmatch_bg = \"#5b4b8a\"    # low-contrast accent-tinted highlight\ninfo = \"#8caaee\"        # blue\nsuccess = \"#a6d189\"     # green\nsecondary = \"#81c8be\"   # teal\nwarning = \"#e5c890\"     # yellow\nerror = \"#e78284\"       # red\n\n# Override a role only when an icon should break derivation.\n[theme.dark.roles]\n# session_icon = \"#81c8be\"",
 		},
 		{
 			Name:        "timeout",
-			Description: "Timeouts for external commands cmdk runs.",
+			Table:       "[timeout]",
+			Description: "Deadlines for the external commands cmdk runs. Values are Go duration strings such as 500ms, 2s, or 1m.",
 			Fields: []FieldDoc{
-				{Name: "fetch", Type: "duration", Description: "Max wait for read-only queries that populate lists (tmux list commands, git probes, zoxide). Queries always run under a deadline. Accepts Go duration strings: ms, s, m, h.", Validation: "must be >= 1ms"},
-				{Name: "picker", Type: "duration", Description: "Max wait for picker stage source commands and launch_path_cmd commands. Zero means no timeout; with no timeout, a hanging command holds the launcher until it exits or cmdk is signaled.", Validation: "cannot be negative; if non-zero, must be >= 1ms"},
-				{Name: "mutation", Type: "duration", Description: "Max wait for state-changing tmux commands (new-session, new-window, set-option, switch-client). Mutations always run under a deadline so a wedged tmux server cannot hang cmdk. Attaching to a session is not a mutation and never times out.", Validation: "must be >= 1ms"},
+				{Name: "fetch", Type: "duration", Description: "Longest wait for read-only queries that populate lists and resolve sessions (tmux list commands, git probes, zoxide). Queries always run under a deadline.", Validation: "must be at least 1ms"},
+				{Name: "picker", Type: "duration", Description: "Longest wait for picker stage source commands and launch_path_cmd. Zero means no deadline, so a hanging command holds the launcher until it exits or cmdk is signaled.", Validation: "cannot be negative; when nonzero, must be at least 1ms"},
+				{Name: "mutation", Type: "duration", Description: "Longest wait for state-changing tmux commands (new-session, new-window, set-option, switch-client). Mutations always run under a deadline so a wedged tmux server cannot hang cmdk. Attaching to a session is not a mutation and never times out.", Validation: "must be at least 1ms"},
 			},
-			Example: "[timeout]\nfetch = \"5s\"    # e.g. 500ms, 2s, 1m\npicker = \"2s\"\nmutation = \"5s\"",
+			Example: "[timeout]\nfetch = \"5s\"\npicker = \"2s\"\nmutation = \"5s\"",
 		},
 		{
 			Name:        "sources",
-			Description: "Per-source tuning. Available sources: zoxide.",
+			Table:       "[sources.zoxide]",
+			Description: "Per-source tuning. zoxide is the only configurable source.",
 			Fields: []FieldDoc{
-				{Name: "limit", Type: "int", Description: "Max results; 0 = unlimited.", Validation: "cannot be negative"},
-				{Name: "min_score", Type: "float64", Description: "Minimum score filter; 0 = disabled.", Validation: "cannot be negative"},
+				{Name: "limit", Type: "int", Description: "Maximum number of entries; 0 means unlimited.", Validation: "cannot be negative"},
+				{Name: "min_score", Type: "float", Description: "Lowest zoxide score an entry needs; 0 disables the filter.", Validation: "cannot be negative"},
 			},
 			Example: "[sources.zoxide]\nlimit = 5\nmin_score = 2.5",
 		},
 		{
 			Name:        "display",
-			Description: "Path display formatting. Most string values support inline Nerdfont icon\n  aliases (e.g. :nf-dev-github:) which are resolved to glyphs at load time.",
+			Table:       "[display]",
+			Description: "Path display formatting. String values support inline Nerd Font icon aliases such as :nf-dev-github:, which resolve to glyphs at load time. Preview the result with \"cmdk shorten\".",
 			Fields: []FieldDoc{
-				{Name: "shorten_home", Type: "string", Description: "Replace $HOME prefix in display paths; empty string disables. Supports icon aliases."},
-				{Name: "truncation_length", Type: "int", Description: "Number of rightmost path segments to display for directory/path rows; 0 disables. Paths with this many or fewer segments are left unchanged. Applied after home shortening and rules.", Validation: "cannot be negative"},
-				{Name: "truncation_symbol", Type: "string", Description: "String prepended (with an implied trailing /) when directory/path truncation occurs. Empty string means no prefix. For example, \":nf-cod-ellipsis:\" produces \"\uea7c/foo/bar\". Supports icon aliases."},
-				{Name: "tmux_session_truncation_length", Type: "int", Description: "Number of rightmost path segments to display for tmux session keys and window owner labels; 0 disables. Uses shorten_home and rules before truncating. Default: 2.", Validation: "cannot be negative"},
-				{Name: "tmux_session_truncation_symbol", Type: "string", Description: "String prepended (with an implied trailing /) when tmux session key truncation occurs. Empty string means no prefix. Supports icon aliases."},
-				{Name: "rules", Type: "map[string]string", Description: "Literal substring replacements applied to display paths, including tmux session keys. Keys are substrings to match, values are replacements. Replacement values support icon aliases; match keys do not.", Validation: "match key cannot be empty"},
+				{Name: "shorten_home", Type: "string", Description: "Replacement for the $HOME prefix in display paths; an empty string disables it."},
+				{Name: "truncation_length", Type: "int", Description: "Number of rightmost path segments to show for directory rows; 0 disables truncation. Paths with this many or fewer segments are unchanged. Applied after home shortening and rules.", Validation: "cannot be negative"},
+				{Name: "truncation_symbol", Type: "string", Description: "Prefix (with an implied trailing /) added when a directory path is truncated. An empty string adds no prefix. For example \":nf-cod-ellipsis:\" renders \"/foo/bar\"."},
+				{Name: "tmux_session_truncation_length", Type: "int", Description: "Number of rightmost path segments to show for tmux session keys and window owner labels; 0 disables truncation. shorten_home and rules apply first.", Validation: "cannot be negative"},
+				{Name: "tmux_session_truncation_symbol", Type: "string", Description: "Prefix (with an implied trailing /) added when a tmux session key is truncated. An empty string adds no prefix."},
+				{Name: "rules", Type: "table of string to string", Description: "Literal substring replacements applied to display paths, including tmux session keys. Keys are the substrings to match and values their replacements. Values support icon aliases; keys do not.", Validation: "a match key cannot be empty"},
 			},
 			Example: "[display]\nshorten_home = \"~\"\ntruncation_length = 3\ntruncation_symbol = \":nf-cod-ellipsis:\"\ntmux_session_truncation_length = 2\ntmux_session_truncation_symbol = \"\"\n\n[display.rules]\n\"github.com\" = \":nf-dev-github:gh\"\n\"~/Code\" = \":nf-cod-folder:Code\"",
 		},
 	}
 }
 
-// RenderHelp renders the configuration reference with defaults and template guidance.
-func RenderHelp() string {
+// referenceWidth is the widest help line cmdk renders, so the reference reads
+// in a default terminal without wrapping mid-word.
+const referenceWidth = 80
+
+// RenderReference renders every configuration key with its meaning,
+// constraints, and default as wrapped help text for "cmdk config --help".
+func RenderReference() string {
 	defaults := DefaultConfig()
-	docs := Docs()
 
 	var b strings.Builder
-	b.WriteString("CONFIGURATION REFERENCE\n\n")
-	b.WriteString("Config file: $XDG_CONFIG_HOME/cmdk/config.toml\n")
-	b.WriteString("    default: ~/.config/cmdk/config.toml when XDG_CONFIG_HOME is unset,\n")
-	b.WriteString("             empty, or not an absolute path\n")
-	for _, section := range docs {
+	for i, section := range Docs() {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(section.Table)
 		b.WriteString("\n")
-		b.WriteString(strings.ToUpper(section.Name))
-		b.WriteString("\n")
-		fmt.Fprintf(&b, "  %s\n\n", section.Description)
+		writeWrapped(&b, section.Description, "  ")
 
 		for _, field := range section.Fields {
-			def := defaultValue(defaults, section.Name, field.Name)
-			if def != "" {
-				fmt.Fprintf(&b, "  %-14s %s (default: %s)\n", field.Name, field.Type, def)
-			} else {
-				fmt.Fprintf(&b, "  %-14s %s\n", field.Name, field.Type)
+			b.WriteString("\n")
+			fmt.Fprintf(&b, "  %s  %s", field.Name, field.Type)
+			if def := defaultValue(defaults, section.Name, field.Name); def != "" {
+				fmt.Fprintf(&b, " (default %s)", def)
 			}
-			fmt.Fprintf(&b, "      %s\n", field.Description)
+			b.WriteString("\n")
+			writeWrapped(&b, field.Description, "      ")
 			if field.Validation != "" {
-				fmt.Fprintf(&b, "      Constraint: %s\n", field.Validation)
+				writeWrapped(&b, "Constraint: "+field.Validation+".", "      ")
 			}
 		}
 
 		if section.Example != "" {
 			b.WriteString("\n  Example:\n")
 			for line := range strings.SplitSeq(section.Example, "\n") {
-				fmt.Fprintf(&b, "      %s\n", line)
+				if line == "" {
+					b.WriteString("\n")
+					continue
+				}
+				fmt.Fprintf(&b, "    %s\n", line)
 			}
 		}
 	}
-
-	fmt.Fprint(&b, `
-TEMPLATE VARIABLES
-  Action commands and stage config fields support Go text/template syntax.
-
-  Available variables (from stack):
-      {{.path}}           directory path (for dir-matching actions)
-      {{.pane_id}}        invoking tmux pane ID (from --pane-id in the TUI; resolved from the current client by action run; unavailable with action run --no-switch)
-      {{.session_id}}     stable tmux session ID (from window or session items)
-      {{.session_key}}    cmdk-managed canonical session path when present (from window or session items)
-      {{.session_name}}   display-safe tmux session name (from window or session items)
-      {{.window_id}}      stable tmux window ID (from window items in the selection stack)
-      {{.window_index}}   tmux window index (from window items in the selection stack)
-      {{.window_name}}    display-safe tmux window name (from window items in the selection stack)
-      {{.launch_path}}    final validated launch directory (final cmd/window_name only)
-      {{.launch_basename}} base name of launch_path (final cmd/window_name only)
-      {{.session_attached}} tmux attached client count (from session items)
-      {{.session_display}}  display string for the selected session
-      {{.session_kind}}     session classification; "external" in this phase
-      {{.session_windows}}  tmux window count (from session items)
-      {{.<key>}}          action input named by a stage's key field
-
-  Available functions:
-      {{sq .path}}     shell-safe single-quoting
-
-  Security: variables such as path, session_name, and action inputs
-  come from external sources (tmux, zoxide, user input) and may
-  contain shell metacharacters. session_name renders tabs and newlines as
-  display glyphs (⇥, ↵), but it is not a stable tmux target and is not
-  shell-safe. session_key is a path-like grouping key for cmdk-managed
-  sessions, not a tmux target. Use session_id for tmux targets, and wrap
-  command arguments with {{sq .var}}, e.g. {{sq .session_name}}, not
-  {{.session_name}}. Built-in
-  built-in session switch and child-window actions target by session_id and
-  shell-quote the tmux target.
-
-  Command environment: shell-mode final commands and launch_path_cmd commands
-  run with a clean CMDK_* namespace. cmdk removes inherited CMDK_* variables
-  and sets CMDK_* variables for data available to that command, such as
-  CMDK_PATH, CMDK_PANE_ID, and CMDK_LAUNCH_PATH when available.
-
-  Session-window actions do not pass action input data through tmux
-  environment variables. Payload commands in session-window mode should use
-  template variables such as {{.launch_path}} in cmd. Interactive
-  session-window shells do not receive action-specific CMDK_* variables from
-  cmdk.
-
-ACTION RUN
-  cmdk action run <exact-name> [--no-switch] noninteractively runs a configured
-  action by its exact, case-sensitive name. No match is an error; multiple
-  configured actions with that exact name are ambiguous and also fail. This
-  command supports only root- and dir-matching actions whose effective launch
-  mode is session-window. Session-matching actions and effective shell-mode
-  actions are unsupported. Unsupported actions are rejected before
-  launch_path_cmd runs or tmux is mutated.
-
-  By default, the command must run from inside an attached tmux client and a
-  successful action switches that exact client. With --no-switch, cmdk requires
-  a running tmux server but not an attached client. It does not start a server,
-  and a missing server fails before action inputs are resolved or external
-  commands run. The window is created in the background, and cmdk never invokes
-  switch-client.
-  No-switch mode provides no invoking pane context: {{.pane_id}} is unavailable
-  and CMDK_PANE_ID is omitted. cmd and window_name templates that reference
-  pane_id fail before launch_path_cmd runs or tmux is mutated.
-
-  A dir action requires --path <dir>, which supplies its selected directory
-  context. A root action rejects --path. Action input keys are also exact and
-  case-sensitive. Supply inputs with repeatable --input key=value flags:
-
-      cmdk action run "Deploy" --path . \
-          --input environment=production \
-          --input 'message=deploy after approval'
-
-  Each value is a literal string: cmdk splits at the first = and does not apply
-  JSON, numeric, boolean, comma, dot, or bracket parsing. Unknown, duplicate,
-  and missing keys are errors; input errors list the action's accepted keys.
-  An omitted prompt input uses its rendered default when configured. key=
-  explicitly supplies an empty string; empty or whitespace-only prompt input is
-  accepted only when that stage has allow_empty = true. A supplied picker input
-  is used directly as the stage's passed value; its source command and picker UI
-  are bypassed. Stages collect action inputs, each stage's key names its input,
-  and action templates consume those values as {{.<key>}}.
-
-  The command creates a fresh window and, unless --no-switch is set, switches
-  the invoking tmux client to it. It does not send text or keys to the launched
-  application. On success, stdout is exactly one JSON object with these fields:
-
-      action       exact configured action name
-      launchPath   absolute effective launch directory
-      sessionId    stable tmux session ID
-      sessionKey   cmdk-managed canonical session key
-      windowId     stable tmux window ID
-      windowName   effective tmux window name
-      paneId       stable ID of the created window's initial tmux pane
-
-  The JSON keys are action, launchPath, sessionId, sessionKey, windowId,
-  windowName, and paneId. Errors and diagnostics are written to stderr and exit
-  with status 1; an error does not produce a success JSON object.
-
-ATTACH
-  cmdk attach enters a cmdk-managed tmux session from outside tmux. It refuses
-  to run when $TMUX is set, because it is meant to be the outer entry point into
-  tmux rather than a nested tmux command.
-
-  cmdk attach <path> resolves the path using the same session resolver as
-  "cmdk session resolve". Without a path argument, [startup].path is required.
-  Leading ~/ is expanded before resolving the path.
-
-  If the cmdk-managed session for that path already exists, cmdk attaches to it.
-  Otherwise cmdk creates the managed session, sets @cmdk_session_kind and
-  @cmdk_session_key, then attaches to the new session.
-
-SESSION WINDOWS
-  cmdk session window <path> [--switch] --new resolves an existing directory,
-  finds or creates the cmdk-managed tmux session for that path, and creates a
-  fresh shell window in that session. The new window stays in the background by
-  default; --switch switches the current tmux client to it.
-
-  cmdk session window <path> [--name <name>] [--switch] -- <command> [args...]
-  creates a fresh command window. --switch must appear before --. Command args
-  after -- are treated as argv-style input;
-  cmdk shell-quotes each arg before passing one shell-command string to tmux.
-  Metacharacters such as $, |, >, and ; are literal by default. Use an explicit
-  shell for shell behavior, e.g.:
-
-      cmdk session window . --name tests -- sh -lc 'npm test | tee test.log'
-      cmdk session window . --switch -- make test
-
-  Command-window lifecycle is direct tmux behavior: when the command exits,
-  cmdk does not hold the window, set remain-on-exit, or drop into a shell.
-
-  Repo worktree paths use one managed session per repo/container. Directory
-  paths use one managed session per canonical directory. Each invocation creates
-  a new tmux window; cmdk does not search for or reuse existing window names.
-
-  Cmdk recognizes managed sessions by the @cmdk_session_key tmux option. When
-  cmdk creates a session it sets only @cmdk_session_kind and @cmdk_session_key.
-  Managed sessions are found by exact key match.
-
-  Background session-window creation does not require a current tmux client when
-  a tmux server is available. --switch requires a current client for
-  switch-client. The command does not attach from outside tmux or fall back to
-  attach-session.
-
-  In the TUI, tmux windows sort above sessions, directories, and actions. When
-  selecting a tmux session, windows in that session sort above the built-in
-  "Switch to session" action and configured session actions.
-
-EXECUTION
-  Actions run in one of two launch modes. In session-window mode, cmdk resolves
-  the effective launch path, renders the payload command, creates/switches to a
-  fresh window in the cmdk-managed tmux session for that path, and runs the
-  rendered cmd there via sh -lc. Dir-matching actions default to session-window.
-  cmdk does not pass CMDK_* action-input data to tmux with -e or set it in the
-  managed session environment; use template variables in cmd.
-
-  In shell mode, commands are passed to sh -c via the exec(2) syscall,
-  replacing the cmdk process in the current pane. If an effective launch path exists, cmdk
-  chdirs there first; shell mode means "do not create a session window", not
-  "ignore the directory context".
-
-  Picker source commands and launch_path_cmd commands are also run via sh -c.
-  launch_path_cmd must print exactly one absolute existing directory path.
-  When a picker source or launch_path_cmd fails, cmdk stays in the launcher
-  and shows an error screen with the rendered command, exit status, and
-  captured stdout/stderr; the same details are appended to the log file.
-  Captured output is bounded (launch_path_cmd: 8 KiB stdout / 32 KiB stderr;
-  picker: 4 MiB stdout / 64 KiB stderr). stdout beyond its cap fails the
-  command rather than being parsed partially; stderr beyond its cap is
-  truncated with an annotation.
-
-  Root/session actions without launch_path or launch_path_cmd default to shell
-  mode and inherit the working directory from where cmdk was launched. Relative
-  paths in cmd (e.g. "./scripts/deploy.sh") resolve from that directory unless
-  shell mode chdirs to an effective launch path.
-
-  For dir-matching actions, use {{.launch_path}} for the final launch directory
-  in payload commands. Use {{.path}} only when you specifically need the
-  originally selected directory before launch_path overrides/generation.
-`)
-
 	return b.String()
+}
+
+// writeWrapped writes text as paragraphs wrapped to referenceWidth under
+// indent. A blank line separates paragraphs; a line that starts with a list
+// number such as "1. " starts its own paragraph with a hanging indent.
+func writeWrapped(b *strings.Builder, text string, indent string) {
+	for i, paragraph := range splitParagraphs(text) {
+		if i > 0 && !isListNumber(paragraph) {
+			b.WriteString("\n")
+		}
+		hanging := ""
+		if isListNumber(paragraph) {
+			hanging = "   "
+		}
+		for i, line := range wrapWords(paragraph, referenceWidth-len(indent)-len(hanging)) {
+			b.WriteString(indent)
+			if i > 0 {
+				b.WriteString(hanging)
+			}
+			b.WriteString(line)
+			b.WriteString("\n")
+		}
+	}
+}
+
+func splitParagraphs(text string) []string {
+	var paragraphs []string
+	var current []string
+	flush := func() {
+		if len(current) > 0 {
+			paragraphs = append(paragraphs, strings.Join(current, " "))
+			current = nil
+		}
+	}
+	for line := range strings.SplitSeq(text, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || isListNumber(line) {
+			flush()
+		}
+		if line != "" {
+			current = append(current, line)
+		}
+	}
+	flush()
+	return paragraphs
+}
+
+func isListNumber(line string) bool {
+	digits, _, ok := strings.Cut(line, ". ")
+	if !ok || digits == "" {
+		return false
+	}
+	for _, r := range digits {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// wrapWords breaks text on spaces so no line is wider than width; a single
+// word wider than width stands on its own line.
+func wrapWords(text string, width int) []string {
+	var lines []string
+	var line strings.Builder
+	lineWidth := 0
+	for _, word := range strings.Fields(text) {
+		wordWidth := ansi.StringWidth(word)
+		if lineWidth > 0 && lineWidth+1+wordWidth > width {
+			lines = append(lines, line.String())
+			line.Reset()
+			lineWidth = 0
+		}
+		if lineWidth > 0 {
+			line.WriteByte(' ')
+			lineWidth++
+		}
+		line.WriteString(word)
+		lineWidth += wordWidth
+	}
+	if lineWidth > 0 {
+		lines = append(lines, line.String())
+	}
+	return lines
 }
 
 func defaultValue(cfg Config, section, field string) string {

@@ -29,39 +29,42 @@ func newSessionWindowCommand(root *rootOptions) *cobra.Command {
 	options := sessionWindowOptions{}
 	var request sessionWindowRequest
 	cmd := &cobra.Command{
-		Use:   "window <path> [--name <name>] [--switch] (--new | -- <command> [args...])",
-		Short: "Create a new tmux window in a cmdk-managed session for a path",
+		Use:   "window <path> [flags] (--new | -- <command> [args...])",
+		Short: "Create a tmux window in the cmdk-managed session for a path",
 		Long: `Create a fresh tmux window in the cmdk-managed session for a path.
 
-The path is required, must exist, and must be a directory. cmdk resolves the
-path using the same session resolver as "cmdk session resolve": repo/worktree
-paths share a managed repo/container session, while non-repo directories get
-one managed session per canonical directory.
+The path must be an existing directory. cmdk resolves it like "cmdk session
+resolve", finds the managed session by its @cmdk_session_key option or creates
+it, and creates one new window there with the path as its working directory.
+Exactly one mode is required: --new opens an interactive shell, and
+-- <command> [args...] runs the command with each argument shell-quoted so
+metacharacters are literal (invoke a shell explicitly for pipes or
+expansion). When the command exits, tmux closes the window; cmdk does not set
+remain-on-exit or fall back to a shell.
 
-Exactly one mode is required:
-  --new                    create an interactive shell window
-  -- <command> [args...]   create a command window
+The window is named after the path's base name unless --name sets it; a name
+longer than behavior.window_name_max_length is shortened to that many
+characters ending in …. The window stays in the background unless --switch
+switches the current client to it; --switch needs a current client, while
+background creation needs only a running server. cmdk never attaches from
+outside tmux and never starts a server.
 
-The new window's cwd is the validated path. The default window name is the base
-name of that path; --name overrides it for either mode and must not be empty.
-Names longer than [behavior].window_name_max_length (default 20) are shortened
-to that many characters ending in …; set it to 0 to keep full names.
-By default, cmdk creates the window in the background without changing the
-current tmux window. --switch switches the current client to the new window.
+--switch and --name must appear before --; everything after -- is the
+command. A path that starts with - must follow its own leading --. Each
+invocation creates a new window and never reuses one by name.
 
-Command args after -- are treated as argv-style input and are shell-quoted
-before being passed to tmux as its shell-command string. Shell metacharacters
-are literal by default; invoke a shell explicitly for shell features, for
-example:
+Stdout: nothing. Stderr: diagnostics; a failure exits 1, and when --switch
+fails after the window was created, the window exists in the background. The
+command runs git to classify the path and tmux to find or create the session
+and window, and never prompts.
 
-  cmdk session window . --name tests -- sh -lc 'npm test | tee test.log'
-  cmdk session window . --switch --new
+` + tmuxPrerequisiteHelp + `
+
+` + configLoadingHelpWithKeys,
+		Example: `  cmdk session window . --switch --new
   cmdk session window . --switch -- make test
-
---switch must appear before --. Arguments after -- are always part of the window
-command. A path that starts with - must follow a leading --, for example
-"cmdk session window -- -dir -- make test". cmdk creates a fresh window every
-time and tracks it by the returned tmux window_id.`,
+  cmdk session window . --name tests -- sh -lc 'npm test | tee test.log'
+  cmdk session window -- -dir -- make test`,
 		Args: func(cmd *cobra.Command, args []string) error {
 			parsed, err := parseSessionWindowGrammar(cmd, args, options)
 			if err != nil {
@@ -81,23 +84,21 @@ time and tracks it by the returned tmux window_id.`,
 
 // bindFlags registers the session window flags on cmd so parsing fills o.
 func (o *sessionWindowOptions) bindFlags(cmd *cobra.Command) {
-	cmd.Flags().BoolVar(&o.newShell, "new", false, "create a fresh interactive shell window")
-	cmd.Flags().StringVar(&o.name, "name", "", "override the tmux window name")
-	cmd.Flags().BoolVar(&o.switchWindow, "switch", false, "switch the current tmux client to the new window")
+	cmd.Flags().BoolVar(&o.newShell, "new", false, "open an interactive shell in the window")
+	cmd.Flags().StringVar(&o.name, "name", "", "window name; must not be empty")
+	cmd.Flags().BoolVar(&o.switchWindow, "switch", false, "switch the current client to the window")
 }
 
 // parseSessionWindowGrammar validates the complete positional grammar before
-// any command work: exactly one path before --, exactly one of --new or a
-// nonempty command after --, and no empty explicit --name. Cobra runs it as
-// the Args validator, after flag parsing and before the tmux prerequisite.
+// any command work: exactly one path before -- and exactly one of --new or a
+// nonempty command after --. Cobra runs it as the Args validator, after flag
+// parsing and before the tmux prerequisite. Flag values are checked by the
+// runner, so a bad value is a command failure rather than a usage error.
 func parseSessionWindowGrammar(cmd *cobra.Command, args []string, options sessionWindowOptions) (sessionWindowRequest, error) {
 	if len(args) == 0 {
 		return sessionWindowRequest{}, errors.New("path is required")
 	}
 	nameSet := cmd.Flags().Changed("name")
-	if nameSet && options.name == "" {
-		return sessionWindowRequest{}, errors.New("--name cannot be empty")
-	}
 	path, commandArgs, commandDelimiter, err := splitSessionWindowArgs(args, cmd.Flags().ArgsLenAtDash())
 	if err != nil {
 		return sessionWindowRequest{}, err
@@ -116,6 +117,9 @@ func parseSessionWindowGrammar(cmd *cobra.Command, args []string, options sessio
 }
 
 func runSessionWindowCommand(root *rootOptions, cmd *cobra.Command, request sessionWindowRequest, options sessionWindowOptions) error {
+	if request.nameSet && options.name == "" {
+		return errors.New("--name cannot be empty")
+	}
 	launchPath, err := resolver.ValidateLaunchDirectory(request.path)
 	if err != nil {
 		return err

@@ -4,7 +4,9 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	log "charm.land/log/v2"
@@ -29,42 +31,70 @@ var Version = "n/a"
 type rootOptions struct {
 	configPath  string
 	paneID      string
-	themeFlag   string
+	themeFlag   themeMode
+	colorMode   colorMode
 	timingsFlag bool
 	timingsJSON bool
 }
 
 func newRootCommand() *cobra.Command {
-	root := &rootOptions{}
+	root := &rootOptions{colorMode: colorAuto}
 	cmd := &cobra.Command{
 		Use:   "cmdk",
 		Short: "Keyboard-driven tmux launcher",
 		Long: `Keyboard-driven tmux launcher.
 
-Run an existing configured session-window action noninteractively:
+Without a subcommand cmdk opens the launcher: a fuzzy-filterable list of tmux
+windows and sessions, zoxide directories, and configured actions. Enter runs
+the selection. A session-window action creates a tmux window and cmdk exits
+0; a shell-mode action replaces the cmdk process with its command, whose exit
+status becomes cmdk's. Quitting without a selection exits 0. See "cmdk help
+launching" for the launch modes and "cmdk help templates" for the variables
+actions use.
 
-  cmdk action run <exact-name> --path <dir> --input key=value [--no-switch]
+The launcher is interactive only. It draws on the terminal attached to stdout
+and reads keys from stdin, so both must be terminals and TERM must name a
+terminal type other than dumb; otherwise cmdk exits 1 with a message saying
+what to fix. Run it from a terminal or a tmux popup; the Examples show the
+tmux binding. Help, --version, help topics, and "cmdk config" need no
+terminal.
 
-Or launch a shell or command in the cmdk-managed session for a directory:
+Streams: the launcher writes nothing to stdout, except that --timings and
+--timings-json run the startup phases without drawing and write a table or
+JSON of their durations to stdout. Diagnostics go to stderr. Every launcher
+run appends to the log file $HOME/.local/state/cmdk/cmdk.log, creating the
+file and its directory when absent; a log that cannot be opened is a stderr
+warning, not an error.
 
-  cmdk session window <path> [--switch] --new
-  cmdk session window <path> [--switch] -- <command> [args...]
+Color: --color=auto (the default) detects the stdout terminal, where a
+nonempty NO_COLOR, TERM=dumb, or a non-terminal disables color; --color=never
+disables color; --color=always forces it even when NO_COLOR is set.
+--theme=light or --theme=dark picks the palette. When --theme is empty and
+color is on, cmdk asks the terminal for its background once per run and
+falls back to the dark palette when the terminal does not answer.
 
-Windows are created in the background by default; --switch selects the new
-window. The path determines the managed session and becomes the new window's
-working directory. Repository and worktree paths share their managed repo
-session; ordinary directories use a session for that canonical directory.
+External programs: tmux 3.2 or newer first in PATH, which the launcher
+queries for windows and sessions and never starts; git, run to resolve a
+path to its repository; sh, which runs configured commands; zoxide,
+optional, for directory entries; a Nerd Font, optional, for icons. Linux is
+verified in required CI; other Unix-like systems are unverified, and Windows
+is unsupported.
 
-Requirements:
-  tmux 3.2 or newer is required for the interactive launcher and tmux-backed
-  commands on Linux or macOS. Install or upgrade it with your platform package
-  manager and ensure the supported executable is first in PATH. Linux is
-  verified in required CI; other Unix-like systems are unverified, and
-  Windows is unsupported. zoxide is optional and provides directory entries.
-  A Nerd Font is optional and enables enhanced icon rendering.
+` + configLoadingHelpWithKeys + `
 
-Log file:
-  $HOME/.local/state/cmdk/cmdk.log`,
+Common tasks:
+  Open the launcher for a pane:   cmdk --pane-id=#{pane_id}
+  Enter a managed session:        cmdk attach [path]
+  Check a configuration file:     cmdk config --validate <path>
+  Open a shell window for a path: cmdk session window <path> --new
+  Run a configured action:        cmdk action run <exact-name>
+
+Command groups:
+  action   Configured actions, run noninteractively:  cmdk action --help
+  session  Session plans and windows for a path:      cmdk session --help
+  window   Switching between tmux windows:            cmdk window --help`,
+		Example: `  bind-key Space display-popup -E "cmdk --pane-id=#{pane_id}"
+  cmdk --timings-json`,
 		DisableSuggestions: true,
 		SilenceUsage:       true,
 		SilenceErrors:      true,
@@ -72,28 +102,60 @@ Log file:
 		RunE:               root.runRootCommand,
 	}
 	cmd.Version = Version
-	cmd.PersistentFlags().StringVarP(&root.configPath, "config", "c", "", "path to config file (also validates; exits 1 on error)")
-	cmd.Flags().StringVar(&root.paneID, "pane-id", "", "tmux pane ID")
-	cmd.Flags().StringVar(&root.themeFlag, "theme", "", "color theme (light, dark)")
-	cmd.Flags().BoolVar(&root.timingsFlag, "timings", false, "measure and print startup phase durations")
-	cmd.Flags().BoolVar(&root.timingsJSON, "timings-json", false, "output timings as JSON (implies --timings)")
+	cmd.PersistentFlags().StringVarP(&root.configPath, "config", "c", "", "configuration file to load; must exist")
+	cmd.Flags().StringVar(&root.paneID, "pane-id", "", "tmux pane the launcher was opened from")
+	cmd.Flags().Var(&root.themeFlag, "theme", "palette: light or dark; empty detects it")
+	cmd.Flags().Var(&root.colorMode, "color", "color output: auto, always, or never")
+	cmd.Flags().BoolVar(&root.timingsFlag, "timings", false, "print startup phase durations instead of the launcher")
+	cmd.Flags().BoolVar(&root.timingsJSON, "timings-json", false, "print the durations as JSON (implies --timings)")
 	// Cobra registers --help and --version only when it executes the resolved
 	// command, but it resolves that command first by stripping the flags it
 	// already knows. Registering both here keeps "cmdk --help --config x"
 	// from treating "x" as an unknown command.
 	cmd.InitDefaultHelpFlag()
 	cmd.InitDefaultVersionFlag()
+	// Flag parsing errors are usage errors; the action group overrides this
+	// to escape terminal controls first.
+	cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+		return markUsageError(err)
+	})
+	cmd.AddGroup(
+		&cobra.Group{ID: commandGroupID, Title: "Commands:"},
+		&cobra.Group{ID: topicGroupID, Title: "Help topics:"},
+	)
+	cmd.SetHelpCommandGroupID(commandGroupID)
+	cmd.SetCompletionCommandGroupID(commandGroupID)
 	cmd.AddCommand(
 		newActionCommand(root),
 		newAttachCommand(root),
 		newConfigCommand(root),
-		newDocsCommand(root),
 		newExitCodesCommand(root),
 		newIconsCommand(root),
+		newLaunchingCommand(root),
 		newSessionCommand(root),
 		newShortenCommand(root),
+		newTemplatesCommand(root),
 		newWindowCommand(root),
 	)
+	for _, child := range cmd.Commands() {
+		if child.GroupID == "" {
+			child.GroupID = commandGroupID
+		}
+	}
+	// Cobra adds its help and completion commands lazily on Execute. Adding
+	// them now lets markUsageErrors cover their Args validators, and making
+	// the completion group runnable stops cobra from printing its help
+	// before validating operands, so an unexpected operand fails the same
+	// way at every level of the tree. The help command's own lookup of an
+	// unknown name stays cobra's: it prints "Unknown help topic" and exits 0.
+	cmd.InitDefaultHelpCmd()
+	cmd.InitDefaultCompletionCmd()
+	for _, child := range cmd.Commands() {
+		if child.Name() == "completion" && !child.Runnable() {
+			child.RunE = runHelp
+		}
+	}
+	markUsageErrors(cmd)
 	return cmd
 }
 
@@ -136,6 +198,14 @@ func (root *rootOptions) runRootCommand(cmd *cobra.Command, _ []string) error {
 		log.Warn("could not determine home directory; path shortening disabled", "error", err)
 	}
 	stop()
+
+	// Timings mode runs without a renderer or input and writes to stdout, so
+	// only the launcher needs the terminal contract.
+	if !root.timingsFlag {
+		if err := checkLauncherTerminal(os.Stdin, os.Stdout); err != nil {
+			return err
+		}
+	}
 
 	tmuxDisplay := tmux.DisplayOptions{
 		Home:              home,
@@ -256,13 +326,18 @@ func (root *rootOptions) runRootCommand(cmd *cobra.Command, _ []string) error {
 	model := tui.NewModel(listItems, root.paneID, nil, reg, ctx, t, tuiAsync, syncItems)
 	stop()
 
-	if autoDetectTheme {
+	// The background query is a round trip to the terminal, so it runs only
+	// when its answer can change what the person sees: the palette is
+	// adaptive, stdout is a terminal (checked above), and the profile can
+	// render color. Otherwise the resolved theme stands.
+	profile := resolveColorProfile(root.colorMode, os.Stdout, os.Environ())
+	if autoDetectTheme && rendersColor(profile) {
 		stop = tr.Begin("theme/auto-detect")
 		model = model.WithAutoThemeDetection(themeOverrides)
 		stop()
 	}
 
-	p := tea.NewProgram(model)
+	p := tea.NewProgram(model, tea.WithColorProfile(profile))
 	finalModel, err := p.Run()
 	if err != nil {
 		return err
@@ -288,7 +363,7 @@ func (root *rootOptions) runRootCommand(cmd *cobra.Command, _ []string) error {
 func (root *rootOptions) resolveTheme(tr trace.Tracer, overrides theme.Overrides) (theme.Theme, bool, error) {
 	autoDetectTheme := root.themeFlag == ""
 	stop := tr.Begin("theme")
-	t, err := theme.Resolve(root.themeFlag, overrides)
+	t, err := theme.Resolve(string(root.themeFlag), overrides)
 	stop()
 	if err != nil {
 		return theme.Theme{}, false, err
@@ -337,9 +412,28 @@ func (m timingsModel) View() tea.View {
 
 // Execute runs the root command and returns its process exit status.
 func Execute() int {
-	if err := newRootCommand().Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return 1
+	return run(newRootCommand(), os.Stderr)
+}
+
+// run executes root, reports a failure as one "cmdk: <message>" line on
+// stderr with no usage text, and maps the error to the exit status.
+func run(root *cobra.Command, stderr io.Writer) int {
+	err := root.Execute()
+	if err != nil {
+		_, _ = fmt.Fprintf(stderr, "cmdk: %s\n", foldLines(err.Error()))
 	}
-	return 0
+	return exitStatus(err)
+}
+
+// foldLines joins a multi-line message into one line, so a diagnostic that
+// embeds captured output or an input value with a newline still prints as
+// one stderr line.
+func foldLines(message string) string {
+	var lines []string
+	for line := range strings.SplitSeq(message, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return strings.Join(lines, "; ")
 }

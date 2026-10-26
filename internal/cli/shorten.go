@@ -2,9 +2,11 @@ package cli
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 
+	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 
 	"github.com/jmcampanini/cmdk/internal/config"
@@ -14,28 +16,32 @@ import (
 func newShortenCommand(root *rootOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "shorten [path]",
-		Short: "Preview display path shortening",
-		Long: `Preview how cmdk displays paths in the launcher.
+		Short: "Preview how the launcher displays a path",
+		Long: `Preview how the launcher displays a path.
 
-If no path argument is supplied, cmdk reads the path from the first line of
-stdin. This is useful for testing display config before opening the TUI.
+Stdout: one line, the display form of the path. With no operand cmdk reads
+the path from the first line of stdin, which must not be a terminal. Stderr:
+diagnostics; no operand with a terminal or empty stdin exits 1. The command
+reads no file but the configuration and never prompts.
 
 How paths are formatted:
 
   1. Replace the $HOME prefix with display.shorten_home.
   2. Apply display.rules literal substring replacements.
-  3. Apply truncation using display.truncation_length and
+  3. Keep the rightmost display.truncation_length segments, prefixed with
      display.truncation_symbol.
 
 Rules replace the first occurrence of each literal match. Longer rule keys run
-before shorter keys, with lexical ordering used as a tie-breaker. Replacement
-values support icon aliases such as :nf-dev-github:; match keys are literal and
-do not resolve aliases. See "cmdk docs" for the full display config reference.`,
+before shorter keys, with lexical order as the tie-breaker. Replacement values
+accept icon aliases such as :nf-dev-github:; match keys are literal.
+--truncate and --truncate-symbol override the configured values for one run.
+
+` + configLoadingHelpWithKeys,
 		Example: `  cmdk shorten /Users/me/Code/github.com/acme/project
   echo /usr/local/bin/foo | cmdk shorten
   cmdk shorten --truncate 2 /usr/local/bin/foo
 
-  # Example config:
+  # With this configuration:
   #   [display]
   #   shorten_home = "~"
   #   truncation_length = 3
@@ -45,16 +51,15 @@ do not resolve aliases. See "cmdk docs" for the full display config reference.`,
   #   "github.com" = "gh"
   #   "~/Code" = "Code"
   #
-  # With that config:
-  #   cmdk shorten /Users/me/Code/github.com/acme/project
-  #   => …/gh/acme/project`,
+  # cmdk shorten /Users/me/Code/github.com/acme/project
+  # prints …/gh/acme/project`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runShortenCommand(root, cmd, args)
 		},
 	}
-	cmd.Flags().Int("truncate", 0, "number of rightmost path segments to display; 0 disables (overrides config)")
-	cmd.Flags().String("truncate-symbol", "", "string prepended (with implied trailing /) when truncation occurs (overrides config)")
+	cmd.Flags().Int("truncate", 0, "rightmost segments to keep; 0 disables")
+	cmd.Flags().String("truncate-symbol", "", "prefix of a truncated path; / is implied")
 	return cmd
 }
 
@@ -90,16 +95,15 @@ func shortenInputPath(args []string) (string, error) {
 		return args[0], nil
 	}
 
-	stat, err := os.Stdin.Stat()
-	if err != nil || stat.Mode()&os.ModeCharDevice != 0 {
-		return "", fmt.Errorf("usage: cmdk shorten <path> or echo <path> | cmdk shorten")
+	if term.IsTerminal(os.Stdin.Fd()) {
+		return "", errors.New("no path operand and stdin is a terminal; pass a path or pipe one line to stdin")
 	}
 	scanner := bufio.NewScanner(os.Stdin)
 	if !scanner.Scan() {
 		if err := scanner.Err(); err != nil {
 			return "", fmt.Errorf("reading stdin: %w", err)
 		}
-		return "", fmt.Errorf("no input on stdin")
+		return "", errors.New("no input on stdin")
 	}
 	return scanner.Text(), nil
 }

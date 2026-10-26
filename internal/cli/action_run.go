@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -57,32 +56,36 @@ func newActionRunCommand(root *rootOptions) *cobra.Command {
 		Short: "Run a configured session-window action",
 		Long: `Run one configured action by its exact, case-sensitive name.
 
-Only actions matching root or dir whose effective launch_mode is session-window
-are supported. Session-matching and shell-mode actions fail before action inputs
-are resolved or external commands run. By default, cmdk requires an attached
-tmux client and switches that exact client.
+The name must match exactly one configured action; no match, or more than
+one, is an error. Only root and dir actions whose effective launch mode is
+session-window are supported. Session actions and shell-mode actions are
+rejected before action inputs are resolved or external commands run.
 
-With --no-switch, cmdk requires a running tmux server but not an attached
-client. It does not start a server, and a missing server fails before action
-inputs are resolved or external commands run. The window is created in the
-background, and cmdk never invokes switch-client. This mode provides no
-invoking pane context: {{.pane_id}} is unavailable and CMDK_PANE_ID is
-omitted. Templates that reference pane_id fail before launch_path_cmd runs or
-tmux is mutated.
+By default cmdk must run inside an attached tmux client; it creates the
+window and switches that exact client to it. With --no-switch cmdk requires a
+running tmux server but not an attached client, creates the window in the
+background, and never runs switch-client. cmdk does not start a server, and a
+missing server fails before inputs are resolved or external commands run.
+--no-switch provides no invoking pane: {{.pane_id}} is unavailable and
+CMDK_PANE_ID is unset, so a template that references pane_id fails before
+launch_path_cmd runs or tmux is changed.
 
-Directory actions require --path. Root actions reject --path and retain their
-configured launch path behavior, including the current-directory fallback for
-an explicit session-window action without launch_path or launch_path_cmd.
+A dir action requires --path, its selected directory. A root action rejects
+--path and keeps its configured launch path behavior, including the
+current-directory fallback of an explicit session-window action that has
+neither launch_path nor launch_path_cmd.
 
-Supply each action input with a separate --input key=value flag. Input keys are
-exact and case-sensitive. Values are split at the first = and otherwise remain
-literal, including commas, dots, brackets, spaces, and empty strings. Prompt
-inputs may use their rendered defaults when omitted. Picker inputs must be
-supplied and are accepted directly without running the picker source.
+Supply each action input with its own --input key=value. Keys are exact and
+case-sensitive; the value is everything after the first = and stays literal,
+including commas, dots, brackets, spaces, and an empty string. A prompt input
+may be omitted when its stage has a default; key= supplies an empty value,
+which only a stage with allow_empty accepts. A picker input must be supplied
+and is used as the stage's value without running its source. Missing,
+unknown, duplicate, and disallowed-empty inputs fail before launch_path_cmd
+runs or tmux is changed, and the message lists the accepted keys.
 
-Missing, unknown, duplicate, and disallowed-empty inputs fail before
-launch_path_cmd or tmux mutation. On success, cmdk creates the new window,
-switches to it unless --no-switch is set, and writes one JSON object to stdout:
+Stdout: on success, one JSON object with the keys action, launchPath,
+sessionId, sessionKey, windowId, windowName, and paneId, for example:
 
   {
     "action": "pi worktree",
@@ -94,14 +97,19 @@ switches to it unless --no-switch is set, and writes one JSON object to stdout:
     "paneId": "%51"
   }
 
-If the window and command are created but switching the client fails, cmdk
-exits 1 without writing success JSON. The stderr diagnostic identifies the
-created session, window, and pane. The action is already running, so do not
-rerun it. Automation that does not need the switch should pass --no-switch.
+Stderr: every diagnostic; a failure writes no JSON and exits 1. If the window
+and its command were created but switching the client fails, the action is
+already running: the diagnostic names the created session, window, and pane
+and how to switch there by hand. Do not rerun it; automation that does not
+need the switch should pass --no-switch. cmdk sends no keys to the launched
+command and never prompts. The command runs launch_path_cmd when the action
+has one, and runs tmux to find the client and create the window.
 
-Other diagnostics are also written to stderr and return exit status 1. No
---json flag is needed. cmdk does not send text or keys to the launched
-application.`,
+` + tmuxPrerequisiteHelp + `
+
+` + configLoadingHelpWithKeys,
+		Example: `  cmdk action run "Deploy" --path . --input environment=production
+  cmdk action run "Dotfiles pi" --no-switch`,
 		Args: cobra.ExactArgs(1),
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			prepared, err := prepareActionRunInvocation(root, cmd, args[0], options)
@@ -118,9 +126,9 @@ application.`,
 			return terminalSafeActionRunError(runPreparedAction(cmd, *invocation))
 		},
 	}
-	cmd.Flags().StringVar(&options.path, "path", "", "selected directory context (required for dir actions)")
-	cmd.Flags().StringArrayVar(&options.inputs, "input", nil, "action input as exact key=value (repeatable)")
-	cmd.Flags().BoolVar(&options.noSwitch, "no-switch", false, "create the window without switching an attached tmux client")
+	cmd.Flags().StringVar(&options.path, "path", "", "selected directory (required for dir actions)")
+	cmd.Flags().StringArrayVar(&options.inputs, "input", nil, "action input as key=value (repeatable)")
+	cmd.Flags().BoolVar(&options.noSwitch, "no-switch", false, "create the window without switching a client")
 	return cmd
 }
 
@@ -220,31 +228,18 @@ func completeActionLaunchResult(result execute.LaunchResult) bool {
 }
 
 func actionRunSwitchFailureError(actionName string, result execute.LaunchResult, switchErr *tmux.SwitchClientError) error {
-	switchFailure := strings.ReplaceAll(strings.TrimRight(switchErr.Error(), "\n"), "\n", "\n  ")
-	message := fmt.Sprintf(`action %q launched, but switching the client failed.
-
-The action's side effects already happened: the launch path exists and the
-window is running its command. Do not rerun this action - rerunning launches
-it a second time.
-
-Created tmux state:
-  session:     %s  (%s)
-  window:      %s  %s
-  pane:        %s
-  launch path: %s
-
-Switch failure: %s
-
-To go there manually: tmux switch-client -t '%s:%s'
-Automation that does not need the switch should pass --no-switch`,
+	message := fmt.Sprintf("action %q launched, but switching the client failed: %s. "+
+		"The action is already running in session %s (%s), window %s %q, pane %s, launch path %s; "+
+		"do not rerun it. Switch by hand with: tmux switch-client -t '%s:%s'. "+
+		"Automation that does not need the switch should pass --no-switch",
 		actionName,
+		foldLines(switchErr.Error()),
 		result.SessionID,
 		result.SessionKey,
 		result.WindowID,
 		result.WindowName,
 		result.PaneID,
 		result.LaunchPath,
-		switchFailure,
 		result.SessionID,
 		result.WindowID,
 	)

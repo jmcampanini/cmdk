@@ -3,67 +3,44 @@ package cli
 import "github.com/spf13/cobra"
 
 func newExitCodesCommand(_ *rootOptions) *cobra.Command {
-	return &cobra.Command{
-		Use:   "exit-codes",
-		Short: "Exit codes and error categories",
-		Args:  cobra.NoArgs,
-		RunE:  runHelp,
-		Long: `Exit codes returned by cmdk.
+	return newHelpTopic("exit-codes", "Exit statuses and the stderr failure format", `Exit statuses cmdk returns and the failures that keep status 0.
 
-  0   Success. The TUI ran to completion and either executed a selected
-      action that itself returned 0, or exited without a selection. Launch
-      resolution failures (for example a failing launch_path_cmd or a
-      template error) are shown inside the TUI; escaping back and quitting
-      afterwards is still exit 0. A successful "cmdk action run" writes one
-      JSON object to stdout with action, launchPath, sessionId, sessionKey,
-      windowId, windowName, and paneId, then exits 0.
+Every failure is one diagnostic line on stderr in the form "cmdk: <message>"
+with no usage text; captured output that spans lines is folded into it.
+Payloads go to stdout, so a script reads stdout and branches on the status.
 
-  1   cmdk error. A malformed or invalid config file, whether discovered in
-      the default config path or passed via --config, an unrecoverable
-      startup failure, a launch mechanics failure after a successful
-      selection (for example tmux window creation or exec failure), a
-      missing tmux executable or unsupported tmux version when invoking
-      tmux-backed functionality, or an internal error. Commands that read
-      the configuration all load the same file, so a broken config file
-      exits 1 from every one of them. Logging setup failures produce a
-      stderr warning and do not cause exit 1.
+  0  Success. The launcher quit without a selection or launched the
+     selection, or a subcommand did its work. These failures also keep 0:
+     a launch resolution error inside the launcher (a failing
+     launch_path_cmd or picker source, or a template error) is shown on an
+     error screen and quitting afterwards exits 0; "cmdk help <name>" for a
+     name that does not exist prints "Unknown help topic" and the root usage,
+     because that lookup belongs to the command library; an empty "cmdk
+     icons" result prints a hint on stderr.
 
-      Usage errors also exit 1 before any command work runs: an unknown
-      command or unexpected operand anywhere in the tree (including operands
-      passed to the root command or to this help topic), an invalid flag, or
-      malformed "cmdk session window" arguments. Bare command groups such as
-      "cmdk action", "cmdk session", and "cmdk window" show help and exit 0.
-      "cmdk help <topic>" with an unknown topic prints "Unknown help topic"
-      and the root usage on stderr, then exits 0.
+  1  Failure during command work: a malformed or invalid configuration file
+     from the discovered path or --config; a missing or too-old tmux; a tmux
+     query or mutation that fails or times out; a path that is not an
+     existing directory; an "action run" rejection (unknown, ambiguous, or
+     unsupported action; missing, unknown, duplicate, or empty inputs; no
+     attached client or no running server); a launch that fails after the
+     launcher accepted a selection; a launcher started without a terminal;
+     or an internal error. A logging setup failure is a stderr warning and
+     does not change the status.
 
-      "cmdk action run" also exits 1 for cmdk-detected errors such as an
-      action that is missing, ambiguous, unsupported, or given invalid action
-      inputs, and for launch resolution or tmux failures. Its default mode also
-      exits 1 when no invoking attached client can be established; --no-switch
-      does not require one. Both modes require a running tmux server, and cmdk
-      does not start one. If window creation succeeds but switching the client
-      fails, the action is already running: cmdk exits 1 without success JSON
-      and reports the created identifiers on stderr. Do not rerun the action;
-      automation that does not need the switch should pass --no-switch. Other
-      errors and diagnostics are also written to stderr rather than as success
-      JSON.
+  2  Usage error, reported before any command work: an unknown command, an
+     unknown flag, a flag value that does not parse (a non-numeric
+     --truncate, a --color other than auto, always, or never, a --theme
+     other than light or dark), an unexpected operand, or operands that fail
+     a command's positional grammar.
 
-  *   Propagated for shell-mode actions. When a selected action runs in shell
-      mode, cmdk replaces its own process with the action's command via an
-      exec(2) syscall. The action's exit code becomes cmdk's exit code, so
-      any value other than 0 or 1 originates from the action itself, not cmdk.
+  *  Propagated from the command when the launcher runs a shell-mode action.
+     cmdk replaces its own process with "sh -c <cmd>" through exec(2), so the
+     command's exit status becomes cmdk's; any status other than 0, 1, or 2
+     comes from the command. Session-window actions and "cmdk session
+     window" run their command inside tmux, and its status never propagates.
 
-      Configured session-window actions create a tmux window and normally
-      switch to it, then cmdk exits 0 once that launch succeeds. "cmdk action
-      run --no-switch" instead leaves attached clients unchanged. On a
-      successful action run in either mode, launch identifiers are written as
-      JSON before exit. The payload runs inside tmux and its eventual exit
-      status is not propagated to the cmdk process.
-
-Subcommands follow the same convention: 0 on success, 1 on
-cmdk-detected errors. Empty results (e.g. "cmdk icons" with a filter
-that matches nothing) print a message to stderr and exit 0; an empty
-result is not treated as an error.
-`,
-	}
+See "cmdk action run --help" for the diagnostic it prints when the window was
+created but switching the client failed, and "cmdk help launching" for the
+launch modes.`)
 }

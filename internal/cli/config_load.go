@@ -33,3 +33,17 @@ func (root *rootOptions) loadConfig(cmd *cobra.Command) (loadedConfig, error) {
 	}
 	return loadedConfig{config: cfg, path: path, report: report}, nil
 }
+
+// configLoadingHelp is the configuration contract every command that loads
+// configuration composes into its long description, so the commands cannot
+// drift apart.
+const configLoadingHelp = `Configuration: cmdk reads --config when given, otherwise
+$XDG_CONFIG_HOME/cmdk/config.toml, or ~/.config/cmdk/config.toml when
+XDG_CONFIG_HOME is unset, empty, or not absolute. An absent discovered file is
+not an error. A --config file that does not exist, or a malformed or invalid
+file from either source, exits 1.`
+
+// configLoadingHelpWithKeys adds the pointer to the key reference for every
+// command other than config itself.
+const configLoadingHelpWithKeys = configLoadingHelp + `
+See "cmdk config --help" for the keys.`
