@@ -15,7 +15,7 @@ import (
 func requireGit(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not available")
+		t.Fatalf("required program git not available: %v", err)
 	}
 }
 

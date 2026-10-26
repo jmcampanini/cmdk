@@ -11,7 +11,7 @@ import (
 func requireTmuxBinary(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("tmux"); err != nil {
-		t.Skip("tmux not available")
+		t.Fatalf("required program tmux not available: %v", err)
 	}
 }
 
