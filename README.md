@@ -5,7 +5,7 @@ cmdk is a keyboard-driven tmux launcher: a fuzzy-filterable popup for switching 
 
 ## Install
 
-cmdk distributes from HEAD only through a Homebrew formula built from source; there is no release channel or tagged binary.
+cmdk distributes from HEAD only; there is no release channel or tagged binary.
 
 Linux and macOS are supported. Linux is verified in required CI; other Unix-like systems are unverified, and Windows is unsupported.
 
