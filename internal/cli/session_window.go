@@ -90,17 +90,15 @@ func (o *sessionWindowOptions) bindFlags(cmd *cobra.Command) {
 }
 
 // parseSessionWindowGrammar validates the complete positional grammar before
-// any command work: exactly one path before --, exactly one of --new or a
-// nonempty command after --, and no empty explicit --name. Cobra runs it as
-// the Args validator, after flag parsing and before the tmux prerequisite.
+// any command work: exactly one path before -- and exactly one of --new or a
+// nonempty command after --. Cobra runs it as the Args validator, after flag
+// parsing and before the tmux prerequisite. Flag values are checked by the
+// runner, so a bad value is a command failure rather than a usage error.
 func parseSessionWindowGrammar(cmd *cobra.Command, args []string, options sessionWindowOptions) (sessionWindowRequest, error) {
 	if len(args) == 0 {
 		return sessionWindowRequest{}, errors.New("path is required")
 	}
 	nameSet := cmd.Flags().Changed("name")
-	if nameSet && options.name == "" {
-		return sessionWindowRequest{}, errors.New("--name cannot be empty")
-	}
 	path, commandArgs, commandDelimiter, err := splitSessionWindowArgs(args, cmd.Flags().ArgsLenAtDash())
 	if err != nil {
 		return sessionWindowRequest{}, err
@@ -119,6 +117,9 @@ func parseSessionWindowGrammar(cmd *cobra.Command, args []string, options sessio
 }
 
 func runSessionWindowCommand(root *rootOptions, cmd *cobra.Command, request sessionWindowRequest, options sessionWindowOptions) error {
+	if request.nameSet && options.name == "" {
+		return errors.New("--name cannot be empty")
+	}
 	launchPath, err := resolver.ValidateLaunchDirectory(request.path)
 	if err != nil {
 		return err

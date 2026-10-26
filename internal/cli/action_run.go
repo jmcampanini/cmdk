@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -229,31 +228,18 @@ func completeActionLaunchResult(result execute.LaunchResult) bool {
 }
 
 func actionRunSwitchFailureError(actionName string, result execute.LaunchResult, switchErr *tmux.SwitchClientError) error {
-	switchFailure := strings.ReplaceAll(strings.TrimRight(switchErr.Error(), "\n"), "\n", "\n  ")
-	message := fmt.Sprintf(`action %q launched, but switching the client failed.
-
-The action's side effects already happened: the launch path exists and the
-window is running its command. Do not rerun this action - rerunning launches
-it a second time.
-
-Created tmux state:
-  session:     %s  (%s)
-  window:      %s  %s
-  pane:        %s
-  launch path: %s
-
-Switch failure: %s
-
-To go there manually: tmux switch-client -t '%s:%s'
-Automation that does not need the switch should pass --no-switch`,
+	message := fmt.Sprintf("action %q launched, but switching the client failed: %s. "+
+		"The action is already running in session %s (%s), window %s %q, pane %s, launch path %s; "+
+		"do not rerun it. Switch by hand with: tmux switch-client -t '%s:%s'. "+
+		"Automation that does not need the switch should pass --no-switch",
 		actionName,
+		foldLines(switchErr.Error()),
 		result.SessionID,
 		result.SessionKey,
 		result.WindowID,
 		result.WindowName,
 		result.PaneID,
 		result.LaunchPath,
-		switchFailure,
 		result.SessionID,
 		result.WindowID,
 	)

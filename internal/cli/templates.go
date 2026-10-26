@@ -11,9 +11,8 @@ for the keys and "cmdk help launching" for when each one is rendered.
 
 Variables from the selection:
   {{.path}}             selected directory (dir actions)
-  {{.pane_id}}          invoking tmux pane: --pane-id in the launcher, the
-                        current client's pane for "cmdk action run", and
-                        unavailable with --no-switch
+  {{.pane_id}}          invoking tmux pane, when the invocation supplies
+                        one; see "cmdk --help" and "cmdk action run --help"
   {{.session_id}}       stable tmux session ID (window and session items)
   {{.session_key}}      canonical path key of a cmdk-managed session, when
                         the session has one (window and session items)

@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/colorprofile"
+
+	"github.com/jmcampanini/cmdk/internal/theme"
 )
 
 // colorMode is the --color value: a fixed set, so pflag rejects any other
@@ -34,6 +36,28 @@ func (m *colorMode) Set(value string) error {
 }
 
 func (*colorMode) Type() string {
+	return "string"
+}
+
+// themeMode is the --theme value: empty for detection, or one of the two
+// built-in palettes, so pflag rejects any other value by name while parsing.
+type themeMode string
+
+func (m *themeMode) String() string {
+	return string(*m)
+}
+
+func (m *themeMode) Set(value string) error {
+	switch value {
+	case "", theme.NameLight, theme.NameDark:
+		*m = themeMode(value)
+		return nil
+	default:
+		return errors.New("must be light or dark")
+	}
+}
+
+func (*themeMode) Type() string {
 	return "string"
 }
 

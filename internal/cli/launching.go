@@ -30,11 +30,13 @@ Managed sessions
 cmdk recognizes a managed session by its @cmdk_session_key tmux session
 option, which holds the canonical path the session is for. When cmdk creates
 a session it sets only @cmdk_session_kind and @cmdk_session_key, and it finds
-a session by exact key match. A repository, its worktrees, and its worktree
-container share one managed session keyed by the repository; any other
-directory gets one managed session keyed by its canonical path. "cmdk session
-resolve" shows the key for a path without touching tmux. Each launch creates
-a fresh window; cmdk never reuses a window by name.
+a session by exact key match. A worktree whose parent directory holds a main,
+develop, or master checkout of the same repository is keyed by that parent,
+the worktree container, as is the container itself, so they share one
+managed session. Any other repository or worktree is keyed by its own top
+level, and any other directory by its canonical path. "cmdk session resolve"
+shows the key for a path without touching tmux. Each launch creates a fresh
+window; cmdk never reuses a window by name.
 
 In the launcher, tmux windows sort above sessions, directories, and actions.
 Inside a selected session, its windows sort above the built-in "Switch to

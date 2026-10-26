@@ -2,6 +2,7 @@ package config
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -103,10 +104,13 @@ func TestRenderReference_ContainsLiveDefaults(t *testing.T) {
 
 func TestRenderReference_KeepsThemeRecipeSteps(t *testing.T) {
 	output := RenderReference()
-	for _, want := range []string{"\n  1. Pick the table", "\n     palettes"} {
-		if !strings.Contains(output, want) {
-			t.Errorf("RenderReference() should contain %q", want)
-		}
+	lines := strings.Split(output, "\n")
+	step := slices.IndexFunc(lines, func(line string) bool { return strings.HasPrefix(line, "  1. ") })
+	if step < 0 || step+1 >= len(lines) {
+		t.Fatalf("RenderReference() has no numbered list step:\n%s", output)
+	}
+	if next := lines[step+1]; !strings.HasPrefix(next, "     ") || strings.TrimSpace(next) == "" {
+		t.Errorf("list continuation %q should carry a hanging indent", next)
 	}
 	flat := unwrapped(output)
 	for _, want := range []string{

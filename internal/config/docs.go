@@ -34,8 +34,9 @@ func themeColorField(name string, description string) FieldDoc {
 
 // Docs returns the configuration reference in its display order.
 func Docs() []SectionDoc {
-	reservedStageKeyValidation := "cannot be empty; must be unique within the action; " +
-		"cannot be reserved (" + strings.Join(reservedStageKeys, ", ") +
+	reservedStageKeyValidation := "cannot be empty; must be an identifier (letters, digits, and underscores, " +
+		"not starting with a digit); compared case-insensitively, must be unique within the action " +
+		"and cannot be reserved (" + strings.Join(reservedStageKeys, ", ") +
 		"; session actions also reserve " + strings.Join(sessionActionExtraReservedStageKeys, ", ") + ")"
 
 	return []SectionDoc{

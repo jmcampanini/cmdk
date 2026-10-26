@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	log "charm.land/log/v2"
@@ -30,7 +31,7 @@ var Version = "n/a"
 type rootOptions struct {
 	configPath  string
 	paneID      string
-	themeFlag   string
+	themeFlag   themeMode
 	colorMode   colorMode
 	timingsFlag bool
 	timingsJSON bool
@@ -103,7 +104,7 @@ Command groups:
 	cmd.Version = Version
 	cmd.PersistentFlags().StringVarP(&root.configPath, "config", "c", "", "configuration file to load; must exist")
 	cmd.Flags().StringVar(&root.paneID, "pane-id", "", "tmux pane the launcher was opened from")
-	cmd.Flags().StringVar(&root.themeFlag, "theme", "", "palette: light or dark; empty detects it")
+	cmd.Flags().Var(&root.themeFlag, "theme", "palette: light or dark; empty detects it")
 	cmd.Flags().Var(&root.colorMode, "color", "color output: auto, always, or never")
 	cmd.Flags().BoolVar(&root.timingsFlag, "timings", false, "print startup phase durations instead of the launcher")
 	cmd.Flags().BoolVar(&root.timingsJSON, "timings-json", false, "print the durations as JSON (implies --timings)")
@@ -362,7 +363,7 @@ func (root *rootOptions) runRootCommand(cmd *cobra.Command, _ []string) error {
 func (root *rootOptions) resolveTheme(tr trace.Tracer, overrides theme.Overrides) (theme.Theme, bool, error) {
 	autoDetectTheme := root.themeFlag == ""
 	stop := tr.Begin("theme")
-	t, err := theme.Resolve(root.themeFlag, overrides)
+	t, err := theme.Resolve(string(root.themeFlag), overrides)
 	stop()
 	if err != nil {
 		return theme.Theme{}, false, err
@@ -419,7 +420,20 @@ func Execute() int {
 func run(root *cobra.Command, stderr io.Writer) int {
 	err := root.Execute()
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "cmdk: %s\n", err)
+		_, _ = fmt.Fprintf(stderr, "cmdk: %s\n", foldLines(err.Error()))
 	}
 	return exitStatus(err)
+}
+
+// foldLines joins a multi-line message into one line, so a diagnostic that
+// embeds captured output or an input value with a newline still prints as
+// one stderr line.
+func foldLines(message string) string {
+	var lines []string
+	for line := range strings.SplitSeq(message, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return strings.Join(lines, "; ")
 }

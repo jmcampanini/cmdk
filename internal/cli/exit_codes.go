@@ -5,8 +5,8 @@ import "github.com/spf13/cobra"
 func newExitCodesCommand(_ *rootOptions) *cobra.Command {
 	return newHelpTopic("exit-codes", "Exit statuses and the stderr failure format", `Exit statuses cmdk returns and the failures that keep status 0.
 
-Every failure is one diagnostic on stderr in the form "cmdk: <message>" with
-no usage text; a multi-line diagnostic keeps the prefix on its first line.
+Every failure is one diagnostic line on stderr in the form "cmdk: <message>"
+with no usage text; captured output that spans lines is folded into it.
 Payloads go to stdout, so a script reads stdout and branches on the status.
 
   0  Success. The launcher quit without a selection or launched the
@@ -30,8 +30,9 @@ Payloads go to stdout, so a script reads stdout and branches on the status.
 
   2  Usage error, reported before any command work: an unknown command, an
      unknown flag, a flag value that does not parse (a non-numeric
-     --truncate, a --color other than auto, always, or never), an unexpected
-     operand, or operands that fail a command's positional grammar.
+     --truncate, a --color other than auto, always, or never, a --theme
+     other than light or dark), an unexpected operand, or operands that fail
+     a command's positional grammar.
 
   *  Propagated from the command when the launcher runs a shell-mode action.
      cmdk replaces its own process with "sh -c <cmd>" through exec(2), so the

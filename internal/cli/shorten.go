@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 
 	"github.com/jmcampanini/cmdk/internal/config"
@@ -94,8 +95,7 @@ func shortenInputPath(args []string) (string, error) {
 		return args[0], nil
 	}
 
-	stat, err := os.Stdin.Stat()
-	if err != nil || stat.Mode()&os.ModeCharDevice != 0 {
+	if term.IsTerminal(os.Stdin.Fd()) {
 		return "", errors.New("no path operand and stdin is a terminal; pass a path or pipe one line to stdin")
 	}
 	scanner := bufio.NewScanner(os.Stdin)

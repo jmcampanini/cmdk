@@ -1147,9 +1147,9 @@ cmd = %q
 	diagnostic := string(stderr)
 	for _, want := range []string{
 		`action "` + actionName + `" launched`,
-		"Do not rerun this action",
-		"Created tmux state:",
-		"Switch failure: tmux switch-client failed: exit status 42\n  stderr: cmdk e2e forced switch-client failure",
+		"do not rerun it",
+		"already running in session " + session.ID,
+		"failed: tmux switch-client failed: exit status 42; stderr: cmdk e2e forced switch-client failure.",
 		session.ID,
 		sessionKey,
 		live[2],

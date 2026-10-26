@@ -99,7 +99,7 @@ func TestExitCodesTopicListsEveryStatus(t *testing.T) {
 func TestHelpTopicsCoverTheConceptsNoCommandOwns(t *testing.T) {
 	tests := map[string][]string{
 		"templates": {"{{.path}}", "{{.pane_id}}", "{{.session_key}}", "{{.launch_basename}}", "{{.<key>}}", "{{sq .path}}", "CMDK_PANE_ID", "shell metacharacters"},
-		"launching": {"session-window", "exec(2)", "@cmdk_session_key", "one managed session keyed by the repository", "8 KiB", "4 MiB", "error screen"},
+		"launching": {"session-window", "exec(2)", "@cmdk_session_key", "worktree container", "8 KiB", "4 MiB", "error screen"},
 	}
 	for topic, wants := range tests {
 		help := executeRootForTest(t, "help", topic)

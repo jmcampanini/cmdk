@@ -32,6 +32,7 @@ func TestRunReportsFailuresAsOnePrefixedLineWithExitStatus(t *testing.T) {
 		{name: "missing operand", args: []string{"action", "run"}, wantStatus: exitUsage, wantStderr: "cmdk: accepts 1 arg(s), received 0"},
 		{name: "custom grammar", args: []string{"session", "window"}, wantStatus: exitUsage, wantStderr: "cmdk: path is required"},
 		{name: "fixed-set flag value", args: []string{"--color=bogus"}, wantStatus: exitUsage, wantStderr: `cmdk: invalid argument "bogus" for "--color" flag: must be auto, always, or never`},
+		{name: "fixed-set theme value", args: []string{"--theme=bogus"}, wantStatus: exitUsage, wantStderr: `cmdk: invalid argument "bogus" for "--theme" flag: must be light or dark`},
 		{name: "flag value error", args: []string{"--config", "", "config"}, wantStatus: exitFailure, wantStderr: "cmdk: config path cannot be empty"},
 		{name: "command work error", args: []string{"session", "resolve", t.TempDir() + "/missing"}, wantStatus: exitFailure},
 	}
@@ -72,7 +73,7 @@ func TestRunReturnsZeroWithoutOutputOnSuccess(t *testing.T) {
 	}
 }
 
-func TestRunKeepsMultiLineDiagnosticPrefixOnFirstLine(t *testing.T) {
+func TestRunFoldsMultiLineDiagnosticIntoOneLine(t *testing.T) {
 	root := &cobra.Command{
 		Use:           "cmdk",
 		SilenceUsage:  true,
@@ -86,8 +87,8 @@ func TestRunKeepsMultiLineDiagnosticPrefixOnFirstLine(t *testing.T) {
 	if status := run(root, &stderr); status != exitFailure {
 		t.Fatalf("status = %d, want %d", status, exitFailure)
 	}
-	if got := stderr.String(); got != "cmdk: first line\n  second line\n" {
-		t.Fatalf("stderr = %q, want the prefix on the first line only", got)
+	if got := stderr.String(); got != "cmdk: first line; second line\n" {
+		t.Fatalf("stderr = %q, want one folded line", got)
 	}
 }
 

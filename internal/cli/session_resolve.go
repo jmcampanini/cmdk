@@ -22,10 +22,12 @@ func newSessionResolveCommand(root *rootOptions) *cobra.Command {
 		Long: `Resolve a directory to the session plan cmdk would use for it.
 
 The path must be an existing directory. cmdk runs git under timeout.fetch to
-classify it as a repo session (a repository, worktree, or worktree container,
-keyed by the repository so they share one session) or a directory session
-(keyed by the canonical directory). The command reads no tmux state and
-creates no session or window.
+classify it as a repo session or a directory session. A repo session is keyed
+by the worktree container when the parent directory holds a main, develop, or
+master checkout of the same repository, and otherwise by the repository's own
+top level; a directory session is keyed by the canonical directory. See
+"cmdk help launching". The command reads no tmux state and creates no session
+or window.
 
 Stdout: two lines, "session_kind:" (repo or directory) and "session_key:"
 (cmdk's grouping key, not a tmux session ID), or with --json one object with

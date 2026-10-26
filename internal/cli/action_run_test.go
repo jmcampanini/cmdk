@@ -486,15 +486,14 @@ func TestRunPreparedActionReportsCreatedStateOnSwitchFailure(t *testing.T) {
 	}
 	for _, want := range []string{
 		`action "pi worktree" launched`,
-		"Do not rerun this action",
-		"Created tmux state:",
-		"$5",
+		"do not rerun it",
+		"already running in session $5",
 		"/Users/me/Code/github.com/acme/api",
 		"@18",
 		"wt-fix-login",
 		"%51",
 		"/Users/me/Code/github.com/acme/api-wt/fix-login",
-		"Switch failure: tmux switch-client failed: exit status 1\n  stderr: client disappeared",
+		"failed: tmux switch-client failed: exit status 1; stderr: client disappeared.",
 		"tmux switch-client -t '$5:@18'",
 		"--no-switch",
 	} {
@@ -520,7 +519,7 @@ func TestRunPreparedActionFallsBackToPlainSwitchErrorForIncompleteCreatedState(t
 	if !errors.Is(err, switchCause) || err.Error() != switchCause.Error() {
 		t.Fatalf("error = %v, want plain switch failure", err)
 	}
-	if strings.Contains(err.Error(), "Created tmux state") {
+	if strings.Contains(err.Error(), "already running") {
 		t.Fatalf("incomplete result produced created-state diagnostic: %v", err)
 	}
 	if stdout.Len() != 0 {
@@ -548,7 +547,7 @@ func TestRunPreparedActionLeavesNonSwitchErrorsUnchanged(t *testing.T) {
 	if !errors.Is(err, cause) {
 		t.Fatalf("error = %v, want original creation error", err)
 	}
-	if strings.Contains(err.Error(), "Created tmux state") {
+	if strings.Contains(err.Error(), "already running") {
 		t.Fatalf("non-switch error produced created-state diagnostic: %v", err)
 	}
 	if stdout.Len() != 0 {
