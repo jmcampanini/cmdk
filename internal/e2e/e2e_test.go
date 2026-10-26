@@ -1426,21 +1426,32 @@ func TestE2E_NoConfigFile(t *testing.T) {
 	navigateToWindowItems(t, sess)
 }
 
-func TestE2E_MalformedConfigShowsError(t *testing.T) {
+func TestE2E_MalformedConfigExitsWithError(t *testing.T) {
 	xdg := writeConfig(t, `[[[broken toml`)
-	sess := startSessionWithEnv(t, map[string]string{"XDG_CONFIG_HOME": xdg})
+	marker := filepath.Join(t.TempDir(), "exitcode")
+	stderrPath := filepath.Join(t.TempDir(), "stderr")
+
+	sess := "cmdk-test-" + strings.ReplaceAll(t.Name(), "/", "-")
+	shellCmd := fmt.Sprintf("%s --pane-id=%%0 2>%s; echo EXITCODE=$? > %s",
+		shellQuoteE2E(binaryPath), shellQuoteE2E(stderrPath), shellQuoteE2E(marker))
+	cmd := tmuxCmd("new-session", "-d", "-s", sess, "-x", "120", "-y", "40",
+		"env", "XDG_CONFIG_HOME="+xdg, "sh", "-c", shellCmd)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("tmux new-session failed: %v\n%s", err, out)
+	}
 	defer killSession(t, sess)
 
-	waitForReady(t, sess)
-	sendKeys(t, sess, "End")
-
-	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, "config error")
-	}, defaultTimeout)
-
-	exitFilterModeE2E(t, sess)
-	sendKeys(t, sess, "Escape")
-	waitForExit(t, sess)
+	got := waitForFile(t, marker, defaultTimeout)
+	if !strings.Contains(got, "EXITCODE=1") {
+		t.Errorf("expected EXITCODE=1, got: %s", got)
+	}
+	stderr, err := os.ReadFile(stderrPath)
+	if err != nil {
+		t.Fatalf("failed to read stderr capture: %v", err)
+	}
+	if !strings.Contains(string(stderr), "loading config") {
+		t.Errorf("stderr = %q, want the config load error", stderr)
+	}
 }
 
 func TestE2E_ConfigCommandOrder(t *testing.T) {

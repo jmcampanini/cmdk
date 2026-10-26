@@ -89,6 +89,23 @@ func executeRootForTest(t *testing.T, args ...string) string {
 	return out.String()
 }
 
+func TestEmptyConfigFlagIsAnError(t *testing.T) {
+	for _, args := range [][]string{
+		{"--config", "", "config"},
+		{"config", "--config="},
+		{"--config=", "shorten", "/tmp"},
+	} {
+		root := newRootCommand()
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		root.SetArgs(args)
+		err := root.Execute()
+		if err == nil || !strings.Contains(err.Error(), "config path cannot be empty") {
+			t.Errorf("cmdk %s: err = %v, want config path cannot be empty", strings.Join(args, " "), err)
+		}
+	}
+}
+
 func TestPersistentConfigFlagReachesSubcommands(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing.toml")
 	for _, args := range [][]string{

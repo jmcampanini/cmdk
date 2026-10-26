@@ -138,13 +138,13 @@ func TestAutoThemeDetection_SwitchesToLightBackground(t *testing.T) {
 
 func TestAutoThemeDetection_AppliesConfigThemeOverrides(t *testing.T) {
 	cfg := testConfig()
-	cfg.Theme = theme.Config{
+	cfg.Theme = config.ThemeConfig{
 		theme.NameLight: {
 			InputBg: "#111111",
 			Accent:  "#222222",
 		},
 	}
-	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{Config: cfg}, theme.Default(cfg.Theme), nil, nil).
+	m := NewModel(testItems(), "%1", nil, testRegistry(), generator.Context{Config: cfg}, theme.Default(cfg.Theme.Overrides()), nil, nil).
 		WithAutoThemeDetection()
 
 	result, _ := m.Update(tea.BackgroundColorMsg{Color: color.White})

@@ -48,7 +48,7 @@ func runConfigCommand(root *rootOptions, cmd *cobra.Command, options configComma
 		return err
 	}
 
-	path, err := config.ResolvePath(root.configPath)
+	path, err := root.configFilePath(cmd)
 	if err != nil {
 		return err
 	}

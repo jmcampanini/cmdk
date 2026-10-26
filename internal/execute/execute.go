@@ -195,7 +195,7 @@ func ResolveLaunch(accumulated []item.Item, selected item.Item, paneID string, c
 			windowNameMaxLen: cfg.Behavior.WindowNameMaxLength,
 			command:          command,
 			newShell:         selected.NewShell,
-			resolveTimeout:   cfg.Timeout.EffectiveFetch(),
+			resolveTimeout:   cfg.Timeout.Fetch,
 			tmuxTimeouts:     tmux.TimeoutsFromConfig(cfg),
 		}, data, nil
 	case launchModeShell:

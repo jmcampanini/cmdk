@@ -60,7 +60,7 @@ func fetchSessionWindows(session item.Item, ctx Context, fetchWindows SessionWin
 		return []item.Item{ErrorItem(Source{Name: "windows"}, errors.New("no fetch function"))}
 	}
 
-	fetchCtx, cancel := context.WithTimeout(context.Background(), ctx.Config.Timeout.EffectiveFetch())
+	fetchCtx, cancel := context.WithTimeout(context.Background(), ctx.Config.Timeout.Fetch)
 	defer cancel()
 
 	windows, err := fetchWindows(fetchCtx, session)

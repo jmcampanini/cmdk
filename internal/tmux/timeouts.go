@@ -6,7 +6,7 @@ import "github.com/jmcampanini/cmdk/internal/config"
 // per-command deadlines.
 func TimeoutsFromConfig(cfg config.Config) Timeouts {
 	return Timeouts{
-		Query:    cfg.Timeout.EffectiveFetch(),
-		Mutation: cfg.Timeout.EffectiveMutation(),
+		Query:    cfg.Timeout.Fetch,
+		Mutation: cfg.Timeout.Mutation,
 	}
 }

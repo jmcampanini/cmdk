@@ -72,7 +72,7 @@ Log file:
 		RunE:               root.runRootCommand,
 	}
 	cmd.Version = Version
-	cmd.PersistentFlags().StringVarP(&root.configPath, "config", "c", "", "path to config file (also validates; exits 1 on error)")
+	cmd.PersistentFlags().StringVarP(&root.configPath, "config", "c", "", "path to config file")
 	cmd.Flags().StringVar(&root.paneID, "pane-id", "", "tmux pane ID")
 	cmd.Flags().StringVar(&root.themeFlag, "theme", "", "color theme (light, dark)")
 	cmd.Flags().BoolVar(&root.timingsFlag, "timings", false, "measure and print startup phase durations")
@@ -97,7 +97,7 @@ Log file:
 	return cmd
 }
 
-func (root *rootOptions) runRootCommand(_ *cobra.Command, _ []string) error {
+func (root *rootOptions) runRootCommand(cmd *cobra.Command, _ []string) error {
 	root.timingsFlag = root.timingsFlag || root.timingsJSON
 
 	tr := trace.Noop()
@@ -120,15 +120,10 @@ func (root *rootOptions) runRootCommand(_ *cobra.Command, _ []string) error {
 	}
 
 	stop = tr.Begin("config")
-	cfgPath, err := config.ResolvePath(root.configPath)
+	cfg, err := root.loadConfig(cmd)
 	if err != nil {
 		stop()
 		return err
-	}
-	cfg, cfgErr := config.Load(cfgPath)
-	if cfgErr != nil && root.configPath != "" {
-		stop()
-		return cfgErr
 	}
 	zoxideCfg := cfg.Sources["zoxide"]
 	shortenHome := cfg.Display.ShortenHome
@@ -147,7 +142,7 @@ func (root *rootOptions) runRootCommand(_ *cobra.Command, _ []string) error {
 		Rules:             rules,
 		SessionTruncation: tmuxTrunc,
 	}
-	fetchTimeout := cfg.Timeout.EffectiveFetch()
+	fetchTimeout := cfg.Timeout.Fetch
 	sources := []generator.Source{
 		traceSource(tr, "source/windows", generator.Source{Name: "windows", Async: true, Fetch: func(ctx context.Context) ([]item.Item, error) {
 			return tmux.ListWindowsWithDisplay(ctx, fetchTimeout, tmuxDisplay)
@@ -158,11 +153,6 @@ func (root *rootOptions) runRootCommand(_ *cobra.Command, _ []string) error {
 		traceSource(tr, "source/zoxide", generator.Source{Name: "zoxide", Limit: zoxideCfg.Limit, Async: true, Fetch: func(ctx context.Context) ([]item.Item, error) {
 			return zoxide.ListDirs(ctx, fetchTimeout, zoxideCfg.MinScore, home, shortenHome, rules, trunc)
 		}}),
-	}
-	if cfgErr != nil {
-		sources = append(sources, traceSource(tr, "source/config", generator.Source{Name: "config", Fetch: func(context.Context) ([]item.Item, error) {
-			return nil, cfgErr
-		}}))
 	}
 	sources = append(sources, traceSource(tr, "source/actions", generator.Source{Name: "actions", Fetch: config.MatchingActions(cfg, "root")}))
 
@@ -296,7 +286,7 @@ func (root *rootOptions) runRootCommand(_ *cobra.Command, _ []string) error {
 func (root *rootOptions) resolveTheme(tr trace.Tracer, cfg config.Config) (theme.Theme, bool, error) {
 	autoDetectTheme := root.themeFlag == ""
 	stop := tr.Begin("theme")
-	t, err := theme.Resolve(root.themeFlag, cfg.Theme)
+	t, err := theme.Resolve(root.themeFlag, cfg.Theme.Overrides())
 	stop()
 	if err != nil {
 		return theme.Theme{}, false, err

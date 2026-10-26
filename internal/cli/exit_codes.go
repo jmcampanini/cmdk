@@ -18,14 +18,15 @@ func newExitCodesCommand(_ *rootOptions) *cobra.Command {
       JSON object to stdout with action, launchPath, sessionId, sessionKey,
       windowId, windowName, and paneId, then exits 0.
 
-  1   cmdk error. An invalid config file passed via --config, an
-      unrecoverable startup failure, a launch mechanics failure after a
-      successful selection (for example tmux window creation or exec
-      failure), a missing tmux executable or unsupported tmux version when
-      invoking tmux-backed functionality, or an internal error. Configuration
-      problems discovered in the default config path appear as a failed source
-      row inside the TUI rather than causing a non-zero exit. Logging setup
-      failures produce a stderr warning and do not cause exit 1.
+  1   cmdk error. A malformed or invalid config file, whether discovered in
+      the default config path or passed via --config, an unrecoverable
+      startup failure, a launch mechanics failure after a successful
+      selection (for example tmux window creation or exec failure), a
+      missing tmux executable or unsupported tmux version when invoking
+      tmux-backed functionality, or an internal error. Every command loads
+      the same configuration, so a broken config file exits 1 before any
+      command work runs. Logging setup failures produce a stderr warning and
+      do not cause exit 1.
 
       Usage errors also exit 1 before any command work runs: an unknown
       command or unexpected operand anywhere in the tree (including operands

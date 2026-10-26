@@ -297,7 +297,7 @@ func (m Model) handleBackgroundColor(msg tea.BackgroundColorMsg) Model {
 		return m
 	}
 
-	next := theme.FromBackground(msg.IsDark(), m.ctx.Config.Theme)
+	next := theme.FromBackground(msg.IsDark(), m.ctx.Config.Theme.Overrides())
 	log.Debug("theme auto-detected", "theme", next.Name, "background", msg.String())
 	if next.Name == m.theme.Name {
 		return m

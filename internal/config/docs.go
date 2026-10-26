@@ -125,9 +125,9 @@ func Docs() []SectionDoc {
 			Name:        "timeout",
 			Description: "Timeouts for external commands cmdk runs.",
 			Fields: []FieldDoc{
-				{Name: "fetch", Type: "duration", Description: "Max wait for read-only queries that populate lists (tmux list commands, git probes, zoxide). Zero uses the default of 2s; queries always run under a deadline. Accepts Go duration strings: ms, s, m, h.", Validation: "cannot be negative; if non-zero, must be >= 1ms"},
+				{Name: "fetch", Type: "duration", Description: "Max wait for read-only queries that populate lists (tmux list commands, git probes, zoxide). Queries always run under a deadline. Accepts Go duration strings: ms, s, m, h.", Validation: "must be positive and >= 1ms"},
 				{Name: "picker", Type: "duration", Description: "Max wait for picker stage source commands and launch_path_cmd commands. Zero means no timeout; with no timeout, a hanging command holds the launcher until it exits or cmdk is signaled.", Validation: "cannot be negative; if non-zero, must be >= 1ms"},
-				{Name: "mutation", Type: "duration", Description: "Max wait for state-changing tmux commands (new-session, new-window, set-option, switch-client). Zero uses the default of 5s; mutations always run under a deadline so a wedged tmux server cannot hang cmdk. Attaching to a session is not a mutation and never times out.", Validation: "cannot be negative; if non-zero, must be >= 1ms"},
+				{Name: "mutation", Type: "duration", Description: "Max wait for state-changing tmux commands (new-session, new-window, set-option, switch-client). Mutations always run under a deadline so a wedged tmux server cannot hang cmdk. Attaching to a session is not a mutation and never times out.", Validation: "must be positive and >= 1ms"},
 			},
 			Example: "[timeout]\nfetch = \"5s\"    # e.g. 500ms, 2s, 1m\npicker = \"2s\"\nmutation = \"5s\"",
 		},
@@ -164,7 +164,8 @@ func RenderHelp() string {
 	var b strings.Builder
 	b.WriteString("CONFIGURATION REFERENCE\n\n")
 	b.WriteString("Config file: $XDG_CONFIG_HOME/cmdk/config.toml\n")
-	b.WriteString("    default: ~/.config/cmdk/config.toml\n")
+	b.WriteString("    default: ~/.config/cmdk/config.toml when XDG_CONFIG_HOME is unset,\n")
+	b.WriteString("             empty, or not an absolute path\n")
 	for _, section := range docs {
 		b.WriteString("\n")
 		b.WriteString(strings.ToUpper(section.Name))

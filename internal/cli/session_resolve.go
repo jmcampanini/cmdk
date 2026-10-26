@@ -7,7 +7,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/jmcampanini/cmdk/internal/config"
 	resolver "github.com/jmcampanini/cmdk/internal/session"
 )
 
@@ -73,13 +72,9 @@ func writeSessionPlan(out io.Writer, plan resolver.Plan) error {
 }
 
 func resolveSessionPlanForCommand(root *rootOptions, cmd *cobra.Command, path string) (resolver.Plan, error) {
-	cfgPath, err := config.ResolvePath(root.configPath)
+	cfg, err := root.loadConfig(cmd)
 	if err != nil {
 		return resolver.Plan{}, err
-	}
-	cfg, err := config.Load(cfgPath)
-	if err != nil {
-		return resolver.Plan{}, fmt.Errorf("loading config: %w", err)
 	}
 	return resolveSessionPlanWithConfig(cmd, path, cfg)
 }
