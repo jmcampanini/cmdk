@@ -5,12 +5,29 @@ cmdk is a keyboard-driven tmux launcher: a fuzzy-filterable popup for switching 
 
 ## Install
 
-cmdk distributes from HEAD only; there is no release channel or tagged binary.
+cmdk supports versioned releases with prebuilt binaries and a Homebrew cask, plus a HEAD-only Homebrew formula built from source. Until the first release is published, use the HEAD formula or build from source.
 
-Linux and macOS are supported. Linux is verified in required CI; other Unix-like systems are unverified, and Windows is unsupported.
+Release archives target Linux and macOS on amd64 and arm64. Linux is verified in required CI; other Unix-like systems are unverified, and Windows is unsupported. Install the [required external programs](#required-external-programs) separately.
 
 
-### Homebrew (macOS)
+### Versioned releases
+
+After the first release is published, install or upgrade with [mise](https://mise.jdx.dev) or the shared Homebrew tap:
+
+```sh
+mise use -g github:jmcampanini/cmdk
+mise upgrade github:jmcampanini/cmdk
+
+brew install --cask jmcampanini/tap/cmdk
+brew upgrade --cask jmcampanini/tap/cmdk
+```
+
+Or download the archive for your OS and architecture from the [releases page](https://github.com/jmcampanini/cmdk/releases), extract it, and put `cmdk` on your `PATH`. To upgrade, download the new release and replace the binary. Each release includes SHA-256 checksums and GitHub build provenance attestations. On macOS, if a browser download is quarantined, run `xattr -d com.apple.quarantine cmdk` on the extracted binary before running it. The Homebrew cask handles quarantine removal and installs bash, zsh, and fish completions.
+
+
+### Homebrew HEAD alternative (macOS)
+
+The existing HEAD formula remains available for installs that track the latest commit:
 
 ```sh
 brew tap jmcampanini/cmdk https://github.com/jmcampanini/cmdk
@@ -31,10 +48,13 @@ With Git and [mise](https://mise.jdx.dev) installed (mise supplies the pinned Go
 ```sh
 git clone https://github.com/jmcampanini/cmdk.git
 cd cmdk
+mise trust
 mise install
 mise run build
 # Copy or symlink ./build/cmdk onto your PATH.
 ```
+
+To upgrade a source installation, pull the latest source, run `mise install` and `mise run build` again, and replace the binary on your `PATH`.
 
 
 ## Representative commands
