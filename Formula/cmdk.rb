@@ -11,7 +11,7 @@ class Cmdk < Formula
       -s -w
       -X github.com/jmcampanini/cmdk/internal/cli.Version=#{version}
     ]
-    system "go", "build", "-trimpath", "-buildvcs=false", *std_go_args(output: bin/"cmdk", ldflags:)
+    system "go", "build", "-buildvcs=false", *std_go_args(output: bin/"cmdk", ldflags:)
     generate_completions_from_executable(bin/"cmdk", "completion")
   end
 
