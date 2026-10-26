@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestDocs_CoversAllFields(t *testing.T) {
@@ -60,92 +62,79 @@ func joinTOMLPath(prefix string, key string) string {
 	return prefix + "." + key
 }
 
-func TestRenderHelp_ContainsAllSections(t *testing.T) {
-	output := RenderHelp()
+// unwrapped collapses the wrapped reference into one line so a test can look
+// for a phrase without knowing where the renderer broke it.
+func unwrapped(text string) string {
+	return strings.Join(strings.Fields(text), " ")
+}
+
+func TestRenderReference_ContainsEveryTableAndKey(t *testing.T) {
+	output := RenderReference()
+	flat := unwrapped(output)
 	for _, section := range Docs() {
-		if !strings.Contains(output, strings.ToUpper(section.Name)) {
-			t.Errorf("RenderHelp() missing section %q", section.Name)
+		if !strings.Contains(output, section.Table+"\n") {
+			t.Errorf("RenderReference() missing table header %q", section.Table)
+		}
+		for _, field := range section.Fields {
+			if !strings.Contains(output, "  "+field.Name+"  "+field.Type) {
+				t.Errorf("RenderReference() missing key %s.%s", section.Name, field.Name)
+			}
+			if field.Validation != "" && !strings.Contains(flat, "Constraint: "+field.Validation) {
+				t.Errorf("RenderReference() missing constraint for %s.%s", section.Name, field.Name)
+			}
 		}
 	}
 }
 
-func TestRenderHelp_ContainsLiveDefaults(t *testing.T) {
-	output := RenderHelp()
+func TestRenderReference_ContainsLiveDefaults(t *testing.T) {
+	output := RenderReference()
 	defaults := DefaultConfig()
 
-	if !strings.Contains(output, defaults.Timeout.Fetch.String()) {
-		t.Errorf("RenderHelp() should contain default timeout %q", defaults.Timeout.Fetch)
-	}
-	if !strings.Contains(output, defaults.Display.ShortenHome) {
-		t.Errorf("RenderHelp() should contain default shorten_home %q", defaults.Display.ShortenHome)
-	}
-}
-
-func TestRenderHelp_ContainsThemeRecipe(t *testing.T) {
-	output := RenderHelp()
 	for _, want := range []string{
-		"To apply an arbitrary palette:",
-		"accent = primary",
-		"Roles derive",
-		"from semantic tokens",
-		"cmdk config --validate /path/to/config.toml",
-		"Catppuccin Frappe-style semantic mapping",
-		"session_icon = \"#81c8be\"",
+		`fetch  duration (default "` + defaults.Timeout.Fetch.String() + `")`,
+		`shorten_home  string (default "` + defaults.Display.ShortenHome + `")`,
+		`window_name_max_length  int (default 20)`,
 	} {
 		if !strings.Contains(output, want) {
-			t.Errorf("RenderHelp() should contain theme recipe text %q", want)
+			t.Errorf("RenderReference() should contain %q", want)
 		}
 	}
 }
 
-func TestRenderHelp_ContainsSessionWindowDocs(t *testing.T) {
-	output := RenderHelp()
-	for _, want := range []string{
-		"cmdk attach",
-		"[startup].path",
-		"outside tmux",
-		"cmdk action run <exact-name> [--no-switch]",
-		"running tmux server",
-		"does not start a server",
-		"CMDK_PANE_ID is omitted",
-		"cmdk session window <path> [--switch] --new",
-		"cmdk session window <path> [--name <name>] [--switch] -- <command> [args...]",
-		"stays in the background by",
-		"default; --switch switches",
-		"--switch must appear before --",
-		"@cmdk_session_key",
-		"--switch requires a current client for",
-		"switch-client",
-		"Switch to session",
-	} {
+func TestRenderReference_KeepsThemeRecipeSteps(t *testing.T) {
+	output := RenderReference()
+	for _, want := range []string{"\n  1. Pick the table", "\n     palettes"} {
 		if !strings.Contains(output, want) {
-			t.Errorf("RenderHelp() should contain %q", want)
+			t.Errorf("RenderReference() should contain %q", want)
+		}
+	}
+	flat := unwrapped(output)
+	for _, want := range []string{
+		"accent = primary accent",
+		"Roles derive from the tokens",
+		`"cmdk config --validate <path>"`,
+	} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("RenderReference() should contain %q", want)
 		}
 	}
 }
 
-func TestRenderHelp_ContainsTemplateVars(t *testing.T) {
-	output := RenderHelp()
-	for _, v := range []string{
-		"{{.path}}",
-		"{{.pane_id}}",
-		"{{sq .path}}",
-		"{{.session_attached}}",
-		"{{.session_display}}",
-		"{{.session_id}}",
-		"{{.session_key}}",
-		"{{.window_id}}",
-		"{{.window_index}}",
-		"{{.window_name}}",
-		"{{.launch_path}}",
-		"{{.launch_basename}}",
-		"{{.session_kind}}",
-		"{{.session_name}}",
-		"{{.session_windows}}",
-		"{{.<key>}}",
-	} {
-		if !strings.Contains(output, v) {
-			t.Errorf("RenderHelp() should contain template variable %q", v)
+func TestRenderReference_FitsEightyColumns(t *testing.T) {
+	for i, line := range strings.Split(RenderReference(), "\n") {
+		if width := ansi.StringWidth(line); width > referenceWidth {
+			t.Errorf("line %d is %d columns, want at most %d: %q", i+1, width, referenceWidth, line)
 		}
+	}
+}
+
+func TestWrapWords(t *testing.T) {
+	got := wrapWords("one two three four", 9)
+	want := []string{"one two", "three", "four"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("wrapWords() = %q, want %q", got, want)
+	}
+	if got := wrapWords("extraordinarily", 5); len(got) != 1 || got[0] != "extraordinarily" {
+		t.Errorf("wrapWords() split a single long word: %q", got)
 	}
 }

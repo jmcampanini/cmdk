@@ -23,15 +23,27 @@ func newAttachCommand(root *rootOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "attach [path]",
 		Short: "Attach to a cmdk-managed tmux session from outside tmux",
-		Long: `Attach to a cmdk-managed tmux session from outside tmux.
+		Long: `Attach to the cmdk-managed tmux session for a directory from outside tmux.
 
-With [path], cmdk resolves that directory using the same session resolver as
-"cmdk session resolve". Without [path], [startup].path in the config file is
-required. If the managed session already exists, cmdk attaches to it. Otherwise
-cmdk creates the managed session and then attaches.
+With [path], cmdk resolves that directory with the same resolver as "cmdk
+session resolve"; a leading ~/ expands to your home directory. Without it,
+[startup].path from the configuration is required. The path must be an
+existing directory. When the managed session exists, cmdk attaches to it.
+Otherwise cmdk creates the session with a window named after the directory,
+sets its @cmdk_session_kind and @cmdk_session_key options, and attaches.
 
-This command refuses to run inside tmux because it is intended as the outer
-entry point into tmux, not as a nested tmux command.`,
+cmdk then hands the terminal to "tmux attach-session", an external program,
+so stdin, stdout, and stderr belong to tmux until the client detaches; the
+attach never times out. cmdk itself writes only diagnostics to stderr and
+never prompts. The command refuses to run when TMUX is set, because it is
+the outer entry point into tmux, not a nested tmux command. It runs git to
+classify the path and tmux to find or create the session.
+
+` + tmuxPrerequisiteHelp + `
+
+` + configLoadingHelpWithKeys,
+		Example: `  cmdk attach
+  cmdk attach ~/Code/github.com/me/project`,
 		Args:    cobra.MaximumNArgs(1),
 		PreRunE: requireTmux,
 		RunE: func(cmd *cobra.Command, args []string) error {

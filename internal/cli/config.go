@@ -24,19 +24,29 @@ func newConfigCommand(root *rootOptions) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "config",
-		Short: "Show resolved configuration and validate a config file",
-		Long: `Show resolved configuration after applying defaults and the config file.
-Exits non-zero if the config is invalid.
+		Short: "Show the effective configuration or validate a file",
+		Long: `Show the configuration cmdk runs with, or validate a configuration file.
 
-See "cmdk docs" for the configuration reference and "cmdk icons" for icon
-aliases.`,
+Stdout: the effective configuration as TOML after defaults and the
+configuration file were applied, preceded by a "# <path>" comment naming the
+file it came from; the report loads back unchanged. --provenance appends a
+"# Provenance" table as TOML comments naming the input that set each value.
+--validate <path> loads that file instead of the discovered one, prints
+"valid" on success, and otherwise exits 1 with the first problem on stderr.
+Stderr: diagnostics. The command never prompts and needs no terminal.
+
+` + configLoadingHelp + ` Unknown keys are rejected by name.
+
+Configuration keys
+
+` + config.RenderReference(),
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runConfigCommand(root, cmd, options)
 		},
 	}
-	cmd.Flags().BoolVar(&options.showProvenance, "provenance", false, "include config provenance")
-	cmd.Flags().StringVar(&options.validatePath, "validate", "", "validate a config file and exit")
+	cmd.Flags().BoolVar(&options.showProvenance, "provenance", false, "append the source of each value")
+	cmd.Flags().StringVar(&options.validatePath, "validate", "", "validate this file and print \"valid\"")
 	return cmd
 }
 

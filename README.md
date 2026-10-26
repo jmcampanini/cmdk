@@ -68,7 +68,7 @@ To upgrade a source installation, pull the latest source, run `mise install` and
 | `cmdk action run <exact-name>` | Run a configured session-window action. |
 | `cmdk window next` / `cmdk window previous` | Cycle through tmux windows across sessions. |
 
-`cmdk --help`, each command's `--help`, and the help topics `cmdk help exit-codes`, `cmdk docs`, and `cmdk icons` are the canonical reference.
+`cmdk --help`, each command's `--help`, and the help topics `cmdk help exit-codes`, `cmdk help launching`, and `cmdk help templates` are the canonical reference.
 
 Bind a key in `~/.tmux.conf` to open the launcher in a tmux popup, reload tmux with `tmux source-file ~/.tmux.conf`, then press `prefix + Space` inside any tmux session:
 
@@ -87,7 +87,7 @@ bind-key Space display-popup -E "cmdk --pane-id=#{pane_id}"
 
 ## Configuration
 
-cmdk reads `$XDG_CONFIG_HOME/cmdk/config.toml`, or `~/.config/cmdk/config.toml` when `XDG_CONFIG_HOME` is unset, empty, or not an absolute path. `cmdk config --help` shows how to inspect and validate the resolved configuration, and `cmdk docs` is the configuration reference.
+cmdk reads `$XDG_CONFIG_HOME/cmdk/config.toml`, or `~/.config/cmdk/config.toml` when `XDG_CONFIG_HOME` is unset, empty, or not an absolute path. `cmdk config --help` is the configuration reference: every key with its meaning and constraints, and how to inspect and validate the resolved configuration.
 
 A minimal config declares one action:
 

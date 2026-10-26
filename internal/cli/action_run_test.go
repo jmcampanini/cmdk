@@ -75,6 +75,8 @@ func TestActionRunHelpDocumentsContract(t *testing.T) {
 	if err := cmd.Help(); err != nil {
 		t.Fatal(err)
 	}
+	// Help is wrapped at 80 columns, so look for each phrase in the unwrapped text.
+	help := strings.Join(strings.Fields(out.String()), " ")
 	for _, want := range []string{
 		"run <exact-name>",
 		"--path",
@@ -86,15 +88,15 @@ func TestActionRunHelpDocumentsContract(t *testing.T) {
 		"before launch_path_cmd runs",
 		"case-sensitive",
 		"session-window",
-		"Picker inputs",
+		"picker input",
 		`"launchPath"`,
 		`"paneId"`,
 		"switching the client fails",
 		"already running",
-		"do not",
-		"stderr",
+		"Do not rerun",
+		"Stderr",
 	} {
-		if !strings.Contains(out.String(), want) {
+		if !strings.Contains(help, want) {
 			t.Errorf("help missing %q\n%s", want, out.String())
 		}
 	}

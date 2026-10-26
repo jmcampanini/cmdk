@@ -10,15 +10,18 @@ func newActionCommand(root *rootOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "action",
 		Short: "Run configured actions noninteractively",
-		Long: `Run configured actions without opening the interactive picker.
+		Long: `Run configured actions without opening the launcher.
 
-Only configured root and directory actions whose effective launch mode is
-session-window are supported.`,
+Only root and dir actions whose effective launch mode is session-window can
+run this way; see "cmdk help launching" for the modes. A bare "cmdk action"
+prints this help and exits 0.`,
 		Args: cobra.NoArgs,
 		RunE: runHelp,
 	}
+	// Flag errors under this group stay usage errors; the group only escapes
+	// terminal controls in the flag text before the message reaches stderr.
 	cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
-		return terminalSafeActionRunError(err)
+		return terminalSafeActionRunError(markUsageError(err))
 	})
 	cmd.AddCommand(newActionRunCommand(root))
 	return cmd

@@ -867,6 +867,19 @@ func TestLoad_MalformedTOML(t *testing.T) {
 	}
 }
 
+func TestLoad_UnknownKeyIsRejectedByName(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte("[behavior]\nnot_a_key = true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := Load(path)
+	if err == nil || !strings.Contains(err.Error(), "behavior.not_a_key") {
+		t.Fatalf("Load() error = %v, want the unknown key named", err)
+	}
+}
+
 func TestLoad_EmptyFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")

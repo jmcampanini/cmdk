@@ -207,20 +207,3 @@ func captureStderr(t *testing.T, fn func()) string {
 	}
 	return string(buf)
 }
-
-func TestIconSetCounts(t *testing.T) {
-	counts := iconSetCounts()
-	total := counts["cod"] + counts["dev"] + counts["oct"]
-	if total != len(icon.All()) {
-		t.Errorf("set counts sum to %d, want %d", total, len(icon.All()))
-	}
-	if counts["cod"] == 0 {
-		t.Error("expected non-zero cod count")
-	}
-	if counts["dev"] == 0 {
-		t.Error("expected non-zero dev count")
-	}
-	if counts["oct"] == 0 {
-		t.Error("expected non-zero oct count")
-	}
-}

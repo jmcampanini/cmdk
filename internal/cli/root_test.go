@@ -6,73 +6,138 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/spf13/cobra"
 )
 
-func TestRootHelpMakesSessionWindowLaunchingDiscoverable(t *testing.T) {
-	cmd := newRootCommand()
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-	if err := cmd.Help(); err != nil {
-		t.Fatal(err)
-	}
+// TestRootHelpEndsWithTaskListAndGroupBlock checks the root long
+// description's shape: the contract text, then a common task list with a
+// full invocation per line, then a block that ends the description with one
+// line per first-level command group and its --help invocation.
+func TestRootHelpEndsWithTaskListAndGroupBlock(t *testing.T) {
+	root := newRootCommand()
+	long := root.Long
+	flat := strings.Join(strings.Fields(long), " ")
 
-	help := out.String()
 	for _, want := range []string{
-		"cmdk action run <exact-name> --path <dir> --input key=value [--no-switch]",
-		"Run configured actions noninteractively",
-		"cmdk session window <path> [--switch] --new",
-		"cmdk session window <path> [--switch] -- <command> [args...]",
-		"Windows are created in the background by default",
-		"The path determines the managed session",
+		"interactive only",
+		"--timings",
+		"Diagnostics go to stderr",
+		"$HOME/.local/state/cmdk/cmdk.log",
+		"--color=auto",
+		"NO_COLOR",
+		"--theme=light or --theme=dark",
 		"tmux 3.2 or newer",
-		"Linux or macOS",
-		"zoxide is optional",
-		"Nerd Font is optional",
-		"Resolve paths and launch windows in managed sessions",
+		"git",
+		"zoxide",
+		"Nerd Font",
+		"Windows is unsupported",
+		configLoadingHelp,
 	} {
+		if !strings.Contains(flat, strings.Join(strings.Fields(want), " ")) {
+			t.Errorf("root help missing %q", want)
+		}
+	}
+
+	tasksAt := strings.Index(long, "\nCommon tasks:\n")
+	groupsAt := strings.LastIndex(long, "\nCommand groups:\n")
+	if tasksAt < 0 || groupsAt < 0 || tasksAt > groupsAt {
+		t.Fatalf("root help must list common tasks before the command group block:\n%s", long)
+	}
+	taskLine := regexp.MustCompile(`^  [^:]+: +cmdk .*\S$`)
+	for _, line := range strings.Split(strings.TrimRight(long[tasksAt+len("\nCommon tasks:\n"):groupsAt], "\n"), "\n") {
+		if !taskLine.MatchString(line) {
+			t.Errorf("task line %q must name the goal and its full cmdk invocation", line)
+		}
+	}
+
+	// First-level command groups the application owns; cobra's completion
+	// group is not one of them.
+	var groups []string
+	for _, child := range root.Commands() {
+		if child.HasSubCommands() && child.Name() != "completion" {
+			groups = append(groups, child.Name())
+		}
+	}
+	lines := strings.Split(long[groupsAt+len("\nCommand groups:\n"):], "\n")
+	if len(lines) != len(groups) {
+		t.Fatalf("group block has %d lines, want one per group %v:\n%s", len(lines), groups, strings.Join(lines, "\n"))
+	}
+	for i, group := range groups {
+		if !strings.HasPrefix(lines[i], "  "+group+" ") || !strings.HasSuffix(lines[i], "  cmdk "+group+" --help") {
+			t.Errorf("group line %q must name %s, what it covers, and \"cmdk %s --help\"", lines[i], group, group)
+		}
+	}
+}
+
+func TestRootHelpListsEveryHelpTopic(t *testing.T) {
+	help := executeRootForTest(t, "--help")
+	topicsAt := strings.Index(help, "\nHelp topics:\n")
+	if topicsAt < 0 {
+		t.Fatalf("root help has no help topics section:\n%s", help)
+	}
+	for _, topic := range []string{"exit-codes", "launching", "templates"} {
+		if !strings.Contains(help[topicsAt:], "\n  "+topic+" ") {
+			t.Errorf("root help does not list topic %q:\n%s", topic, help)
+		}
+	}
+}
+
+func TestExitCodesTopicListsEveryStatus(t *testing.T) {
+	help := executeRootForTest(t, "help", "exit-codes")
+	for _, want := range []string{"\n  0  ", "\n  1  ", "\n  2  ", "\n  *  ", `"cmdk: <message>"`, "Unknown help topic", "exec(2)"} {
 		if !strings.Contains(help, want) {
-			t.Errorf("root help missing %q\n%s", want, help)
+			t.Errorf("exit-codes help missing %q:\n%s", want, help)
 		}
 	}
 }
 
-func TestExitCodesTopicPrintsSameHelpFromBothEntryPoints(t *testing.T) {
-	direct := executeRootForTest(t, "exit-codes")
-	viaHelp := executeRootForTest(t, "help", "exit-codes")
-
-	if direct != viaHelp {
-		t.Fatalf("exit-codes output differs between entry points:\n%s\n---\n%s", direct, viaHelp)
+func TestHelpTopicsCoverTheConceptsNoCommandOwns(t *testing.T) {
+	tests := map[string][]string{
+		"templates": {"{{.path}}", "{{.pane_id}}", "{{.session_key}}", "{{.launch_basename}}", "{{.<key>}}", "{{sq .path}}", "CMDK_PANE_ID", "shell metacharacters"},
+		"launching": {"session-window", "exec(2)", "@cmdk_session_key", "one managed session keyed by the repository", "8 KiB", "4 MiB", "error screen"},
 	}
-	for _, want := range []string{"\n  0   ", "\n  1   ", "\n  *   "} {
-		if !strings.Contains(direct, want) {
-			t.Errorf("exit-codes help missing %q:\n%s", want, direct)
+	for topic, wants := range tests {
+		help := executeRootForTest(t, "help", topic)
+		for _, want := range wants {
+			if !strings.Contains(help, want) {
+				t.Errorf("%s help missing %q", topic, want)
+			}
 		}
 	}
 }
 
-func TestEveryApplicationCommandHasWrappedLongHelp(t *testing.T) {
+// TestEveryApplicationCommandHelpIsCompleteAndFits is the one help test the
+// documentation contract asks for: every application-owned command has short
+// and long help, every rendered help line (flag usage included) fits 80
+// columns, and a help topic prints its help when invoked directly.
+func TestEveryApplicationCommandHelpIsCompleteAndFits(t *testing.T) {
 	commands := map[string]*cobra.Command{}
 	collectApplicationCommands(newRootCommand(), commands)
 
 	for path, command := range commands {
+		if strings.TrimSpace(command.Short) == "" {
+			t.Errorf("%s has no short help", path)
+		}
 		if strings.TrimSpace(command.Long) == "" {
 			t.Errorf("%s has no long help", path)
 		}
-		if command.Name() == "docs" {
-			// The docs Long is rendered from internal/config/docs.go, which
-			// fleet#20 leaves out of scope.
-			continue
+
+		words := strings.Fields(path)[1:]
+		help := executeRootForTest(t, append(words, "--help")...)
+		for i, line := range strings.Split(help, "\n") {
+			if width := ansi.StringWidth(line); width > 80 {
+				t.Errorf("%s help line %d is %d columns, want at most 80: %q", path, i+1, width, line)
+			}
 		}
-		for field, text := range map[string]string{"Long": command.Long, "Example": command.Example} {
-			for i, line := range strings.Split(text, "\n") {
-				if len(line) > 80 {
-					t.Errorf("%s %s line %d is %d columns, want at most 80: %q", path, field, i+1, len(line), line)
-				}
+
+		if command.GroupID == topicGroupID {
+			if direct := executeRootForTest(t, words...); direct != help {
+				t.Errorf("%s run directly prints text other than its help:\n%s\n---\n%s", path, direct, help)
 			}
 		}
 	}

@@ -22,40 +22,48 @@ func newIconsCommand(_ *rootOptions) *cobra.Command {
 	var options iconOptions
 	cmd := &cobra.Command{
 		Use:   "icons",
-		Short: "List supported icon aliases",
-		Long: `List supported icon aliases.
+		Short: "List the Nerd Font icon aliases configuration accepts",
+		Long: `List the Nerd Font icon aliases cmdk accepts in configuration.
 
-cmdk supports Nerdfont icon aliases from three icon sets:
+Aliases come from three icon sets:
 
-  cod   Codicons (VS Code icons)    - UI actions, terminals, files, debug
-  dev   Devicons                    - language and tool logos
-  oct   Octicons (GitHub icons)     - git workflows, project management
+  cod   Codicons (VS Code icons): UI actions, terminals, files, debugging
+  dev   Devicons: language and tool logos
+  oct   Octicons (GitHub icons): git workflows, project management
 
-Use aliases in config with colon syntax: icon = ":nf-cod-terminal:"
+Use an alias in configuration with colon syntax, icon = ":nf-cod-terminal:",
+or paste the raw glyph. Display strings such as display.shorten_home and
+display.rules values accept aliases inline.
 
-Without flags, cmdk prints an overview with usage examples and icon counts.`,
+Stdout: the matching aliases grouped by set under a heading per set, one line
+per alias with its glyph, alias, and description; --fzf prints one flat line
+per alias (glyph, alias, set, description) with no headings for piping into
+fzf. With no set flag every set is listed; --cod, --dev, and --oct restrict
+the sets, and --filter keeps the aliases whose alias or description contains
+the text, case-insensitively. Stderr: when nothing matches, a hint on how to
+widen the search, still with exit 0. The command reads no file and never
+prompts.`,
+		Example: `  cmdk icons
+  cmdk icons --cod
+  cmdk icons --dev --oct
+  cmdk icons --filter terminal
+  cmdk icons --cod --filter folder
+  cmdk icons --fzf | fzf`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return runIconsCommand(options)
 		},
 	}
-	cmd.Flags().BoolVar(&options.cod, "cod", false, "Show Codicons")
-	cmd.Flags().BoolVar(&options.dev, "dev", false, "Show Devicons")
-	cmd.Flags().BoolVar(&options.oct, "oct", false, "Show Octicons")
-	cmd.Flags().StringVar(&options.filter, "filter", "", "Filter by substring match on alias or description")
-	cmd.Flags().BoolVar(&options.fzf, "fzf", false, "Flat output for piping to fzf")
+	cmd.Flags().BoolVar(&options.cod, "cod", false, "include Codicons")
+	cmd.Flags().BoolVar(&options.dev, "dev", false, "include Devicons")
+	cmd.Flags().BoolVar(&options.oct, "oct", false, "include Octicons")
+	cmd.Flags().StringVar(&options.filter, "filter", "", "keep aliases whose alias or description contains this")
+	cmd.Flags().BoolVar(&options.fzf, "fzf", false, "one flat line per alias, for piping to fzf")
 	return cmd
 }
 
 func runIconsCommand(options iconOptions) error {
-	hasSetFlag := options.cod || options.dev || options.oct
-	hasAnyFlag := hasSetFlag || options.filter != "" || options.fzf
-	if !hasAnyFlag {
-		printIconHelp()
-		return nil
-	}
-
-	showAll := !hasSetFlag
+	showAll := !options.cod && !options.dev && !options.oct
 	filterLower := strings.ToLower(options.filter)
 	filtered := filterIconEntries(icon.All(), options, showAll, filterLower)
 	if len(filtered) == 0 {
@@ -190,46 +198,4 @@ func prefixHeading(prefix string) string {
 	default:
 		return prefix
 	}
-}
-
-func printIconHelp() {
-	counts := iconSetCounts()
-	total := counts["cod"] + counts["dev"] + counts["oct"]
-
-	fmt.Printf(`ICON ALIASES
-
-  cmdk supports %d Nerdfont icon aliases from three icon sets:
-
-    cod   Codicons (VS Code icons)    - UI actions, terminals, files, debug
-    dev   Devicons                    - language and tool logos
-    oct   Octicons (GitHub icons)     - git workflows, project management
-
-  Use aliases in config with colon syntax: icon = ":nf-cod-terminal:"
-  Or use raw unicode characters directly: icon = "`+"\uebc8"+`"
-
-USAGE
-
-  cmdk icons --cod                    Show all Codicons
-  cmdk icons --dev --oct              Show Devicons and Octicons
-  cmdk icons --filter terminal        Search all sets for "terminal"
-  cmdk icons --cod --filter folder    Search Codicons for "folder"
-  cmdk icons --fzf                    Flat output for piping to fzf
-  cmdk icons --fzf | fzf             Interactive fuzzy search
-
-FLAGS
-
-  --cod           Show Codicons (%d icons)
-  --dev           Show Devicons (%d icons)
-  --oct           Show Octicons (%d icons)
-  --filter STR    Case-insensitive substring match on alias and description
-  --fzf           Flat output (one line per icon, no headers)
-`, total, counts["cod"], counts["dev"], counts["oct"])
-}
-
-func iconSetCounts() map[string]int {
-	counts := make(map[string]int)
-	for _, e := range icon.All() {
-		counts[setFromAlias(e.Alias)]++
-	}
-	return counts
 }
