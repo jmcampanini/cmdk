@@ -125,14 +125,11 @@ application.`,
 }
 
 func prepareActionRunInvocation(root *rootOptions, cmd *cobra.Command, name string, options actionRunOptions) (actionRunInvocation, error) {
-	cfgPath, err := config.ResolvePath(root.configPath)
+	loaded, err := root.loadConfig(cmd)
 	if err != nil {
 		return actionRunInvocation{}, err
 	}
-	cfg, err := config.Load(cfgPath)
-	if err != nil {
-		return actionRunInvocation{}, fmt.Errorf("loading config: %w", err)
-	}
+	cfg := loaded.config
 
 	action, err := actionrun.ValidateAction(cfg, name)
 	if err != nil {
@@ -155,11 +152,11 @@ func prepareActionRunInvocation(root *rootOptions, cmd *cobra.Command, name stri
 	}
 	var client tmux.ClientTarget
 	if options.noSwitch {
-		if err := requireActionRunServer(commandContext(cmd), cfg.Timeout.EffectiveFetch()); err != nil {
+		if err := requireActionRunServer(commandContext(cmd), cfg.Timeout.Fetch); err != nil {
 			return actionRunInvocation{}, err
 		}
 	} else {
-		client, err = currentActionRunClient(commandContext(cmd), cfg.Timeout.EffectiveFetch())
+		client, err = currentActionRunClient(commandContext(cmd), cfg.Timeout.Fetch)
 		if err != nil {
 			return actionRunInvocation{}, err
 		}

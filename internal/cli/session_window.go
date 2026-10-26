@@ -2,11 +2,9 @@ package cli
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/spf13/cobra"
 
-	"github.com/jmcampanini/cmdk/internal/config"
 	resolver "github.com/jmcampanini/cmdk/internal/session"
 	"github.com/jmcampanini/cmdk/internal/tmux"
 )
@@ -122,14 +120,11 @@ func runSessionWindowCommand(root *rootOptions, cmd *cobra.Command, request sess
 	if err != nil {
 		return err
 	}
-	cfgPath, err := config.ResolvePath(root.configPath)
+	loaded, err := root.loadConfig(cmd)
 	if err != nil {
 		return err
 	}
-	cfg, err := config.Load(cfgPath)
-	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
-	}
+	cfg := loaded.config
 	plan, err := resolveSessionPlanWithConfig(cmd, launchPath, cfg)
 	if err != nil {
 		return err

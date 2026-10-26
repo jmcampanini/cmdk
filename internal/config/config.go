@@ -6,18 +6,15 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 	"time"
 	"unicode"
 
-	log "charm.land/log/v2"
 	"github.com/jmcampanini/go-config-loader/configloader"
 
 	"github.com/jmcampanini/cmdk/internal/icon"
-	"github.com/jmcampanini/cmdk/internal/theme"
 )
 
 // StageConfig defines one prompt or picker input collected before an action runs.
@@ -56,38 +53,13 @@ type Behavior struct {
 	WindowNameMaxLength int  `toml:"window_name_max_length"`
 }
 
-// Timeout bounds external queries, picker commands, and tmux mutations.
+// Timeout bounds external queries, picker commands, and tmux mutations. Fetch
+// and Mutation are always positive after validation because queries and
+// mutations always run under a deadline; Picker may be zero for no timeout.
 type Timeout struct {
 	Fetch    time.Duration `toml:"fetch"`
 	Picker   time.Duration `toml:"picker"`
 	Mutation time.Duration `toml:"mutation"`
-}
-
-const (
-	defaultFetchTimeout = 2 * time.Second
-	// Mutations are local tmux-server IPC that normally completes in
-	// milliseconds; the generous default only bounds a wedged server.
-	defaultMutationTimeout = 5 * time.Second
-)
-
-// EffectiveFetch is the per-command deadline for read-only external queries
-// (tmux list commands, git probes, zoxide). Zero or unset means the default;
-// external queries always run under a deadline.
-func (t Timeout) EffectiveFetch() time.Duration {
-	if t.Fetch > 0 {
-		return t.Fetch
-	}
-	return defaultFetchTimeout
-}
-
-// EffectiveMutation is the per-command deadline for state-changing tmux
-// commands (new-session, new-window, set-option, switch-client). Zero or
-// unset means the default; mutations always run under a deadline.
-func (t Timeout) EffectiveMutation() time.Duration {
-	if t.Mutation > 0 {
-		return t.Mutation
-	}
-	return defaultMutationTimeout
 }
 
 // SourceConfig limits the count and minimum score of fetched source items.
@@ -119,7 +91,7 @@ type Config struct {
 	Timeout  Timeout                 `toml:"timeout"`
 	Sources  map[string]SourceConfig `toml:"sources"`
 	Display  Display                 `toml:"display"`
-	Theme    theme.Config            `toml:"theme"`
+	Theme    ThemeConfig             `toml:"theme"`
 }
 
 const (
@@ -179,7 +151,9 @@ func DefaultConfig() Config {
 			StartInFilter:       true,
 			WindowNameMaxLength: 20,
 		},
-		Timeout: Timeout{Fetch: defaultFetchTimeout, Picker: 2 * time.Second, Mutation: defaultMutationTimeout},
+		// Mutations are local tmux-server IPC that normally completes in
+		// milliseconds; the generous default only bounds a wedged server.
+		Timeout: Timeout{Fetch: 2 * time.Second, Picker: 2 * time.Second, Mutation: 5 * time.Second},
 		Sources: map[string]SourceConfig{"zoxide": {Limit: 0}},
 		Display: Display{ShortenHome: "~", TmuxSessionTruncationLength: 2},
 	}
@@ -190,13 +164,13 @@ func (c Config) Validate() error {
 	if strings.ContainsFunc(c.Startup.Path, unicode.IsControl) {
 		return errors.New("startup.path cannot contain control characters")
 	}
-	if err := validateTimeout("fetch", c.Timeout.Fetch); err != nil {
+	if err := validateDeadline("fetch", c.Timeout.Fetch); err != nil {
 		return err
 	}
 	if err := validateTimeout("picker", c.Timeout.Picker); err != nil {
 		return err
 	}
-	if err := validateTimeout("mutation", c.Timeout.Mutation); err != nil {
+	if err := validateDeadline("mutation", c.Timeout.Mutation); err != nil {
 		return err
 	}
 	for name, sc := range c.Sources {
@@ -213,7 +187,7 @@ func (c Config) Validate() error {
 	if err := validateActions(c.Actions); err != nil {
 		return err
 	}
-	if err := c.Theme.Validate(); err != nil {
+	if err := c.Theme.validate(); err != nil {
 		return err
 	}
 	if c.Display.TruncationLength < 0 {
@@ -228,6 +202,13 @@ func (c Config) Validate() error {
 		}
 	}
 	return nil
+}
+
+func validateDeadline(name string, d time.Duration) error {
+	if d == 0 {
+		return fmt.Errorf("timeout.%s must be at least 1ms", name)
+	}
+	return validateTimeout(name, d)
 }
 
 func validateTimeout(name string, d time.Duration) error {
@@ -407,21 +388,16 @@ func (c *Config) resolveIcons() error {
 	return nil
 }
 
-// Load always returns a valid Config, even when err is non-nil (defaults are used as fallback).
-func Load(path string) (Config, error) {
-	cfg, _, err := LoadWithReport(path)
-	return cfg, err
-}
-
-// LoadWithReport loads the effective config and returns provenance metadata for the loaded layers.
-// It always returns a valid Config, even when err is non-nil (defaults are used as fallback).
-func LoadWithReport(path string) (Config, configloader.LoadReport, error) {
+// Load loads the effective configuration from the file at path, which may be
+// absent, and reports where each value came from. On error it returns the
+// zero Config and an empty report.
+func Load(path string) (Config, configloader.LoadReport, error) {
 	if err := validateOptionalRegularFile(path); err != nil {
-		return DefaultConfig(), configloader.LoadReport{}, err
+		return Config{}, configloader.LoadReport{}, err
 	}
 	fileLoader, err := configloader.NewMergeAllFilesLoader[Config](configloader.File(path))
 	if err != nil {
-		return DefaultConfig(), configloader.LoadReport{}, err
+		return Config{}, configloader.LoadReport{}, err
 	}
 	return loadConfig(fileLoader)
 }
@@ -439,35 +415,26 @@ func ValidateFile(path string) error {
 	return err
 }
 
+// loadConfig decodes the file over DefaultConfig, so every default is applied
+// once by the loader; TOML tables merge into the default maps rather than
+// replacing them.
 func loadConfig(fileLoader configloader.ConfigLoader[Config]) (Config, configloader.LoadReport, error) {
 	cfg, report, err := configloader.Load(DefaultConfig(), fileLoader)
 	if err != nil {
-		return DefaultConfig(), configloader.LoadReport{}, err
+		return Config{}, configloader.LoadReport{}, err
 	}
-	cfg, err = finalizeLoadedConfig(cfg)
-	if err != nil {
-		return DefaultConfig(), configloader.LoadReport{}, err
-	}
-	return cfg, report, nil
-}
-
-func finalizeLoadedConfig(cfg Config) (Config, error) {
-	cfg = applyDefaultSources(cfg)
 	if err := cfg.Validate(); err != nil {
-		return cfg, err
+		return Config{}, configloader.LoadReport{}, err
 	}
 	if err := cfg.resolveIcons(); err != nil {
-		return cfg, err
+		return Config{}, configloader.LoadReport{}, err
 	}
-	return cfg, nil
+	return cfg, report, nil
 }
 
 // TODO: Remove these preflight checks once go-config-loader rejects existing
 // non-regular config paths while still allowing missing optional files.
 func validateOptionalRegularFile(path string) error {
-	if path == "" {
-		return nil
-	}
 	err := validateRegularFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
@@ -495,28 +462,4 @@ func validateRegularFile(path string) error {
 		return fmt.Errorf("config path is not a regular file: %s", path)
 	}
 	return nil
-}
-
-func applyDefaultSources(cfg Config) Config {
-	if cfg.Sources == nil {
-		cfg.Sources = map[string]SourceConfig{}
-	}
-	for name, sc := range DefaultConfig().Sources {
-		if _, ok := cfg.Sources[name]; !ok {
-			cfg.Sources[name] = sc
-		}
-	}
-	return cfg
-}
-
-// DefaultPath resolves config.toml under XDG_CONFIG_HOME or the user's .config directory.
-func DefaultPath() string {
-	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		return filepath.Join(xdg, "cmdk", "config.toml")
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		log.Warn("could not determine home directory for config path", "error", err)
-	}
-	return filepath.Join(home, ".config", "cmdk", "config.toml")
 }

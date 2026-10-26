@@ -77,16 +77,16 @@ func TestDarkUsesFrappeDefaults(t *testing.T) {
 	}
 }
 
-func TestConfigOverridesSemanticTokensAndReDerivesRoles(t *testing.T) {
-	cfg := Config{
-		NameDark: {
-			Accent:  "#111111",
-			Info:    "#222222",
-			Warning: "#333333",
-		},
+func TestOverridesReplaceSemanticTokensAndReDeriveRoles(t *testing.T) {
+	overrides := Overrides{
+		NameDark: {Tokens: Tokens{
+			Accent:  Color("#111111"),
+			Info:    Color("#222222"),
+			Warning: Color("#333333"),
+		}},
 	}
 
-	dark := Dark(cfg)
+	dark := Dark(overrides)
 
 	if !reflect.DeepEqual(dark.Tokens.Accent, lipgloss.Color("#111111")) {
 		t.Errorf("accent = %v, want override", dark.Tokens.Accent)
@@ -102,17 +102,15 @@ func TestConfigOverridesSemanticTokensAndReDerivesRoles(t *testing.T) {
 	}
 }
 
-func TestConfigRoleOverridesWinOverSemanticDerivation(t *testing.T) {
-	cfg := Config{
+func TestRoleOverridesWinOverSemanticDerivation(t *testing.T) {
+	overrides := Overrides{
 		NameDark: {
-			Info: "#222222",
-			Roles: RoleConfig{
-				DirIcon: "#444444",
-			},
+			Roles:  Roles{DirIcon: Color("#444444")},
+			Tokens: Tokens{Info: Color("#222222")},
 		},
 	}
 
-	dark := Dark(cfg)
+	dark := Dark(overrides)
 
 	if !reflect.DeepEqual(dark.Tokens.Info, lipgloss.Color("#222222")) {
 		t.Errorf("info = %v, want semantic override", dark.Tokens.Info)
@@ -122,39 +120,13 @@ func TestConfigRoleOverridesWinOverSemanticDerivation(t *testing.T) {
 	}
 }
 
-func TestConfigOverridesOnlyMatchingMode(t *testing.T) {
-	cfg := Config{
-		NameLight: {Accent: "#111111"},
+func TestOverridesApplyOnlyToMatchingMode(t *testing.T) {
+	overrides := Overrides{
+		NameLight: {Tokens: Tokens{Accent: Color("#111111")}},
 	}
 
-	dark := Dark(cfg)
+	dark := Dark(overrides)
 	if reflect.DeepEqual(dark.Tokens.Accent, lipgloss.Color("#111111")) {
 		t.Error("dark theme should not use light override")
-	}
-}
-
-func TestConfigValidate(t *testing.T) {
-	tests := []struct {
-		name string
-		cfg  Config
-		ok   bool
-	}{
-		{"nil", nil, true},
-		{"valid", Config{NameDark: {Accent: "#abcdef", Roles: RoleConfig{DirIcon: "#123456"}}}, true},
-		{"invalid mode", Config{"frappe": {Accent: "#abcdef"}}, false},
-		{"invalid color", Config{NameDark: {Accent: "abcdef"}}, false},
-		{"invalid role color", Config{NameDark: {Roles: RoleConfig{DirIcon: "blue"}}}, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := tt.cfg.Validate()
-			if tt.ok && err != nil {
-				t.Fatalf("Validate() error = %v, want nil", err)
-			}
-			if !tt.ok && err == nil {
-				t.Fatal("Validate() error = nil, want error")
-			}
-		})
 	}
 }

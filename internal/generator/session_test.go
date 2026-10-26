@@ -22,10 +22,11 @@ func sessionAccumulated() []item.Item {
 }
 
 func TestSessionGenerator_Ordering(t *testing.T) {
-	cfg := config.Config{Actions: []config.Action{
+	cfg := config.DefaultConfig()
+	cfg.Actions = []config.Action{
 		{Name: "Rename", Cmd: "tmux rename-session", Matches: "session"},
 		{Name: "Dir only", Cmd: "echo dir", Matches: "dir"},
-	}}
+	}
 	fetch := func(context.Context, item.Item) ([]item.Item, error) {
 		return []item.Item{
 			{Type: "window", Display: "tmux win zsh ‹ work", Action: item.ActionExecute},
@@ -54,7 +55,7 @@ func TestSessionGenerator_Ordering(t *testing.T) {
 func TestSessionGenerator_SwitchUsesSessionID(t *testing.T) {
 	items := NewSessionGenerator(func(context.Context, item.Item) ([]item.Item, error) {
 		return nil, nil
-	})(sessionAccumulated(), Context{})
+	})(sessionAccumulated(), Context{Config: config.DefaultConfig()})
 
 	if len(items) == 0 {
 		t.Fatal("got no items")
@@ -86,7 +87,7 @@ func TestSessionGenerator_MissingSessionIDShowsError(t *testing.T) {
 
 	items := NewSessionGenerator(func(context.Context, item.Item) ([]item.Item, error) {
 		return nil, nil
-	})(accumulated, Context{})
+	})(accumulated, Context{Config: config.DefaultConfig()})
 
 	if len(items) != 1 {
 		t.Fatalf("got %d items, want 1", len(items))
@@ -99,7 +100,7 @@ func TestSessionGenerator_MissingSessionIDShowsError(t *testing.T) {
 func TestSessionGenerator_WindowFetchErrorAppended(t *testing.T) {
 	items := NewSessionGenerator(func(context.Context, item.Item) ([]item.Item, error) {
 		return nil, errors.New("tmux failed")
-	})(sessionAccumulated(), Context{})
+	})(sessionAccumulated(), Context{Config: config.DefaultConfig()})
 
 	if len(items) != 2 {
 		t.Fatalf("got %d items, want 2", len(items))
@@ -118,7 +119,7 @@ func TestSessionGenerator_WindowFetchErrorAppended(t *testing.T) {
 func TestSessionGenerator_IgnoresNonSession(t *testing.T) {
 	items := NewSessionGenerator(func(context.Context, item.Item) ([]item.Item, error) {
 		return nil, nil
-	})([]item.Item{{Type: "dir"}}, Context{})
+	})([]item.Item{{Type: "dir"}}, Context{Config: config.DefaultConfig()})
 
 	if items != nil {
 		t.Errorf("got %v, want nil", items)

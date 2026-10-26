@@ -97,7 +97,7 @@ Log file:
 	return cmd
 }
 
-func (root *rootOptions) runRootCommand(_ *cobra.Command, _ []string) error {
+func (root *rootOptions) runRootCommand(cmd *cobra.Command, _ []string) error {
 	root.timingsFlag = root.timingsFlag || root.timingsJSON
 
 	tr := trace.Noop()
@@ -120,16 +120,12 @@ func (root *rootOptions) runRootCommand(_ *cobra.Command, _ []string) error {
 	}
 
 	stop = tr.Begin("config")
-	cfgPath, err := config.ResolvePath(root.configPath)
+	loaded, err := root.loadConfig(cmd)
 	if err != nil {
 		stop()
 		return err
 	}
-	cfg, cfgErr := config.Load(cfgPath)
-	if cfgErr != nil && root.configPath != "" {
-		stop()
-		return cfgErr
-	}
+	cfg := loaded.config
 	zoxideCfg := cfg.Sources["zoxide"]
 	shortenHome := cfg.Display.ShortenHome
 	trunc := pathfmt.Truncation{Length: cfg.Display.TruncationLength, Symbol: cfg.Display.TruncationSymbol}
@@ -147,7 +143,7 @@ func (root *rootOptions) runRootCommand(_ *cobra.Command, _ []string) error {
 		Rules:             rules,
 		SessionTruncation: tmuxTrunc,
 	}
-	fetchTimeout := cfg.Timeout.EffectiveFetch()
+	fetchTimeout := cfg.Timeout.Fetch
 	sources := []generator.Source{
 		traceSource(tr, "source/windows", generator.Source{Name: "windows", Async: true, Fetch: func(ctx context.Context) ([]item.Item, error) {
 			return tmux.ListWindowsWithDisplay(ctx, fetchTimeout, tmuxDisplay)
@@ -158,11 +154,6 @@ func (root *rootOptions) runRootCommand(_ *cobra.Command, _ []string) error {
 		traceSource(tr, "source/zoxide", generator.Source{Name: "zoxide", Limit: zoxideCfg.Limit, Async: true, Fetch: func(ctx context.Context) ([]item.Item, error) {
 			return zoxide.ListDirs(ctx, fetchTimeout, zoxideCfg.MinScore, home, shortenHome, rules, trunc)
 		}}),
-	}
-	if cfgErr != nil {
-		sources = append(sources, traceSource(tr, "source/config", generator.Source{Name: "config", Fetch: func(context.Context) ([]item.Item, error) {
-			return nil, cfgErr
-		}}))
 	}
 	sources = append(sources, traceSource(tr, "source/actions", generator.Source{Name: "actions", Fetch: config.MatchingActions(cfg, "root")}))
 
@@ -191,7 +182,7 @@ func (root *rootOptions) runRootCommand(_ *cobra.Command, _ []string) error {
 		listItems := item.GroupAndOrder(items, cfg.Behavior.BellToTop)
 		stop()
 
-		t, _, err := root.resolveTheme(tr, cfg)
+		t, _, err := root.resolveTheme(tr, cfg.Theme.Overrides())
 		if err != nil {
 			return err
 		}
@@ -245,7 +236,8 @@ func (root *rootOptions) runRootCommand(_ *cobra.Command, _ []string) error {
 	listItems := item.GroupAndOrder(initialAll, cfg.Behavior.BellToTop)
 	stop()
 
-	t, autoDetectTheme, err := root.resolveTheme(tr, cfg)
+	themeOverrides := cfg.Theme.Overrides()
+	t, autoDetectTheme, err := root.resolveTheme(tr, themeOverrides)
 	if err != nil {
 		return err
 	}
@@ -266,7 +258,7 @@ func (root *rootOptions) runRootCommand(_ *cobra.Command, _ []string) error {
 
 	if autoDetectTheme {
 		stop = tr.Begin("theme/auto-detect")
-		model = model.WithAutoThemeDetection()
+		model = model.WithAutoThemeDetection(themeOverrides)
 		stop()
 	}
 
@@ -293,10 +285,10 @@ func (root *rootOptions) runRootCommand(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-func (root *rootOptions) resolveTheme(tr trace.Tracer, cfg config.Config) (theme.Theme, bool, error) {
+func (root *rootOptions) resolveTheme(tr trace.Tracer, overrides theme.Overrides) (theme.Theme, bool, error) {
 	autoDetectTheme := root.themeFlag == ""
 	stop := tr.Begin("theme")
-	t, err := theme.Resolve(root.themeFlag, cfg.Theme)
+	t, err := theme.Resolve(root.themeFlag, overrides)
 	stop()
 	if err != nil {
 		return theme.Theme{}, false, err

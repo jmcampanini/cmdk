@@ -82,11 +82,11 @@ func TestValidate_Valid(t *testing.T) {
 	}
 }
 
-func TestValidate_ZeroTimeout(t *testing.T) {
+func TestValidate_ZeroFetchTimeout(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Timeout.Fetch = 0
-	if err := cfg.Validate(); err != nil {
-		t.Errorf("zero timeout should be valid: %v", err)
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for zero fetch timeout; queries always run under a deadline")
 	}
 }
 
@@ -113,34 +113,8 @@ func TestValidate_MutationTimeout(t *testing.T) {
 
 	cfg = DefaultConfig()
 	cfg.Timeout.Mutation = 0
-	if err := cfg.Validate(); err != nil {
-		t.Errorf("zero mutation timeout should be valid (means default): %v", err)
-	}
-}
-
-func TestTimeout_EffectiveDefaults(t *testing.T) {
-	var zero Timeout
-	if got := zero.EffectiveFetch(); got != 2*time.Second {
-		t.Errorf("EffectiveFetch() = %s for zero value, want 2s default", got)
-	}
-	if got := zero.EffectiveMutation(); got != 5*time.Second {
-		t.Errorf("EffectiveMutation() = %s for zero value, want 5s default", got)
-	}
-
-	set := Timeout{Fetch: 7 * time.Second, Mutation: 9 * time.Second}
-	if got := set.EffectiveFetch(); got != 7*time.Second {
-		t.Errorf("EffectiveFetch() = %s, want configured 7s", got)
-	}
-	if got := set.EffectiveMutation(); got != 9*time.Second {
-		t.Errorf("EffectiveMutation() = %s, want configured 9s", got)
-	}
-
-	negative := Timeout{Fetch: -time.Second, Mutation: -time.Second}
-	if got := negative.EffectiveFetch(); got != 2*time.Second {
-		t.Errorf("EffectiveFetch() = %s for negative value, want 2s default", got)
-	}
-	if got := negative.EffectiveMutation(); got != 5*time.Second {
-		t.Errorf("EffectiveMutation() = %s for negative value, want 5s default", got)
+	if err := cfg.Validate(); err == nil {
+		t.Error("expected error for zero mutation timeout; mutations always run under a deadline")
 	}
 }
 
@@ -176,32 +150,55 @@ func TestValidate_ZeroWindowNameMaxLength(t *testing.T) {
 	}
 }
 
-func TestValidate_ThemeOverrides(t *testing.T) {
-	cfg := DefaultConfig()
-	cfg.Theme = theme.Config{
-		theme.NameDark: {
-			Accent: "#ca9ee6",
-			Roles:  theme.RoleConfig{SessionIcon: "#81c8be"},
-		},
+func TestValidate_Theme(t *testing.T) {
+	tests := []struct {
+		name    string
+		theme   ThemeConfig
+		wantErr string
+	}{
+		{name: "nil", theme: nil},
+		{name: "valid", theme: ThemeConfig{theme.NameDark: {Accent: "#ca9ee6", Roles: ThemeRoleConfig{SessionIcon: "#81c8be"}}}},
+		{name: "invalid mode", theme: ThemeConfig{"frappe": {Accent: "#ca9ee6"}}, wantErr: "theme.frappe is not valid"},
+		{name: "invalid color", theme: ThemeConfig{theme.NameDark: {Accent: "ca9ee6"}}, wantErr: "theme.dark.accent must be a #RRGGBB hex color"},
+		{name: "invalid role color", theme: ThemeConfig{theme.NameLight: {Roles: ThemeRoleConfig{DirIcon: "blue"}}}, wantErr: "theme.light.roles.dir_icon must be a #RRGGBB hex color"},
 	}
-	if err := cfg.Validate(); err != nil {
-		t.Errorf("unexpected error: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Theme = tt.theme
+
+			err := cfg.Validate()
+
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("Validate() error = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("Validate() error = %v, want containing %q", err, tt.wantErr)
+			}
+		})
 	}
 }
 
-func TestValidate_InvalidThemeMode(t *testing.T) {
-	cfg := DefaultConfig()
-	cfg.Theme = theme.Config{"frappe": {Accent: "#ca9ee6"}}
-	if err := cfg.Validate(); err == nil {
-		t.Fatal("expected error for invalid theme mode")
-	}
-}
+func TestThemeConfig_OverridesConvertsSetColorsOnly(t *testing.T) {
+	cfg := ThemeConfig{theme.NameDark: {Accent: "#ca9ee6", Roles: ThemeRoleConfig{SessionIcon: "#81c8be"}}}
 
-func TestValidate_InvalidThemeColor(t *testing.T) {
-	cfg := DefaultConfig()
-	cfg.Theme = theme.Config{theme.NameDark: {Accent: "ca9ee6"}}
-	if err := cfg.Validate(); err == nil {
-		t.Fatal("expected error for invalid theme color")
+	overrides := cfg.Overrides()
+
+	dark := overrides[theme.NameDark]
+	if dark.Tokens.Accent != theme.Color("#ca9ee6") {
+		t.Errorf("Tokens.Accent = %v, want %v", dark.Tokens.Accent, theme.Color("#ca9ee6"))
+	}
+	if dark.Roles.SessionIcon != theme.Color("#81c8be") {
+		t.Errorf("Roles.SessionIcon = %v, want %v", dark.Roles.SessionIcon, theme.Color("#81c8be"))
+	}
+	if dark.Tokens.Text != nil {
+		t.Errorf("Tokens.Text = %v, want nil for an unset color", dark.Tokens.Text)
+	}
+	if _, ok := overrides[theme.NameLight]; ok {
+		t.Error("overrides include light mode, want only configured modes")
 	}
 }
 
@@ -747,15 +744,12 @@ mutation = "7s"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.Timeout.Mutation != 7*time.Second {
 		t.Errorf("Timeout.Mutation = %s, want configured 7s", cfg.Timeout.Mutation)
-	}
-	if cfg.Timeout.EffectiveMutation() != 7*time.Second {
-		t.Errorf("EffectiveMutation() = %s, want configured 7s", cfg.Timeout.EffectiveMutation())
 	}
 }
 
@@ -779,7 +773,7 @@ matches = "root"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -811,7 +805,7 @@ session_icon = "#81c8be"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -824,7 +818,7 @@ session_icon = "#81c8be"
 }
 
 func TestLoad_MissingFile_ReturnsDefaults(t *testing.T) {
-	cfg, err := Load("/nonexistent/path/config.toml")
+	cfg, _, err := Load("/nonexistent/path/config.toml")
 	if err != nil {
 		t.Fatalf("expected nil error, got: %v", err)
 	}
@@ -838,13 +832,12 @@ func TestLoad_MissingFile_ReturnsDefaults(t *testing.T) {
 }
 
 func TestLoad_DirectoryPathReturnsError(t *testing.T) {
-	cfg, err := Load(t.TempDir())
+	cfg, _, err := Load(t.TempDir())
 	if err == nil {
 		t.Fatal("expected error for directory config path")
 	}
-	defaults := DefaultConfig()
-	if cfg.Timeout.Fetch != defaults.Timeout.Fetch {
-		t.Errorf("Timeout.Fetch = %s, want default %s", cfg.Timeout.Fetch, defaults.Timeout.Fetch)
+	if cfg.Timeout.Fetch != 0 {
+		t.Errorf("Timeout.Fetch = %s after a load error, want the zero Config", cfg.Timeout.Fetch)
 	}
 }
 
@@ -865,16 +858,12 @@ func TestLoad_MalformedTOML(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err == nil {
 		t.Fatal("expected error for malformed TOML")
 	}
-	defaults := DefaultConfig()
-	if cfg.Timeout.Fetch != defaults.Timeout.Fetch {
-		t.Errorf("Timeout.Fetch = %s, want %s (default)", cfg.Timeout.Fetch, defaults.Timeout.Fetch)
-	}
-	if cfg.Behavior.WrapList != defaults.Behavior.WrapList {
-		t.Errorf("Behavior.WrapList = %v, want %v (default)", cfg.Behavior.WrapList, defaults.Behavior.WrapList)
+	if cfg.Timeout.Fetch != 0 {
+		t.Errorf("Timeout.Fetch = %s after a load error, want the zero Config", cfg.Timeout.Fetch)
 	}
 }
 
@@ -885,7 +874,7 @@ func TestLoad_EmptyFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -916,7 +905,7 @@ matches = "root"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -931,7 +920,7 @@ matches = "root"
 	}
 }
 
-func TestLoad_ValidationError_ReturnsDefaults(t *testing.T) {
+func TestLoad_ValidationError(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(path, []byte(`
@@ -941,13 +930,12 @@ fetch = "-1s"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err == nil {
 		t.Fatal("expected validation error")
 	}
-	defaults := DefaultConfig()
-	if cfg.Timeout.Fetch != defaults.Timeout.Fetch {
-		t.Errorf("Timeout.Fetch = %s, want default %s", cfg.Timeout.Fetch, defaults.Timeout.Fetch)
+	if cfg.Timeout.Fetch != 0 {
+		t.Errorf("Timeout.Fetch = %s after a load error, want the zero Config", cfg.Timeout.Fetch)
 	}
 }
 
@@ -961,7 +949,7 @@ limit = 5
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -980,7 +968,7 @@ min_score = 2.5
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -989,7 +977,7 @@ min_score = 2.5
 	}
 }
 
-func TestLoadWithReport_TracksFileProvenance(t *testing.T) {
+func TestLoad_TracksFileProvenance(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(path, []byte(`
@@ -999,7 +987,7 @@ fetch = "3s"
 		t.Fatal(err)
 	}
 
-	cfg, report, err := LoadWithReport(path)
+	cfg, report, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1018,11 +1006,11 @@ fetch = "3s"
 	}
 }
 
-func TestLoadWithReport_IgnoresConfigEnvOverrides(t *testing.T) {
+func TestLoad_IgnoresConfigEnvOverrides(t *testing.T) {
 	t.Setenv("CMDK_FETCH_TIMEOUT", "5s")
 	t.Setenv("CMDK_WRAP_LIST", "false")
 
-	cfg, report, err := LoadWithReport("/nonexistent/path/config.toml")
+	cfg, report, err := Load("/nonexistent/path/config.toml")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1097,15 +1085,15 @@ limit = 10
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.Sources["fish"].Limit != 10 {
 		t.Errorf("Sources[fish].Limit = %d, want 10", cfg.Sources["fish"].Limit)
 	}
-	if cfg.Sources["zoxide"].Limit != 0 {
-		t.Errorf("Sources[zoxide].Limit = %d, want 0 (default backfilled)", cfg.Sources["zoxide"].Limit)
+	if zoxide, ok := cfg.Sources["zoxide"]; !ok || zoxide != DefaultConfig().Sources["zoxide"] {
+		t.Errorf("Sources = %v, want the zoxide default kept beside the configured fish source", cfg.Sources)
 	}
 }
 
@@ -1118,13 +1106,58 @@ func TestDefaultPath_XDGOverride(t *testing.T) {
 	}
 }
 
-func TestDefaultPath_Fallback(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", "")
-	got := DefaultPath()
-	home, _ := os.UserHomeDir()
+func TestDefaultPath_FallsBackUnlessXDGIsAbsolute(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
 	want := filepath.Join(home, ".config", "cmdk", "config.toml")
-	if got != want {
-		t.Errorf("DefaultPath() = %q, want %q", got, want)
+	for name, xdg := range map[string]string{"empty": "", "relative": "relative/xdg", "dot": "."} {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv("XDG_CONFIG_HOME", xdg)
+			if got := DefaultPath(); got != want {
+				t.Errorf("DefaultPath() = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestResolvePath(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/tmp/xdg-test")
+	dir := t.TempDir()
+	existing := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(existing, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name       string
+		supplied   string
+		isSupplied bool
+		want       string
+		wantErr    string
+	}{
+		{name: "not supplied discovers the default path", want: "/tmp/xdg-test/cmdk/config.toml"},
+		{name: "supplied existing file", supplied: existing, isSupplied: true, want: existing},
+		{name: "supplied empty path", supplied: "", isSupplied: true, wantErr: "config path cannot be empty"},
+		{name: "supplied missing file", supplied: filepath.Join(dir, "missing.toml"), isSupplied: true, wantErr: "config file not found"},
+		{name: "supplied directory", supplied: dir, isSupplied: true, wantErr: "not a regular file"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ResolvePath(tt.supplied, tt.isSupplied)
+
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("ResolvePath(%q, %v) error = %v, want containing %q", tt.supplied, tt.isSupplied, err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ResolvePath(%q, %v) error = %v", tt.supplied, tt.isSupplied, err)
+			}
+			if got != tt.want {
+				t.Errorf("ResolvePath(%q, %v) = %q, want %q", tt.supplied, tt.isSupplied, got, tt.want)
+			}
+		})
 	}
 }
 
@@ -1139,7 +1172,7 @@ func TestLoad_DisplayRules(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1164,7 +1197,7 @@ shorten_home = ""
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1192,7 +1225,7 @@ truncation_symbol = "…"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1215,7 +1248,7 @@ tmux_session_truncation_symbol = "…"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1237,7 +1270,7 @@ shorten_home = "~"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1344,7 +1377,7 @@ icon = ":nf-dev-github:"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1360,7 +1393,7 @@ func TestLoad_ActionWithUnicodeIcon(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1381,7 +1414,7 @@ matches = "root"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1400,7 +1433,7 @@ wrap_list = false
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1419,7 +1452,7 @@ start_in_filter = false
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1440,7 +1473,7 @@ matches = "root"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1459,7 +1492,7 @@ bell_to_top = false
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1481,7 +1514,7 @@ icon = ":nf-cod-folder_opened:"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1507,7 +1540,7 @@ matches = "dir"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1532,7 +1565,7 @@ fetch = "2s"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1558,7 +1591,7 @@ matches = "dir"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1660,7 +1693,7 @@ func TestLoad_DisplayInlineIconResolution(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tt.toml), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			cfg, err := Load(path)
+			cfg, _, err := Load(path)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -1703,7 +1736,7 @@ func TestLoad_DisplayInvalidInlineIcon(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tt.toml), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			_, err := Load(path)
+			_, _, err := Load(path)
 			if err == nil {
 				t.Fatal("expected error")
 			}
@@ -1724,7 +1757,7 @@ auto_select_single = false
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1751,7 +1784,7 @@ default = "dev"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1794,7 +1827,7 @@ allow_empty = true
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1821,7 +1854,7 @@ text = "Name:"
 		t.Fatal(err)
 	}
 
-	cfg, err := Load(path)
+	cfg, _, err := Load(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

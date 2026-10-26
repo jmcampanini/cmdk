@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -40,7 +41,10 @@ aliases.`,
 }
 
 func runConfigCommand(root *rootOptions, cmd *cobra.Command, options configCommandOptions) error {
-	if options.validatePath != "" {
+	if cmd.Flags().Changed("validate") {
+		if options.validatePath == "" {
+			return errors.New("config path cannot be empty")
+		}
 		if err := config.ValidateFile(options.validatePath); err != nil {
 			return err
 		}
@@ -48,17 +52,13 @@ func runConfigCommand(root *rootOptions, cmd *cobra.Command, options configComma
 		return err
 	}
 
-	path, err := config.ResolvePath(root.configPath)
-	if err != nil {
-		return err
-	}
-	cfg, report, err := config.LoadWithReport(path)
+	loaded, err := root.loadConfig(cmd)
 	if err != nil {
 		return err
 	}
 
-	reporter := configreporter.New(cfg, report)
-	return writeConfigReport(cmd.OutOrStdout(), path, reporter, options.showProvenance)
+	reporter := configreporter.New(loaded.config, loaded.report)
+	return writeConfigReport(cmd.OutOrStdout(), loaded.path, reporter, options.showProvenance)
 }
 
 func writeConfigReport(out io.Writer, path string, reporter configreporter.Reporter[config.Config], showProvenance bool) error {

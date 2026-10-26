@@ -265,42 +265,6 @@ func TestIntegration_ExecuteWithEnvVars(t *testing.T) {
 	}
 }
 
-func TestIntegration_MalformedConfig(t *testing.T) {
-	windows := Source{Name: "windows", Fetch: func(context.Context) ([]item.Item, error) {
-		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil
-	}}
-	dirs := Source{Name: "zoxide", Fetch: func(context.Context) ([]item.Item, error) {
-		return []item.Item{{Type: "dir", Display: "/projects"}}, nil
-	}}
-	cfgErr := errors.New("bad toml")
-	badConfig := Source{Name: "config", Fetch: func(context.Context) ([]item.Item, error) {
-		return nil, cfgErr
-	}}
-
-	gen := newIntegrationRootGenerator(windows, dirs, badConfig, Source{Name: "actions", Fetch: config.MatchingActions(config.Config{}, "root")})
-	items := gen(nil, Context{})
-
-	if len(items) != 3 {
-		t.Fatalf("got %d items, want 3", len(items))
-	}
-	if items[0].Type != "window" {
-		t.Errorf("items[0].Type = %q, want window", items[0].Type)
-	}
-	if items[1].Type != "dir" {
-		t.Errorf("items[1].Type = %q, want dir", items[1].Type)
-	}
-	errItem := items[2]
-	if errItem.Type != "error" {
-		t.Errorf("errItem.Type = %q, want error", errItem.Type)
-	}
-	if errItem.Source != "config" {
-		t.Errorf("errItem.Source = %q, want config", errItem.Source)
-	}
-	if errItem.Action != "" {
-		t.Errorf("errItem.Action = %q, want empty", errItem.Action)
-	}
-}
-
 func TestIntegration_OneSourceFailsOthersWork(t *testing.T) {
 	windows := Source{Name: "windows", Fetch: func(context.Context) ([]item.Item, error) {
 		return []item.Item{{Type: "window", Display: "main:1 zsh"}}, nil

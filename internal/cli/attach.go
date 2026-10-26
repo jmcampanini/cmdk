@@ -46,16 +46,13 @@ func runAttachCommand(root *rootOptions, cmd *cobra.Command, args []string) erro
 		return errors.New("cmdk attach cannot run inside tmux; it is intended to enter a cmdk-managed tmux session from outside tmux")
 	}
 
-	cfgPath, err := config.ResolvePath(root.configPath)
+	loaded, err := root.loadConfig(cmd)
 	if err != nil {
 		return err
 	}
-	cfg, err := config.Load(cfgPath)
-	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
-	}
+	cfg := loaded.config
 
-	path, err := attachPath(args, cfg, cfgPath)
+	path, err := attachPath(args, cfg, loaded.path)
 	if err != nil {
 		return err
 	}

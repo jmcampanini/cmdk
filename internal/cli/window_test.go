@@ -10,6 +10,7 @@ import (
 
 func stubWindowSwitcher(t *testing.T, fn func(context.Context, tmux.WindowDirection, tmux.WindowSwitchOptions) error) {
 	t.Helper()
+	useTempConfigHome(t)
 	oldSwitch := switchRelativeWindow
 	switchRelativeWindow = fn
 	stubTmuxPrerequisite(t, func(context.Context) error { return nil })

@@ -10,7 +10,7 @@ import (
 )
 
 func resolveSessionPlanWithConfig(cmd *cobra.Command, path string, cfg config.Config) (resolver.Plan, error) {
-	ctx, cancel := context.WithTimeout(commandContext(cmd), cfg.Timeout.EffectiveFetch())
+	ctx, cancel := context.WithTimeout(commandContext(cmd), cfg.Timeout.Fetch)
 	defer cancel()
-	return resolver.Resolve(ctx, path, cfg.Timeout.EffectiveFetch())
+	return resolver.Resolve(ctx, path, cfg.Timeout.Fetch)
 }

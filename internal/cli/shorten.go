@@ -64,14 +64,11 @@ func runShortenCommand(root *rootOptions, cmd *cobra.Command, args []string) err
 		return err
 	}
 
-	cfgPath, err := config.ResolvePath(root.configPath)
+	loaded, err := root.loadConfig(cmd)
 	if err != nil {
 		return err
 	}
-	cfg, err := config.Load(cfgPath)
-	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
-	}
+	cfg := loaded.config
 
 	trunc, err := shortenTruncation(cmd, cfg)
 	if err != nil {

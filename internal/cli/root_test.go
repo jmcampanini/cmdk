@@ -2,7 +2,9 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -89,6 +91,24 @@ func executeRootForTest(t *testing.T, args ...string) string {
 	return out.String()
 }
 
+func TestEmptyConfigFlagIsAnError(t *testing.T) {
+	for _, args := range [][]string{
+		{"--config", "", "config"},
+		{"config", "--config="},
+		{"--config=", "shorten", "/tmp"},
+		{"config", "--validate", ""},
+	} {
+		root := newRootCommand()
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		root.SetArgs(args)
+		err := root.Execute()
+		if err == nil || !strings.Contains(err.Error(), "config path cannot be empty") {
+			t.Errorf("cmdk %s: err = %v, want config path cannot be empty", strings.Join(args, " "), err)
+		}
+	}
+}
+
 func TestPersistentConfigFlagReachesSubcommands(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing.toml")
 	for _, args := range [][]string{
@@ -105,5 +125,57 @@ func TestPersistentConfigFlagReachesSubcommands(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "config file not found: "+missing) {
 			t.Errorf("cmdk %s: err = %v, want config file not found", strings.Join(args, " "), err)
 		}
+	}
+}
+
+func TestEveryCommandRejectsInvalidDiscoveredConfig(t *testing.T) {
+	stubTmuxPrerequisite(t, func(context.Context) error { return nil })
+	t.Setenv("TMUX", "")
+	dir := t.TempDir()
+	commands := [][]string{
+		{},
+		{"config"},
+		{"shorten", dir},
+		{"session", "resolve", dir},
+		{"session", "window", dir, "--new"},
+		{"attach", dir},
+		{"action", "run", "example", "--no-switch"},
+		{"window", "next"},
+	}
+	tests := []struct {
+		name      string
+		content   string
+		wantInErr string
+	}{
+		{name: "malformed", content: "[[[broken", wantInErr: "toml"},
+		{name: "invalid", content: "[timeout]\nfetch = '0s'", wantInErr: "timeout.fetch"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			xdg := useTempConfigHome(t)
+			path := filepath.Join(xdg, "cmdk", "config.toml")
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(tt.content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			for _, args := range commands {
+				root := newRootCommand()
+				var out bytes.Buffer
+				root.SetOut(&out)
+				root.SetErr(io.Discard)
+				root.SetArgs(args)
+
+				err := root.Execute()
+				if err == nil || !strings.Contains(err.Error(), tt.wantInErr) {
+					t.Errorf("cmdk %s: err = %v, want error mentioning %q", strings.Join(args, " "), err, tt.wantInErr)
+				}
+				if out.Len() != 0 {
+					t.Errorf("cmdk %s: stdout = %q, want empty", strings.Join(args, " "), out.String())
+				}
+			}
+		})
 	}
 }
