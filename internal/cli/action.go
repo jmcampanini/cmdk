@@ -14,7 +14,9 @@ func newActionCommand(root *rootOptions) *cobra.Command {
 
 Only root and dir actions whose effective launch mode is session-window can
 run this way; see "cmdk help launching" for the modes. A bare "cmdk action"
-prints this help and exits 0.`,
+prints this help and exits 0.
+
+` + helpOutputContract,
 		Args: cobra.NoArgs,
 		RunE: runHelp,
 	}

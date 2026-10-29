@@ -1088,7 +1088,7 @@ func TestValidate_ZeroPickerTimeout(t *testing.T) {
 	}
 }
 
-func TestLoad_OtherSourcePreservesZoxideDefault(t *testing.T) {
+func TestLoad_RejectsUnknownSource(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(path, []byte(`
@@ -1098,15 +1098,9 @@ limit = 10
 		t.Fatal(err)
 	}
 
-	cfg, _, err := Load(path)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.Sources["fish"].Limit != 10 {
-		t.Errorf("Sources[fish].Limit = %d, want 10", cfg.Sources["fish"].Limit)
-	}
-	if zoxide, ok := cfg.Sources["zoxide"]; !ok || zoxide != DefaultConfig().Sources["zoxide"] {
-		t.Errorf("Sources = %v, want the zoxide default kept beside the configured fish source", cfg.Sources)
+	_, _, err := Load(path)
+	if err == nil || !strings.Contains(err.Error(), `unknown source "fish"`) {
+		t.Fatalf("Load() error = %v, want the unknown source named", err)
 	}
 }
 

@@ -51,10 +51,14 @@ func useIsolatedTmuxSocket(t *testing.T) {
 }
 
 func TestMain(m *testing.M) {
+	os.Exit(runTests(m))
+}
+
+func runTests(m *testing.M) int {
 	tmuxSocket = fmt.Sprintf("cmdk-e2e-%d", os.Getpid())
 	if err := cmdktmux.CheckPrerequisite(context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: e2e tests: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 
 	// The mise test-e2e task builds the binary through the build task and
@@ -62,11 +66,22 @@ func TestMain(m *testing.M) {
 	binaryPath = os.Getenv("CMDK_E2E_BINARY")
 	if binaryPath == "" {
 		fmt.Fprintln(os.Stderr, "ERROR: e2e tests: CMDK_E2E_BINARY is not set; run the suite with 'mise run test-e2e'")
-		os.Exit(1)
+		return 1
 	}
 	if _, err := os.Stat(binaryPath); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: e2e tests: stat binary %q: %v\n", binaryPath, err)
-		os.Exit(1)
+		return 1
+	}
+
+	testHome, err := os.MkdirTemp("", "cmdk-e2e-")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: e2e tests: create home: %v\n", err)
+		return 1
+	}
+	defer func() { _ = os.RemoveAll(testHome) }()
+	if err := isolateEnvironment(testHome); err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: e2e tests: isolate environment: %v\n", err)
+		return 1
 	}
 
 	// tmux stops the server as soon as its last session closes. Each test ends
@@ -75,12 +90,47 @@ func TestMain(m *testing.M) {
 	// unexpectedly". Keeping the empty server alive removes that race.
 	if out, err := tmuxCmd("start-server", ";", "set", "-s", "exit-empty", "off").CombinedOutput(); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: e2e tests: start tmux server: %v\n%s", err, out)
-		os.Exit(1)
+		return 1
+	}
+	defer func() { _ = tmuxCmd("kill-server").Run() }()
+
+	return m.Run()
+}
+
+func isolateEnvironment(testHome string) error {
+	bin := filepath.Join(testHome, "bin")
+	project := filepath.Join(testHome, "project")
+	for _, dir := range []string{bin, project} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+	}
+	zoxide := `#!/bin/sh
+if [ "$#" -ne 3 ] || [ "$1" != query ] || [ "$2" != --list ] || [ "$3" != --score ]; then
+  echo "unexpected zoxide arguments: $*" >&2
+  exit 1
+fi
+printf '42.0 %s\n' ` + shellQuoteE2E(project) + "\n"
+	if err := os.WriteFile(filepath.Join(bin, "zoxide"), []byte(zoxide), 0o755); err != nil {
+		return err
 	}
 
-	code := m.Run()
-	_ = tmuxCmd("kill-server").Run()
-	os.Exit(code)
+	for name, value := range map[string]string{
+		"HOME":                testHome,
+		"XDG_CONFIG_HOME":     filepath.Join(testHome, ".config"),
+		"XDG_CACHE_HOME":      filepath.Join(testHome, ".cache"),
+		"XDG_DATA_HOME":       filepath.Join(testHome, ".local", "share"),
+		"XDG_STATE_HOME":      filepath.Join(testHome, ".local", "state"),
+		"GIT_CONFIG_GLOBAL":   os.DevNull,
+		"GIT_CONFIG_NOSYSTEM": "1",
+		"SHELL":               "/bin/sh",
+		"PATH":                bin + string(os.PathListSeparator) + os.Getenv("PATH"),
+	} {
+		if err := os.Setenv(name, value); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func TestE2E_TmuxSentinel(t *testing.T) {
@@ -207,11 +257,6 @@ func typeText(t *testing.T, sess string, text string) {
 	}
 }
 
-func hasZoxide() bool {
-	_, err := exec.LookPath("zoxide")
-	return err == nil
-}
-
 func requireGitE2E(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
@@ -262,17 +307,6 @@ func realPathE2E(t *testing.T, path string) string {
 		t.Fatalf("EvalSymlinks(%q): %v", path, err)
 	}
 	return filepath.Clean(resolved)
-}
-
-func requireZoxideEntries(t *testing.T) {
-	t.Helper()
-	if !hasZoxide() {
-		t.Skip("zoxide not available")
-	}
-	out, _ := exec.Command("zoxide", "query", "--list", "--score").Output()
-	if len(strings.TrimSpace(string(out))) == 0 {
-		t.Skip("no zoxide entries")
-	}
 }
 
 func navigateToDirItem(t *testing.T, sess string) {
@@ -513,7 +547,6 @@ func TestE2E_SessionSwitchActionSwitchesAndExits(t *testing.T) {
 }
 
 func TestE2E_ZoxideDirsVisible(t *testing.T) {
-	requireZoxideEntries(t)
 	sess := startSession(t)
 	defer killSession(t, sess)
 
@@ -521,13 +554,11 @@ func TestE2E_ZoxideDirsVisible(t *testing.T) {
 	exitFilterModeE2E(t, sess)
 
 	waitForContent(t, sess, func(s string) bool {
-		return strings.Contains(s, iconDir)
+		return strings.Contains(s, iconDir) && strings.Contains(s, "~/project")
 	}, defaultTimeout)
 }
 
 func TestE2E_SelectDirShowsDirActions(t *testing.T) {
-	requireZoxideEntries(t)
-
 	xdg := writeConfig(t, `
 [behavior]
 auto_select_single = false
@@ -546,8 +577,6 @@ auto_select_single = false
 }
 
 func TestE2E_EscapeFromDirActionsReturnsToRoot(t *testing.T) {
-	requireZoxideEntries(t)
-
 	xdg := writeConfig(t, `
 [behavior]
 auto_select_single = false
@@ -580,7 +609,7 @@ auto_select_single = false
 }
 
 func TestE2E_WithoutZoxide_StillLaunches(t *testing.T) {
-	sess := startSession(t)
+	sess := startSessionWithEnv(t, map[string]string{"PATH": restrictedPATH(t)})
 	defer killSession(t, sess)
 
 	waitForReady(t, sess)
@@ -1522,8 +1551,6 @@ matches = "root"
 }
 
 func TestE2E_DirActionsVisible(t *testing.T) {
-	requireZoxideEntries(t)
-
 	xdg := writeConfig(t, `
 [[actions]]
 name = "xq-yazi-action"
@@ -1544,8 +1571,6 @@ matches = "dir"
 }
 
 func TestE2E_DirActionsOrder(t *testing.T) {
-	requireZoxideEntries(t)
-
 	xdg := writeConfig(t, `
 [[actions]]
 name = "xq-alpha-dirc"
@@ -1581,8 +1606,6 @@ matches = "dir"
 }
 
 func TestE2E_NoDirActionsShowsDefault(t *testing.T) {
-	requireZoxideEntries(t)
-
 	xdg := writeConfig(t, `
 [behavior]
 auto_select_single = false
@@ -1605,14 +1628,16 @@ auto_select_single = false
 func restrictedPATH(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	tmuxPath, err := exec.LookPath("tmux")
-	if err != nil {
-		t.Fatal("tmux not found")
+	for _, name := range []string{"tmux", "env", "sh"} {
+		path, err := exec.LookPath(name)
+		if err != nil {
+			t.Fatalf("required program %s not found: %v", name, err)
+		}
+		if err := os.Symlink(path, filepath.Join(dir, name)); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err := os.Symlink(tmuxPath, filepath.Join(dir, "tmux")); err != nil {
-		t.Fatal(err)
-	}
-	return dir + ":/usr/bin:/bin"
+	return dir
 }
 
 func TestE2E_EnvVarsPresent(t *testing.T) {
@@ -1667,10 +1692,6 @@ matches = "root"
 }
 
 func TestE2E_ZoxideUnavailable_ErrorItem(t *testing.T) {
-	if !hasZoxide() {
-		t.Skip("zoxide not available - can't test unavailability scenario")
-	}
-
 	path := restrictedPATH(t)
 	sess := startSessionWithEnv(t, map[string]string{"PATH": path})
 	defer killSession(t, sess)
@@ -1687,10 +1708,6 @@ func TestE2E_ZoxideUnavailable_ErrorItem(t *testing.T) {
 }
 
 func TestE2E_ErrorItemOpensDetails(t *testing.T) {
-	if !hasZoxide() {
-		t.Skip("zoxide not available - can't test error item scenario")
-	}
-
 	path := restrictedPATH(t)
 	sess := startSessionWithEnv(t, map[string]string{"PATH": path})
 	defer killSession(t, sess)
@@ -1898,8 +1915,6 @@ func TestE2E_DisplayPopup(t *testing.T) {
 }
 
 func TestE2E_PromptStage(t *testing.T) {
-	requireZoxideEntries(t)
-
 	marker := filepath.Join(t.TempDir(), "prompt-result")
 	xdg := writeConfig(t, fmt.Sprintf(`
 [behavior]
@@ -1933,8 +1948,6 @@ stages = [
 }
 
 func TestE2E_PickerStage(t *testing.T) {
-	requireZoxideEntries(t)
-
 	marker := filepath.Join(t.TempDir(), "picker-result")
 	xdg := writeConfig(t, fmt.Sprintf(`
 [behavior]
@@ -2056,8 +2069,6 @@ func TestE2E_ShortenNoTruncateFlag(t *testing.T) {
 }
 
 func TestE2E_EscFromPromptStage(t *testing.T) {
-	requireZoxideEntries(t)
-
 	xdg := writeConfig(t, `
 [behavior]
 auto_select_single = false

@@ -2,10 +2,9 @@ package config
 
 import (
 	"errors"
+	log "log/slog"
 	"os"
 	"path/filepath"
-
-	log "charm.land/log/v2"
 )
 
 // ResolvePath returns the configuration file a command loads. A supplied path

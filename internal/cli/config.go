@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/jmcampanini/cmdk/internal/config"
+	"github.com/jmcampanini/cmdk/internal/safetext"
 )
 
 type configCommandOptions struct {
@@ -28,9 +29,13 @@ func newConfigCommand(root *rootOptions) *cobra.Command {
 		Long: `Show the configuration cmdk runs with, or validate a configuration file.
 
 Stdout: the effective configuration as TOML after defaults and the
-configuration file were applied, preceded by a "# <path>" comment naming the
-file it came from; the report loads back unchanged. --provenance appends a
-"# Provenance" table as TOML comments naming the input that set each value.
+configuration file were applied, preceded by a comment naming the quoted
+file path. Launch modes, window-name templates, picker delimiters, and icon
+aliases are resolved before reporting.
+A "# Derived values" section lists those values as TOML comments, so the
+report loads back unchanged. --provenance appends a "# Provenance" table as
+TOML comments naming the input that set each value. No values are redacted;
+cmdk has no configuration fields designated as secrets.
 --validate <path> loads that file instead of the discovered one, prints
 "valid" on success, and otherwise exits 1 with the first problem on stderr.
 Stderr: diagnostics. The command never prompts and needs no terminal.
@@ -67,15 +72,18 @@ func runConfigCommand(root *rootOptions, cmd *cobra.Command, options configComma
 		return err
 	}
 
-	reporter := configreporter.New(loaded.config, loaded.report)
-	return writeConfigReport(cmd.OutOrStdout(), loaded.path, reporter, options.showProvenance)
+	return writeConfigReport(cmd.OutOrStdout(), loaded, options.showProvenance)
 }
 
-func writeConfigReport(out io.Writer, path string, reporter configreporter.Reporter[config.Config], showProvenance bool) error {
-	if _, err := fmt.Fprintf(out, "# %s\n", path); err != nil {
+func writeConfigReport(out io.Writer, loaded loadedConfig, showProvenance bool) error {
+	reporter := configreporter.New(loaded.config, loaded.report)
+	if _, err := fmt.Fprintf(out, "# %q\n", loaded.path); err != nil {
 		return err
 	}
 	if err := reporter.WriteTOML(out); err != nil {
+		return err
+	}
+	if err := loaded.config.WriteDerivedValues(out); err != nil {
 		return err
 	}
 	if !showProvenance {
@@ -90,6 +98,12 @@ func writeConfigReport(out io.Writer, path string, reporter configreporter.Repor
 
 func writeProvenanceTable(out io.Writer, reporter configreporter.Reporter[config.Config]) error {
 	headers := reporter.ProvenanceHeaders()
+	rows := reporter.ProvenanceRows()
+	for _, row := range rows {
+		for i, cell := range row {
+			row[i] = safetext.EscapeTerminalControls(cell)
+		}
+	}
 	lastColumn := len(headers) - 1
 	paddedCell := lipgloss.NewStyle().PaddingRight(2)
 	plainCell := lipgloss.NewStyle()
@@ -107,7 +121,7 @@ func writeProvenanceTable(out io.Writer, reporter configreporter.Reporter[config
 			return plainCell
 		}).
 		Headers(headers...).
-		Rows(reporter.ProvenanceRows()...)
+		Rows(rows...)
 
 	for _, line := range strings.Split(provenance.String(), "\n") {
 		if _, err := fmt.Fprintf(out, "# %s\n", strings.TrimRight(line, " ")); err != nil {

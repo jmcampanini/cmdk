@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	log "log/slog"
 	"runtime/debug"
 	"sync"
 	"time"
 
-	log "charm.land/log/v2"
 	"github.com/jmcampanini/cmdk/internal/cmdrun"
 	"github.com/jmcampanini/cmdk/internal/item"
 )

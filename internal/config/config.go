@@ -139,6 +139,9 @@ var sessionActionReservedStageKeys = slices.Concat(reservedStageKeys, sessionAct
 
 var validStageKey = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
+// DefaultWindowNameTemplate names a new window after its launch directory.
+const DefaultWindowNameTemplate = "{{.launch_basename}}"
+
 // DefaultConfig returns a Config with production defaults. Load decodes TOML
 // on top of this struct, so fields set here act as defaults for anything the
 // user's config file does not mention.
@@ -174,6 +177,9 @@ func (c Config) Validate() error {
 		return err
 	}
 	for name, sc := range c.Sources {
+		if name != "zoxide" {
+			return fmt.Errorf("unknown source %q in sources; supported source: zoxide", name)
+		}
 		if sc.Limit < 0 {
 			return fmt.Errorf("sources.%s.limit cannot be negative", name)
 		}
@@ -388,10 +394,10 @@ func (c *Config) resolveIcons() error {
 	return nil
 }
 
-// Load loads the effective configuration from the file at path, which may be
-// absent, and reports where each value came from. On error it returns the
-// zero Config and an empty report.
-func Load(path string) (Config, configloader.LoadReport, error) {
+// Load applies the optional file at path and explicit overrides to the defaults,
+// then validates and resolves the effective configuration. It reports where
+// each value came from. On error it returns the zero Config and an empty report.
+func Load(path string, overrides ...Overrides) (Config, configloader.LoadReport, error) {
 	if err := validateOptionalRegularFile(path); err != nil {
 		return Config{}, configloader.LoadReport{}, err
 	}
@@ -399,7 +405,7 @@ func Load(path string) (Config, configloader.LoadReport, error) {
 	if err != nil {
 		return Config{}, configloader.LoadReport{}, err
 	}
-	return loadConfig(fileLoader)
+	return loadConfig(fileLoader, overrides...)
 }
 
 // ValidateFile validates a required config file.
@@ -418,8 +424,12 @@ func ValidateFile(path string) error {
 // loadConfig decodes the file over DefaultConfig, so every default is applied
 // once by the loader; TOML tables merge into the default maps rather than
 // replacing them.
-func loadConfig(fileLoader configloader.ConfigLoader[Config]) (Config, configloader.LoadReport, error) {
-	cfg, report, err := configloader.Load(DefaultConfig(), fileLoader)
+func loadConfig(fileLoader configloader.ConfigLoader[Config], overrides ...Overrides) (Config, configloader.LoadReport, error) {
+	loaders := []configloader.ConfigLoader[Config]{fileLoader}
+	for _, override := range overrides {
+		loaders = append(loaders, override.load)
+	}
+	cfg, report, err := configloader.Load(DefaultConfig(), loaders...)
 	if err != nil {
 		return Config{}, configloader.LoadReport{}, err
 	}
@@ -429,6 +439,7 @@ func loadConfig(fileLoader configloader.ConfigLoader[Config]) (Config, configloa
 	if err := cfg.resolveIcons(); err != nil {
 		return Config{}, configloader.LoadReport{}, err
 	}
+	cfg.resolveActions()
 	return cfg, report, nil
 }
 

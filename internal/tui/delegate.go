@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"image/color"
 	"io"
+	log "log/slog"
 	"strings"
 
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	log "charm.land/log/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/jmcampanini/cmdk/internal/item"

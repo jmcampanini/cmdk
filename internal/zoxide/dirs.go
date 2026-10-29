@@ -4,12 +4,12 @@ package zoxide
 import (
 	"cmp"
 	"context"
+	log "log/slog"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
-	log "charm.land/log/v2"
 	"github.com/jmcampanini/cmdk/internal/cmdrun"
 	"github.com/jmcampanini/cmdk/internal/item"
 	"github.com/jmcampanini/cmdk/internal/pathfmt"

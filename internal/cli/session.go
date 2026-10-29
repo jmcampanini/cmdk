@@ -10,7 +10,9 @@ func newSessionCommand(root *rootOptions) *cobra.Command {
 
 A managed session is one cmdk created for a repository or a directory; see
 "cmdk help launching" for how paths map to sessions. A bare "cmdk session"
-prints this help and exits 0.`,
+prints this help and exits 0.
+
+` + helpOutputContract,
 		Args: cobra.NoArgs,
 		RunE: runHelp,
 	}

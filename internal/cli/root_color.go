@@ -2,7 +2,6 @@ package cli
 
 import (
 	"errors"
-	"io"
 	"slices"
 	"strings"
 
@@ -66,30 +65,35 @@ func (*themeMode) Type() string {
 // NO_COLOR, TERM=dumb, or a non-terminal disables color. never forces the
 // no-color profile. always overrides detection and NO_COLOR, falling back to
 // ANSI when the environment still reports no color.
-func resolveColorProfile(mode colorMode, stdout io.Writer, env []string) colorprofile.Profile {
-	switch mode {
-	case colorNever:
+func resolveColorProfile(mode colorMode, isTerminal bool, env []string) colorprofile.Profile {
+	if mode == colorNever {
 		return colorprofile.ASCII
-	case colorAlways:
-		forced := slices.DeleteFunc(slices.Clone(env), func(kv string) bool {
-			return strings.HasPrefix(kv, "NO_COLOR=")
-		})
-		forced = append(forced, "CLICOLOR_FORCE=1")
-		if profile := colorprofile.Detect(stdout, forced); profile >= colorprofile.ANSI {
-			return profile
-		}
-		return colorprofile.ANSI
-	default:
-		// colorprofile parses NO_COLOR as a boolean, so NO_COLOR=anything
-		// would keep color; the contract is that any nonempty value disables
-		// it.
-		if slices.ContainsFunc(env, func(kv string) bool {
-			return strings.HasPrefix(kv, "NO_COLOR=") && kv != "NO_COLOR="
-		}) {
-			return colorprofile.ASCII
-		}
-		return colorprofile.Detect(stdout, env)
 	}
+
+	var termType, noColor string
+	for _, entry := range env {
+		key, value, _ := strings.Cut(entry, "=")
+		switch key {
+		case "TERM":
+			termType = value
+		case "NO_COLOR":
+			noColor = value
+		}
+	}
+	if mode == colorAuto && (!isTerminal || termType == "dumb" || noColor != "") {
+		return colorprofile.ASCII
+	}
+
+	if mode == colorAlways {
+		env = append(slices.Clone(env), "NO_COLOR=", "CLICOLOR_FORCE=1")
+	}
+	// Detect also runs an unbounded "tmux info" subprocess. Env and Terminfo
+	// inspect local capabilities without letting color detection hang startup.
+	profile := max(colorprofile.Env(env), colorprofile.Terminfo(termType))
+	if mode == colorAlways {
+		return max(profile, colorprofile.ANSI)
+	}
+	return profile
 }
 
 // rendersColor reports whether the profile can render color, which is the

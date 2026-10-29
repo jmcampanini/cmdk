@@ -4,6 +4,7 @@ package tui
 import (
 	"errors"
 	"fmt"
+	log "log/slog"
 	"os"
 	"slices"
 	"sort"
@@ -15,7 +16,6 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	log "charm.land/log/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/jmcampanini/cmdk/internal/cmdrun"

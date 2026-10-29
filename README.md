@@ -5,63 +5,59 @@ cmdk is a keyboard-driven tmux launcher: a fuzzy-filterable popup for switching 
 
 ## Install
 
-cmdk supports versioned releases with prebuilt binaries and a Homebrew cask, plus a HEAD-only Homebrew formula built from source. Until the first release is published, use the HEAD formula or build from source.
+cmdk supports versioned releases for Linux and macOS on amd64 and arm64, with prebuilt binaries and a Homebrew cask, plus a HEAD-only Homebrew formula; until the first release, install the HEAD formula or build from source.
 
-Release archives target Linux and macOS on amd64 and arm64. Linux is verified in required CI; other Unix-like systems are unverified, and Windows is unsupported. Install the [required external programs](#required-external-programs) separately.
-
-
-### Versioned releases
-
-After the first release is published, install or upgrade with [mise](https://mise.jdx.dev) or the shared Homebrew tap:
+After the first release, install or upgrade with [mise](https://mise.jdx.dev):
 
 ```sh
 mise use -g github:jmcampanini/cmdk
 mise upgrade github:jmcampanini/cmdk
+```
 
+After the first release, install or upgrade the cask with Homebrew:
+
+```sh
 brew install --cask jmcampanini/tap/cmdk
 brew upgrade --cask jmcampanini/tap/cmdk
 ```
 
-Or download the archive for your OS and architecture from the [releases page](https://github.com/jmcampanini/cmdk/releases), extract it, and put `cmdk` on your `PATH`. To upgrade, download the new release and replace the binary. Each release includes SHA-256 checksums and GitHub build provenance attestations. On macOS, if a browser download is quarantined, run `xattr -d com.apple.quarantine cmdk` on the extracted binary before running it. The Homebrew cask handles quarantine removal and installs bash, zsh, and fish completions.
+After the first release, download the matching archive from [GitHub Releases](https://github.com/jmcampanini/cmdk/releases), then install or upgrade with `tar` and administrator access through `sudo`:
 
+```sh
+tar -xzf 'cmdk_<version>_<os>_<arch>.tar.gz'
+# macOS only, if the browser quarantined the downloaded binary:
+xattr -d com.apple.quarantine cmdk
+sudo install -d /usr/local/bin
+sudo install -m 755 cmdk /usr/local/bin/cmdk
+```
 
-### Homebrew HEAD alternative (macOS)
-
-The existing HEAD formula remains available for installs that track the latest commit:
+To track the latest commit on macOS, install or upgrade the HEAD formula with Homebrew:
 
 ```sh
 brew tap jmcampanini/cmdk https://github.com/jmcampanini/cmdk
 brew install --HEAD jmcampanini/cmdk/cmdk
-```
-
-To upgrade to the latest commit:
-
-```sh
 brew upgrade --fetch-HEAD cmdk
 ```
 
-
-### From source (Linux or macOS)
-
-With Git and [mise](https://mise.jdx.dev) installed (mise supplies the pinned Go toolchain from `mise.toml`):
+To build from source with Git, [mise](https://mise.jdx.dev), and administrator access through `sudo`, clone, build, and install; run the final five commands again to upgrade:
 
 ```sh
 git clone https://github.com/jmcampanini/cmdk.git
 cd cmdk
 mise trust
+git pull --ff-only
 mise install
 mise run build
-# Copy or symlink ./build/cmdk onto your PATH.
+sudo install -d /usr/local/bin
+sudo install -m 755 build/cmdk /usr/local/bin/cmdk
 ```
-
-To upgrade a source installation, pull the latest source, run `mise install` and `mise run build` again, and replace the binary on your `PATH`.
 
 
 ## Representative commands
 
 | Invocation | Result |
 | --- | --- |
-| `cmdk --pane-id=#{pane_id}` | Open the launcher for a pane; the binding below runs it in a tmux popup. |
+| `cmdk --pane-id=#{pane_id}` | Open the launcher for a pane; `cmdk --help` shows a tmux popup binding. |
 | `cmdk attach [path]` | Attach to a cmdk-managed session from outside tmux. |
 | `cmdk session resolve <path>` | Inspect the planned session for a path. |
 | `cmdk session window <path> --new` | Create a shell window in a cmdk-managed session. |
@@ -69,12 +65,6 @@ To upgrade a source installation, pull the latest source, run `mise install` and
 | `cmdk window next` / `cmdk window previous` | Cycle through tmux windows across sessions. |
 
 `cmdk --help`, each command's `--help`, and the help topics `cmdk help exit-codes`, `cmdk help launching`, and `cmdk help templates` are the canonical reference.
-
-Bind a key in `~/.tmux.conf` to open the launcher in a tmux popup, reload tmux with `tmux source-file ~/.tmux.conf`, then press `prefix + Space` inside any tmux session:
-
-```tmux
-bind-key Space display-popup -E "cmdk --pane-id=#{pane_id}"
-```
 
 
 ## Required external programs

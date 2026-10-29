@@ -1,8 +1,8 @@
 package cli
 
 import (
+	"errors"
 	"io"
-	"os"
 	"strings"
 	"testing"
 
@@ -173,7 +173,11 @@ func TestEmitIconsEmptyHint(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			options := iconOptions{cod: tt.cod, dev: tt.dev, oct: tt.oct, filter: tt.filter}
 
-			got := captureStderr(t, func() { emitIconsEmptyHint(options) })
+			var stderr strings.Builder
+			if err := emitIconsEmptyHint(&stderr, options); err != nil {
+				t.Fatal(err)
+			}
+			got := stderr.String()
 			for _, want := range tt.contains {
 				if !strings.Contains(got, want) {
 					t.Errorf("stderr missing %q\nstderr:\n%s", want, got)
@@ -189,64 +193,41 @@ func TestEmitIconsEmptyHint(t *testing.T) {
 }
 
 func TestRunIconsCommandWithoutFlagsListsEverySet(t *testing.T) {
-	bare := captureStdout(t, func() {
-		if err := runIconsCommand(iconOptions{}); err != nil {
-			t.Fatal(err)
-		}
-	})
-	explicit := captureStdout(t, func() {
-		if err := runIconsCommand(iconOptions{cod: true, dev: true, oct: true}); err != nil {
-			t.Fatal(err)
-		}
-	})
-	if bare != explicit {
+	var bare, explicit strings.Builder
+	if err := runIconsCommand(iconOptions{}, &bare, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if err := runIconsCommand(iconOptions{cod: true, dev: true, oct: true}, &explicit, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if bare.String() != explicit.String() {
 		t.Error("bare icons output differs from listing every set")
 	}
 	for _, heading := range []string{"Codicons (cod)", "Devicons (dev)", "Octicons (oct)"} {
-		if !strings.Contains(bare, heading+"\n") {
+		if !strings.Contains(bare.String(), heading+"\n") {
 			t.Errorf("bare icons output missing heading %q", heading)
 		}
 	}
 }
 
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-	return captureStream(t, &os.Stdout, fn)
-}
+func TestIconsReturnsOutputFailure(t *testing.T) {
+	writeErr := errors.New("output unavailable")
+	for _, args := range [][]string{
+		{"icons"},
+		{"icons", "--fzf"},
+		{"icons", "--filter", "no-icon-has-this-name"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			root := newRootCommand()
+			root.SetArgs(args)
+			root.SetOut(errorWriter{err: writeErr})
+			root.SetErr(errorWriter{err: writeErr})
 
-func captureStderr(t *testing.T, fn func()) string {
-	t.Helper()
-	return captureStream(t, &os.Stderr, fn)
-}
+			err := root.Execute()
 
-func captureStream(t *testing.T, stream **os.File, fn func()) string {
-	t.Helper()
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("os.Pipe: %v", err)
+			if !errors.Is(err, writeErr) {
+				t.Errorf("Execute() error = %v, want %v", err, writeErr)
+			}
+		})
 	}
-	orig := *stream
-	*stream = w
-	defer func() { *stream = orig }()
-
-	// Drain while fn writes, so output larger than the pipe buffer cannot
-	// block the writer.
-	type read struct {
-		data []byte
-		err  error
-	}
-	done := make(chan read, 1)
-	go func() {
-		data, err := io.ReadAll(r)
-		done <- read{data: data, err: err}
-	}()
-
-	fn()
-	_ = w.Close()
-
-	result := <-done
-	if result.err != nil {
-		t.Fatalf("read pipe: %v", result.err)
-	}
-	return string(result.data)
 }

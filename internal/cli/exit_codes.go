@@ -13,10 +13,8 @@ Payloads go to stdout, so a script reads stdout and branches on the status.
      selection, or a subcommand did its work. These failures also keep 0:
      a launch resolution error inside the launcher (a failing
      launch_path_cmd or picker source, or a template error) is shown on an
-     error screen and quitting afterwards exits 0; "cmdk help <name>" for a
-     name that does not exist prints "Unknown help topic" and the root usage,
-     because that lookup belongs to the command library; an empty "cmdk
-     icons" result prints a hint on stderr.
+     error screen and quitting afterwards exits 0; an empty "cmdk icons"
+     result prints a hint on stderr.
 
   1  Failure during command work: a malformed or invalid configuration file
      from the discovered path or --config; a missing or too-old tmux; a tmux
@@ -29,10 +27,10 @@ Payloads go to stdout, so a script reads stdout and branches on the status.
      does not change the status.
 
   2  Usage error, reported before any command work: an unknown command, an
-     unknown flag, a flag value that does not parse (a non-numeric
-     --truncate, a --color other than auto, always, or never, a --theme
-     other than light or dark), an unexpected operand, or operands that fail
-     a command's positional grammar.
+     unknown help topic, an unknown flag, a flag value that does not parse
+     (a non-numeric --truncate, a --color other than auto, always, or never,
+     or a --theme other than light or dark), an unexpected operand, or
+     operands that fail a command's positional grammar.
 
   *  Propagated from the command when the launcher runs a shell-mode action.
      cmdk replaces its own process with "sh -c <cmd>" through exec(2), so the

@@ -1,7 +1,7 @@
 package tui
 
 import (
-	log "charm.land/log/v2"
+	log "log/slog"
 
 	"github.com/jmcampanini/cmdk/internal/generator"
 	"github.com/jmcampanini/cmdk/internal/item"

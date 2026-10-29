@@ -5,11 +5,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	log "log/slog"
 	"os"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	log "charm.land/log/v2"
+	"github.com/charmbracelet/colorprofile"
+	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 
 	"github.com/jmcampanini/cmdk/internal/cmdrun"
@@ -35,6 +37,7 @@ type rootOptions struct {
 	colorMode   colorMode
 	timingsFlag bool
 	timingsJSON bool
+	version     bool
 }
 
 func newRootCommand() *cobra.Command {
@@ -57,7 +60,8 @@ and reads keys from stdin, so both must be terminals and TERM must name a
 terminal type other than dumb; otherwise cmdk exits 1 with a message saying
 what to fix. Run it from a terminal or a tmux popup; the Examples show the
 tmux binding. Help, --version, help topics, and "cmdk config" need no
-terminal.
+terminal. --version prints the build version to stdout and exits without
+loading configuration or running external programs.
 
 Streams: the launcher writes nothing to stdout, except that --timings and
 --timings-json run the startup phases without drawing and write a table or
@@ -90,30 +94,31 @@ Common tasks:
   Run a configured action:        cmdk action run <exact-name>
 
 Command groups:
-  action   Configured actions, run noninteractively:  cmdk action --help
-  session  Session plans and windows for a path:      cmdk session --help
-  window   Switching between tmux windows:            cmdk window --help`,
+  action      Configured actions:           cmdk action --help
+  completion  Shell completion scripts:     cmdk completion --help
+  session     Session plans and windows:    cmdk session --help
+  window      Switching between windows:    cmdk window --help`,
 		Example: `  bind-key Space display-popup -E "cmdk --pane-id=#{pane_id}"
   cmdk --timings-json`,
 		DisableSuggestions: true,
 		SilenceUsage:       true,
 		SilenceErrors:      true,
-		PreRunE:            requireTmux,
-		RunE:               root.runRootCommand,
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			if root.version {
+				return nil
+			}
+			return requireTmux(cmd, args)
+		},
+		RunE: root.runRootCommand,
 	}
-	cmd.Version = Version
 	cmd.PersistentFlags().StringVarP(&root.configPath, "config", "c", "", "configuration file to load; must exist")
 	cmd.Flags().StringVar(&root.paneID, "pane-id", "", "tmux pane the launcher was opened from")
 	cmd.Flags().Var(&root.themeFlag, "theme", "palette: light or dark; empty detects it")
 	cmd.Flags().Var(&root.colorMode, "color", "color output: auto, always, or never")
 	cmd.Flags().BoolVar(&root.timingsFlag, "timings", false, "print startup phase durations instead of the launcher")
 	cmd.Flags().BoolVar(&root.timingsJSON, "timings-json", false, "print the durations as JSON (implies --timings)")
-	// Cobra registers --help and --version only when it executes the resolved
-	// command, but it resolves that command first by stripping the flags it
-	// already knows. Registering both here keeps "cmdk --help --config x"
-	// from treating "x" as an unknown command.
+	cmd.Flags().BoolVarP(&root.version, "version", "v", false, "print the build version")
 	cmd.InitDefaultHelpFlag()
-	cmd.InitDefaultVersionFlag()
 	// Flag parsing errors are usage errors; the action group overrides this
 	// to escape terminal controls first.
 	cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
@@ -123,11 +128,13 @@ Command groups:
 		&cobra.Group{ID: commandGroupID, Title: "Commands:"},
 		&cobra.Group{ID: topicGroupID, Title: "Help topics:"},
 	)
-	cmd.SetHelpCommandGroupID(commandGroupID)
-	cmd.SetCompletionCommandGroupID(commandGroupID)
+	help := newHelpCommand()
+	cmd.SetHelpCommand(help)
 	cmd.AddCommand(
+		help,
 		newActionCommand(root),
 		newAttachCommand(root),
+		newCompletionCommand(),
 		newConfigCommand(root),
 		newExitCodesCommand(root),
 		newIconsCommand(root),
@@ -142,24 +149,16 @@ Command groups:
 			child.GroupID = commandGroupID
 		}
 	}
-	// Cobra adds its help and completion commands lazily on Execute. Adding
-	// them now lets markUsageErrors cover their Args validators, and making
-	// the completion group runnable stops cobra from printing its help
-	// before validating operands, so an unexpected operand fails the same
-	// way at every level of the tree. The help command's own lookup of an
-	// unknown name stays cobra's: it prints "Unknown help topic" and exits 0.
-	cmd.InitDefaultHelpCmd()
-	cmd.InitDefaultCompletionCmd()
-	for _, child := range cmd.Commands() {
-		if child.Name() == "completion" && !child.Runnable() {
-			child.RunE = runHelp
-		}
-	}
 	markUsageErrors(cmd)
 	return cmd
 }
 
 func (root *rootOptions) runRootCommand(cmd *cobra.Command, _ []string) error {
+	if root.version {
+		_, err := fmt.Fprintf(cmd.OutOrStdout(), "cmdk version %s\n", Version)
+		return err
+	}
+
 	root.timingsFlag = root.timingsFlag || root.timingsJSON
 
 	tr := trace.Noop()
@@ -265,7 +264,7 @@ func (root *rootOptions) runRootCommand(cmd *cobra.Command, _ []string) error {
 		// such as RequestBackgroundColor that would emit escape sequences first.
 		stop = tr.Begin("tea-ready")
 		wrapper := timingsModel{inner: model}
-		p := tea.NewProgram(wrapper, tea.WithoutRenderer(), tea.WithInput(nil))
+		p := tea.NewProgram(wrapper, tea.WithoutRenderer(), tea.WithInput(nil), tea.WithColorProfile(colorprofile.ASCII))
 		_, err = p.Run()
 		stop()
 		if err != nil {
@@ -330,7 +329,10 @@ func (root *rootOptions) runRootCommand(cmd *cobra.Command, _ []string) error {
 	// when its answer can change what the person sees: the palette is
 	// adaptive, stdout is a terminal (checked above), and the profile can
 	// render color. Otherwise the resolved theme stands.
-	profile := resolveColorProfile(root.colorMode, os.Stdout, os.Environ())
+	profile := resolveColorProfile(root.colorMode, term.IsTerminal(os.Stdout.Fd()), os.Environ())
+	if rendersColor(profile) && profile < colorprofile.TrueColor && os.Getenv("TMUX") != "" && tmux.SupportsTrueColor(cmd.Context(), fetchTimeout) {
+		profile = colorprofile.TrueColor
+	}
 	if autoDetectTheme && rendersColor(profile) {
 		stop = tr.Begin("theme/auto-detect")
 		model = model.WithAutoThemeDetection(themeOverrides)

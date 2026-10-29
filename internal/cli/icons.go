@@ -2,7 +2,7 @@ package cli
 
 import (
 	"fmt"
-	"os"
+	"io"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -50,8 +50,8 @@ prompts.`,
   cmdk icons --cod --filter folder
   cmdk icons --fzf | fzf`,
 		Args: cobra.NoArgs,
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return runIconsCommand(options)
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runIconsCommand(options, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 	cmd.Flags().BoolVar(&options.cod, "cod", false, "include Codicons")
@@ -62,21 +62,18 @@ prompts.`,
 	return cmd
 }
 
-func runIconsCommand(options iconOptions) error {
+func runIconsCommand(options iconOptions, stdout, stderr io.Writer) error {
 	showAll := !options.cod && !options.dev && !options.oct
 	filterLower := strings.ToLower(options.filter)
 	filtered := filterIconEntries(icon.All(), options, showAll, filterLower)
 	if len(filtered) == 0 {
-		emitIconsEmptyHint(options)
-		return nil
+		return emitIconsEmptyHint(stderr, options)
 	}
 
 	if options.fzf {
-		printIconsFzf(filtered)
-		return nil
+		return printIconsFzf(stdout, filtered)
 	}
-	printIconsGrouped(filtered)
-	return nil
+	return printIconsGrouped(stdout, filtered)
 }
 
 func filterIconEntries(entries []icon.Entry, options iconOptions, showAll bool, filterLower string) []icon.Entry {
@@ -94,29 +91,39 @@ func filterIconEntries(entries []icon.Entry, options iconOptions, showAll bool, 
 	return filtered
 }
 
-func printIconsFzf(entries []icon.Entry) {
+func printIconsFzf(out io.Writer, entries []icon.Entry) error {
 	for _, e := range entries {
 		set := setFromAlias(e.Alias)
-		fmt.Printf("%s  %-40s [%s]  %s\n", e.Icon, ":"+e.Alias+":", set, e.Description)
+		if _, err := fmt.Fprintf(out, "%s  %-40s [%s]  %s\n", e.Icon, ":"+e.Alias+":", set, e.Description); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func printIconsGrouped(entries []icon.Entry) {
+func printIconsGrouped(out io.Writer, entries []icon.Entry) error {
 	var curPrefix string
 	for _, e := range entries {
 		prefix := aliasPrefix(e.Alias)
 		if prefix != curPrefix {
 			if curPrefix != "" {
-				fmt.Println()
+				if _, err := fmt.Fprintln(out); err != nil {
+					return err
+				}
 			}
-			fmt.Println(prefixHeading(prefix))
+			if _, err := fmt.Fprintln(out, prefixHeading(prefix)); err != nil {
+				return err
+			}
 			curPrefix = prefix
 		}
-		fmt.Printf("  %s  %-40s %s\n", e.Icon, ":"+e.Alias+":", e.Description)
+		if _, err := fmt.Fprintf(out, "  %s  %-40s %s\n", e.Icon, ":"+e.Alias+":", e.Description); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func emitIconsEmptyHint(options iconOptions) {
+func emitIconsEmptyHint(out io.Writer, options iconOptions) error {
 	sets := []struct {
 		name   string
 		active bool
@@ -140,19 +147,22 @@ func emitIconsEmptyHint(options iconOptions) {
 		scope = "sets: " + strings.Join(active, ",")
 	}
 
+	var message strings.Builder
 	if options.filter != "" {
-		fmt.Fprintf(os.Stderr, "no results for filter=%q (%s)\n", options.filter, scope)
+		fmt.Fprintf(&message, "no results for filter=%q (%s)\n", options.filter, scope)
 	} else {
-		fmt.Fprintf(os.Stderr, "no results (%s)\n", scope)
+		fmt.Fprintf(&message, "no results (%s)\n", scope)
 	}
-	fmt.Fprintln(os.Stderr, "try:")
+	fmt.Fprintln(&message, "try:")
 	if len(active) > 0 && len(missing) > 0 {
-		fmt.Fprintf(os.Stderr, "  %-24s include other icon sets\n", strings.Join(missing, " "))
+		fmt.Fprintf(&message, "  %-24s include other icon sets\n", strings.Join(missing, " "))
 	}
 	if options.filter != "" {
-		fmt.Fprintf(os.Stderr, "  %-24s broader match\n", "--filter=<shorter>")
+		fmt.Fprintf(&message, "  %-24s broader match\n", "--filter=<shorter>")
 	}
-	fmt.Fprintf(os.Stderr, "  %-24s interactive fuzzy search\n", "cmdk icons --fzf | fzf")
+	fmt.Fprintf(&message, "  %-24s interactive fuzzy search\n", "cmdk icons --fzf | fzf")
+	_, err := io.WriteString(out, message.String())
+	return err
 }
 
 func matchesSetFlag(set string, options iconOptions) bool {
