@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -20,6 +19,12 @@ func TestEveryApplicationCommandDeclaresGrammar(t *testing.T) {
 	if root.Args != nil {
 		t.Error("root must leave Args unset so cobra rejects an unknown subcommand during discovery")
 	}
+	if root.Version != "" {
+		t.Error("root must leave Cobra's Version unset and own --version")
+	}
+	if root.Flags().Lookup("version") == nil || root.Flags().Lookup("help") == nil {
+		t.Error("root must register --help and --version during construction")
+	}
 
 	commands := map[string]*cobra.Command{}
 	collectApplicationCommands(root, commands)
@@ -36,13 +41,8 @@ func TestEveryApplicationCommandDeclaresGrammar(t *testing.T) {
 	}
 }
 
-// collectApplicationCommands walks a command tree into path-keyed entries,
-// skipping the help and completion commands that cobra owns.
+// collectApplicationCommands walks a fresh command tree into path-keyed entries.
 func collectApplicationCommands(command *cobra.Command, into map[string]*cobra.Command) {
-	name := command.Name()
-	if command.HasParent() && (name == "help" || name == "completion" || strings.HasPrefix(name, "__complete")) {
-		return
-	}
 	into[command.CommandPath()] = command
 	for _, child := range command.Commands() {
 		collectApplicationCommands(child, into)

@@ -38,7 +38,9 @@ func newWindowCommand(root *rootOptions) *cobra.Command {
 
 ` + windowOrderHelp + `
 
-A bare "cmdk window" prints this help and exits 0.`,
+A bare "cmdk window" prints this help and exits 0.
+
+` + helpOutputContract,
 		Args: cobra.NoArgs,
 		RunE: runHelp,
 	}

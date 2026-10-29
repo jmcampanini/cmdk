@@ -55,11 +55,9 @@ func TestRootHelpEndsWithTaskListAndGroupBlock(t *testing.T) {
 		}
 	}
 
-	// First-level command groups the application owns; cobra's completion
-	// group is not one of them.
 	var groups []string
 	for _, child := range root.Commands() {
-		if child.HasSubCommands() && child.Name() != "completion" {
+		if child.HasSubCommands() {
 			groups = append(groups, child.Name())
 		}
 	}
@@ -89,7 +87,7 @@ func TestRootHelpListsEveryHelpTopic(t *testing.T) {
 
 func TestExitCodesTopicListsEveryStatus(t *testing.T) {
 	help := executeRootForTest(t, "help", "exit-codes")
-	for _, want := range []string{"\n  0  ", "\n  1  ", "\n  2  ", "\n  *  ", `"cmdk: <message>"`, "Unknown help topic", "exec(2)"} {
+	for _, want := range []string{"\n  0  ", "\n  1  ", "\n  2  ", "\n  *  ", `"cmdk: <message>"`, "unknown help topic", "exec(2)"} {
 		if !strings.Contains(help, want) {
 			t.Errorf("exit-codes help missing %q:\n%s", want, help)
 		}

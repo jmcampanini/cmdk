@@ -9,7 +9,6 @@ import (
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 
-	"github.com/jmcampanini/cmdk/internal/config"
 	"github.com/jmcampanini/cmdk/internal/pathfmt"
 )
 
@@ -34,7 +33,8 @@ How paths are formatted:
 Rules replace the first occurrence of each literal match. Longer rule keys run
 before shorter keys, with lexical order as the tie-breaker. Replacement values
 accept icon aliases such as :nf-dev-github:; match keys are literal.
---truncate and --truncate-symbol override the configured values for one run.
+--truncate and --truncate-symbol override the configured values for one run
+before validation; --truncate-symbol accepts the same icon aliases.
 
 ` + configLoadingHelpWithKeys,
 		Example: `  cmdk shorten /Users/me/Code/github.com/acme/project
@@ -75,10 +75,7 @@ func runShortenCommand(root *rootOptions, cmd *cobra.Command, args []string) err
 	}
 	cfg := loaded.config
 
-	trunc, err := shortenTruncation(cmd, cfg)
-	if err != nil {
-		return err
-	}
+	trunc := pathfmt.Truncation{Length: cfg.Display.TruncationLength, Symbol: cfg.Display.TruncationSymbol}
 	shortenHome := cfg.Display.ShortenHome
 	rules := pathfmt.CompileRules(cfg.Display.Rules)
 	home, err := os.UserHomeDir()
@@ -86,8 +83,8 @@ func runShortenCommand(root *rootOptions, cmd *cobra.Command, args []string) err
 		return fmt.Errorf("cannot shorten home prefix: %w", err)
 	}
 
-	fmt.Println(pathfmt.DisplayPath(path, home, shortenHome, rules, trunc))
-	return nil
+	_, err = fmt.Fprintln(cmd.OutOrStdout(), pathfmt.DisplayPath(path, home, shortenHome, rules, trunc))
+	return err
 }
 
 func shortenInputPath(args []string) (string, error) {
@@ -106,26 +103,4 @@ func shortenInputPath(args []string) (string, error) {
 		return "", errors.New("no input on stdin")
 	}
 	return scanner.Text(), nil
-}
-
-func shortenTruncation(cmd *cobra.Command, cfg config.Config) (pathfmt.Truncation, error) {
-	trunc := pathfmt.Truncation{Length: cfg.Display.TruncationLength, Symbol: cfg.Display.TruncationSymbol}
-	if cmd.Flags().Changed("truncate") {
-		v, err := cmd.Flags().GetInt("truncate")
-		if err != nil {
-			return pathfmt.Truncation{}, fmt.Errorf("reading --truncate flag: %w", err)
-		}
-		if v < 0 {
-			return pathfmt.Truncation{}, fmt.Errorf("--truncate cannot be negative")
-		}
-		trunc.Length = v
-	}
-	if cmd.Flags().Changed("truncate-symbol") {
-		v, err := cmd.Flags().GetString("truncate-symbol")
-		if err != nil {
-			return pathfmt.Truncation{}, fmt.Errorf("reading --truncate-symbol flag: %w", err)
-		}
-		trunc.Symbol = v
-	}
-	return trunc, nil
 }

@@ -6,6 +6,22 @@ import (
 	"github.com/jmcampanini/cmdk/internal/item"
 )
 
+func (c *Config) resolveActions() {
+	for i := range c.Actions {
+		action := &c.Actions[i]
+		action.LaunchMode = EffectiveLaunchMode(action.Matches, action.LaunchMode, action.LaunchPath != "" || action.LaunchPathCmd != "")
+		if action.LaunchMode == LaunchModeSessionWindow && action.WindowName == "" {
+			action.WindowName = DefaultWindowNameTemplate
+		}
+		for j := range action.Stages {
+			stage := &action.Stages[j]
+			if stage.Type == "picker" {
+				stage.Delimiter = (item.Stage{Delimiter: stage.Delimiter, Display: stage.Display, Pass: stage.Pass}).EffectiveDelimiter()
+			}
+		}
+	}
+}
+
 // ToItem converts an action into a launcher item and preserves its stage pipeline.
 func (a Action) ToItem() item.Item {
 	stages := make([]item.Stage, len(a.Stages))

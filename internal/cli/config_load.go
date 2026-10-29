@@ -27,7 +27,24 @@ func (root *rootOptions) loadConfig(cmd *cobra.Command) (loadedConfig, error) {
 	if err != nil {
 		return loadedConfig{}, err
 	}
-	cfg, report, err := config.Load(path)
+
+	var overrides config.Overrides
+	if cmd.Flags().Changed("truncate") {
+		value, err := cmd.Flags().GetInt("truncate")
+		if err != nil {
+			return loadedConfig{}, fmt.Errorf("read --truncate: %w", err)
+		}
+		overrides.TruncationLength = &value
+	}
+	if cmd.Flags().Changed("truncate-symbol") {
+		value, err := cmd.Flags().GetString("truncate-symbol")
+		if err != nil {
+			return loadedConfig{}, fmt.Errorf("read --truncate-symbol: %w", err)
+		}
+		overrides.TruncationSymbol = &value
+	}
+
+	cfg, report, err := config.Load(path, overrides)
 	if err != nil {
 		return loadedConfig{}, fmt.Errorf("loading config: %w", err)
 	}

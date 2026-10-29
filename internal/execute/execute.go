@@ -30,8 +30,6 @@ type ExecFn func(argv0 string, argv []string, envv []string) error
 type launchMode string
 
 const (
-	defaultWindowNameTemplate = "{{.launch_basename}}"
-
 	launchPathCmdMaxStdoutBytes = 8 * 1024
 	launchPathCmdMaxStderrBytes = 32 * 1024
 
@@ -559,7 +557,7 @@ func sessionWindowCommand(selected item.Item, data map[string]string) ([]string,
 func renderWindowName(selected item.Item, data map[string]string) (string, error) {
 	templateText := selected.WindowName
 	if templateText == "" {
-		templateText = defaultWindowNameTemplate
+		templateText = config.DefaultWindowNameTemplate
 	}
 	name, err := RenderCmd(templateText, data)
 	if err != nil {

@@ -3,11 +3,11 @@ package tui
 import (
 	"context"
 	"fmt"
+	log "log/slog"
 	"runtime/debug"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	log "charm.land/log/v2"
 
 	"github.com/jmcampanini/cmdk/internal/item"
 )

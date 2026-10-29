@@ -3,13 +3,10 @@ package logging
 
 import (
 	"io"
+	log "log/slog"
 	"os"
 	"path/filepath"
-
-	"charm.land/log/v2"
 )
-
-var defaultDir = filepath.Join(os.Getenv("HOME"), ".local", "state", "cmdk")
 
 const logFileName = "cmdk.log"
 
@@ -25,7 +22,7 @@ func (l *Logger) Close() error {
 
 // Setup configures the process-wide logger under the user's local state directory.
 func Setup() (*Logger, error) {
-	return SetupWithDir(defaultDir)
+	return SetupWithDir(filepath.Join(os.Getenv("HOME"), ".local", "state", "cmdk"))
 }
 
 // SetupWithDir appends logs to cmdk.log in dir and installs the process-wide logger.
@@ -39,8 +36,7 @@ func SetupWithDir(dir string) (*Logger, error) {
 		return nil, err
 	}
 
-	l := log.New(f)
-	l.SetReportTimestamp(true)
+	l := log.New(log.NewTextHandler(f, nil))
 	log.SetDefault(l)
 	return &Logger{closer: f}, nil
 }

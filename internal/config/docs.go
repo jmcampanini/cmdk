@@ -146,7 +146,7 @@ func Docs() []SectionDoc {
 		{
 			Name:        "sources",
 			Table:       "[sources.zoxide]",
-			Description: "Per-source tuning. zoxide is the only configurable source.",
+			Description: "Per-source tuning. zoxide is the only supported source name; other names are rejected.",
 			Fields: []FieldDoc{
 				{Name: "limit", Type: "int", Description: "Maximum number of entries; 0 means unlimited.", Validation: "cannot be negative"},
 				{Name: "min_score", Type: "float", Description: "Lowest zoxide score an entry needs; 0 disables the filter.", Validation: "cannot be negative"},
