@@ -43,38 +43,3 @@ release:
     name: cmdk
   draft: false
   prerelease: auto
-
-homebrew_casks:
-  - name: cmdk
-    homepage: https://github.com/jmcampanini/cmdk
-    description: Keyboard-driven tmux launcher
-    binaries:
-      - cmdk
-    generate_completions_from_executable:
-      executable: cmdk
-      args:
-        - completion
-      shells:
-        - bash
-        - zsh
-        - fish
-    directory: Casks
-    commit_msg_template: "Update cmdk to {{ .Tag }}"
-    commit_author:
-      name: github-actions[bot]
-      email: 41898282+github-actions[bot]@users.noreply.github.com
-    skip_upload: auto
-    repository:
-      owner: jmcampanini
-      name: homebrew-tap
-      branch: main
-      git:
-        url: ssh://git@github.com/jmcampanini/homebrew-tap.git
-        private_key: "{{ envOrDefault \"HOMEBREW_TAP_DEPLOY_KEY\" \"\" }}"
-    hooks:
-      pre:
-        # Homebrew runs completion generation before postflight; remove quarantine before executing the unsigned binary.
-        install_steps: |
-          on_macos do
-            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/cmdk"]
-          end
