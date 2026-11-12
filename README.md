@@ -5,20 +5,13 @@ cmdk is a keyboard-driven tmux launcher: a fuzzy-filterable popup for switching 
 
 ## Install
 
-cmdk supports versioned releases for Linux and macOS on amd64 and arm64, with prebuilt binaries and a Homebrew cask, plus a HEAD-only Homebrew formula; until the first release, install the HEAD formula or build from source.
+cmdk publishes versioned releases with prebuilt binaries for Linux and macOS on amd64 and arm64.
 
 After the first release, install or upgrade with [mise](https://mise.jdx.dev):
 
 ```sh
 mise use -g github:jmcampanini/cmdk
 mise upgrade github:jmcampanini/cmdk
-```
-
-After the first release, install or upgrade the cask with Homebrew:
-
-```sh
-brew install --cask jmcampanini/tap/cmdk
-brew upgrade --cask jmcampanini/tap/cmdk
 ```
 
 After the first release, download the matching archive from [GitHub Releases](https://github.com/jmcampanini/cmdk/releases), then install or upgrade with `tar` and administrator access through `sudo`:
@@ -29,14 +22,6 @@ tar -xzf 'cmdk_<version>_<os>_<arch>.tar.gz'
 xattr -d com.apple.quarantine cmdk
 sudo install -d /usr/local/bin
 sudo install -m 755 cmdk /usr/local/bin/cmdk
-```
-
-To track the latest commit on macOS, install or upgrade the HEAD formula with Homebrew:
-
-```sh
-brew tap jmcampanini/cmdk https://github.com/jmcampanini/cmdk
-brew install --HEAD jmcampanini/cmdk/cmdk
-brew upgrade --fetch-HEAD cmdk
 ```
 
 To build from source with Git, [mise](https://mise.jdx.dev), and administrator access through `sudo`, clone, build, and install; run the final five commands again to upgrade:
